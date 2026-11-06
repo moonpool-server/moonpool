@@ -206,12 +206,14 @@ def archive_roots(archive, kind):
                     continue
                 prefix = m.group(1) or ""
                 name = prefix.rsplit("/", 1)[-1] if prefix else ""
-                native = member.replace("\\", "/").lower().endswith("dlls/main.dll")
                 if prefix in seen:
-                    if native:
-                        next(r for r in roots if r["prefix"] == prefix)["native"] = True
                     continue
                 seen.add(prefix)
+                # Native code is any DLL under the mod's folder, not only a UE4SS C++ mod's
+                # dlls/main.dll: a Lua mod that loads its own library carries one elsewhere.
+                folder = prefix + "/" if prefix else ""
+                native = any(n.replace("\\", "/").lower().endswith(".dll") and n.replace("\\", "/").startswith(folder)
+                             for n in names)
                 roots.append({"name": name, "prefix": prefix, "native": native})
             if not roots:
                 raise ValueError(f"archive {Path(archive).name} holds no UE4SS mod (no Scripts/main.lua or dlls/main.dll)")

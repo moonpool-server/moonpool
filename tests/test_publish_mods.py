@@ -71,7 +71,7 @@ class ArchiveRootsTests(unittest.TestCase):
             archive = Path(tmp) / "n.zip"
             with zipfile.ZipFile(archive, "w") as bundle:
                 bundle.writestr("ProxChat/Scripts/main.lua", b"print(1)")
-                bundle.writestr("ProxChat/dlls/main.dll", b"MZ")
+                bundle.writestr("ProxChat/native/proxchat_native.dll", b"MZ")
             self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"), [{"name": "ProxChat", "prefix": "ProxChat", "native": True}])
 
     def test_several_roots_need_install_folder(self):
