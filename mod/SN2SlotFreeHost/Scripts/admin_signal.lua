@@ -103,7 +103,13 @@ function M.run(state, sender, text, g)
   state.last[key] = now
 
   local a, cmd = p.args, p.command
-  if cmd == 'help' then return reply(true, 'ping slots time weather') end
+  if cmd == 'help' then return reply(true, 'cmd kick ping slots time weather') end
+  if cmd == 'cmd' then
+    -- The game's own console, run on the host as this admin: the same door and the same
+    -- switch as moonpool diag console (player in enabled_commands).
+    if p.raw == '' then return reply(false, 'use: !cmd LINE') end
+    return invoke(g, 'console', { sender = sender, line = p.raw }, function() return 'ran ' .. short(p.raw) end)
+  end
   if cmd == 'slots' then
     local n = tonumber(a[1])
     if not n or #a ~= 1 then return reply(false, 'use: !slots 1-63') end

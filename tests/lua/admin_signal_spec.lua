@@ -74,9 +74,19 @@ r = admin.run(s, ALICE, '!time 08:00', game())
 eq(r.text, 'time 08:00', 'time reply')
 eq(calls[2][1], 'time', 'time handler mapped'); eq(calls[2][2].value, '08:00', 'time argument mapped')
 now = now + 3
+r = admin.run(s, ALICE, '!cmd stat fps', game())
+eq(r.text, 'ran stat fps', 'cmd reply names the line')
+eq(calls[#calls][1], 'console', 'cmd maps to the console door')
+eq(calls[#calls][2].line, 'stat fps', 'the whole line is passed')
+eq(calls[#calls][2].sender.name, 'Alice', 'as the admin')
+now = now + 10
+r = admin.run(s, ALICE, '!cmd', game())
+eq(r.ok, false, 'an empty line is refused'); eq(r.text, 'use: !cmd LINE', 'with the usage')
+now = now + 10
 r = admin.run(s, ALICE, '!kick Player Two', game())
 eq(r.text, 'Player Two removed', 'kick reply')
-eq(calls[3][1], 'kick', 'kick handler mapped'); eq(calls[3][2].player, 'Player Two', 'spaced player preserved')
+eq(calls[#calls][1], 'kick', 'kick handler mapped')
+eq(calls[#calls][2].player, 'Player Two', 'spaced player preserved')
 now = now + 3
 r = admin.run(s, ALICE, '!help', game())
 eq(#r.text <= 40, true, 'reply at most 40 characters')

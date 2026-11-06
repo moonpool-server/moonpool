@@ -55,7 +55,10 @@ Admins give orders from inside the game with nothing installed: rename any PDA s
 !weather DA_Storm     set the weather
 !slots 8              change the player cap
 !ping                 where everyone is, for admins; your own spot for anyone
+!cmd LINE             one of the game's console commands, run on the host as you
 ```
+
+`!cmd` is the same door as `bin/moonpool diag console` and is off until `player` is in `enabled_commands` (see Console commands below)
 
 One order every few seconds. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
 

@@ -779,6 +779,10 @@ local function admin_call(name, args)
   if name == 'kick' then
     return handlers.kick(args)
   end
+  if name == 'console' then
+    if not CFG.enabled_set.player then return false, nil, 'console is off: add player to enabled_commands' end
+    return handlers.player({ player = args.sender.name, command = args.line })
+  end
   if name == 'unlocks' then return handlers.unlocks(args) end
   if name == 'restart' then
     local ok = write_atomic(cpath('admin-restart-request.json'), { requested_at = os.time(), source = 'in_game' })
