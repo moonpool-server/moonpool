@@ -194,22 +194,22 @@ echo 4242
 }
 
 @test "a world without a webhook publishes its panel; a board shows it beside its own, and a silent world as No signal" {
-  printf '{"ts":1700000000,"world_name":"Blue Hole","players":[]}' >"$CONTROL_DIR/status.json"
+  printf '{"ts":1700000000,"world_name":"All Blue","players":[]}' >"$CONTROL_DIR/status.json"
   run env SN2_NOW=1700000000 python3 "$ROOT/scripts/discord-notify.py" status
   [ "$status" -eq 0 ]
-  [ "$(jq -r '"\(.ts) \(.world) \(.container.type)"' "$PUBLIC_DIR/card.json")" = '1700000000 Blue Hole 17' ]
+  [ "$(jq -r '"\(.ts) \(.world) \(.container.type)"' "$PUBLIC_DIR/card.json")" = '1700000000 All Blue 17' ]
   fake_discord; cp "$PUBLIC_DIR/card.json" "$FAKE/peer/card.json"; peer="http://127.0.0.1:$(cat "$FAKE/port")/peer"
   printf '{"ts":1700000000,"world_name":"Midnight Zone","players":[]}' >"$CONTROL_DIR/status.json"
   body=$(SN2_NOW=1700000100 DISCORD_BOARD_PEERS="$peer/card.json $peer/missing.json" \
     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [ "$(jq '.components | length' <<<"$body")" -eq 4 ]
   [[ $(jq -r '.components[0] | tostring' <<<"$body") == *'Midnight Zone'* ]]
-  [[ $(jq -r '.components[1] | tostring' <<<"$body") == *'Blue Hole'* ]]
+  [[ $(jq -r '.components[1] | tostring' <<<"$body") == *'All Blue'* ]]
   [[ $(jq -r '.components[2].components[0].content' <<<"$body") == *'**No signal**'* ]]
   # A panel past DISCORD_PEER_MAX_AGE is no signal too, never a stale Open.
   body=$(SN2_NOW=1700009999 DISCORD_BOARD_PEERS="$peer/card.json" \
     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
-  [[ $(jq -r '.components[1].components[0].content' <<<"$body") == *'Blue Hole'*'**No signal**'* ]]
+  [[ $(jq -r '.components[1].components[0].content' <<<"$body") == *'All Blue'*'**No signal**'* ]]
 }
 
 @test "Discord alerts are silent unless pushes are asked for, and mention the role as a role" {

@@ -8,7 +8,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 
 ## What you need
 
-- A Linux box or Docker Desktop with Docker Engine 26 and Compose 2.25 or newer
+- A Linux box or Docker Desktop with Docker Engine 26 and Compose 2.25 or newer. On Windows run everything here from the WSL shell Docker Desktop uses, since `bin/moonpool` is a Python script that leans on bash
 - About 4 cores 8 GB of memory and 40 GB of SSD for 4 players. That's the game's own limit and the default. You can raise `PLAYER_SLOTS` but it's less proven
 - A copy of the game on a Steam account you only use for hosting. An account can only be signed in one place so it can't be the one you play on
 - Your friends need their own copy of the game on Steam or Xbox
@@ -62,16 +62,16 @@ The Discord card and the join page, as players see them
 
 ## Mods
 
-Your mod list lives inside the server's data volume. Copy [plugins.example.yaml](plugins.example.yaml) in and edit it there
+Your mod list lives inside the server's data volume. Copy [plugins.example.yaml](plugins.example.yaml) in
 
 ```sh
-docker compose exec -T sn2 sh -c 'cat > /home/container/control/plugins.yaml' < plugins.example.yaml
-docker compose exec sn2 vi /home/container/control/plugins.yaml
+cp plugins.example.yaml plugins.yaml   # edit it with any editor
+docker compose cp plugins.yaml sn2:/home/container/control/plugins.yaml
 ```
 
 Your join page then offers Play with mods
 
-Players install our launcher once from this repo. It shows them what your server wants and asks before installing anything and asks again when that changes. It keeps them on your versions from then on
+Players install our launcher once: [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which is what the join page hands them. It shows them what your server wants and asks before installing anything and asks again when that changes. It keeps them on your versions from then on
 
 Mods run with the player's Windows rights and nobody here reviews them so only say yes to a host you trust. The launcher asks Windows Defender to scan each download when Defender is available but a clean scan doesn't prove a mod is safe. A saved yes stays until the list changes. A new key at the same address counts as a new server and warns you
 
@@ -83,7 +83,7 @@ gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-work
 
 ## Does it work
 
-Tested by hand with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. CI runs the code's own tests but not the real game
+Tested by hand with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. The fix in v0.3.0 for the crash on join has had short sessions only, on experimental build `26283380`. CI runs the code's own tests but not the real game
 
 A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. Moonpool supports the game's public branch. Other branches need files for their exact build that this project doesn't ship
 

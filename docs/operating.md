@@ -31,8 +31,8 @@ They can't be invited through Steam. They add the hosting account by its in-game
 ## Mods
 
 ```sh
-docker compose exec -T sn2 sh -c 'cat > /home/container/control/plugins.yaml' < plugins.example.yaml
-docker compose exec sn2 vi /home/container/control/plugins.yaml
+cp plugins.example.yaml plugins.yaml   # edit it with any editor
+docker compose cp plugins.yaml sn2:/home/container/control/plugins.yaml
 bin/moonpool mods publish
 bin/moonpool mods list
 ```
@@ -113,7 +113,7 @@ docker compose cp map-background.example.json sn2:/home/container/map-background
 
 The file has one entry per game branch, so public and experimental can use different maps. A branch's entry is one picture or a list of pictures laid side by side. Each `url` is tile addresses with `{z}`, a picture's address or a file you put in the data volume. `bounds` are the picture's left, top, right and bottom edges in game units
 
-The experimental build carries its own top-down region pictures in the game folder under `Subnautica2/Content/Debug`, with their bounds in `maps.json` there. They're 60 to 80 MB each so shrink them to about 2048 pixels before you use them as a list. They're the studio's own files so whether to put them on your map is your call, like any picture here
+The experimental build carries its own top-down region pictures in the game folder under `Subnautica2/Content/Debug`, with their bounds in `maps.json` there. They're the studio's own files. Moonpool doesn't ship or fetch them and putting them on a page is between you and the studio
 
 For your own picture pick two spots far apart that you can find in game. Stand on each and run `bin/moonpool map where <player>`, note each spot's pixel position in the picture, then `bin/moonpool map bounds` works out the edges. The picture can't be rotated
 
