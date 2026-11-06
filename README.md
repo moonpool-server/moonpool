@@ -99,7 +99,7 @@ CONTACT: [issues](https://github.com/moonpool-server/moonpool/issues) for questi
 
 ## Contributing
 
-Issues and pull requests are welcome. `pre-commit run --all-files` runs the same checks as CI. Please don't commit game files, Steam sessions, logs or anything generated from the game
+Issues and pull requests are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). `pre-commit run --all-files` runs the same checks as CI. Please don't commit game files, Steam sessions, logs or anything generated from the game
 
 ## Legal and risk
 
