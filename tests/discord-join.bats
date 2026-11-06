@@ -141,6 +141,14 @@ map_status() {
   [[ "$body" != *moonpool.cmd* ]]
 }
 
+@test "turning PUBLISH_CARD off takes an earlier card.json off the web port" {
+  printf '{"ts":1700000000,"world_name":"All Blue","players":[]}' >"$CONTROL_DIR/status.json"
+  SN2_NOW=1700000000 PUBLISH_CARD=true python3 "$ROOT/scripts/discord-notify.py" status
+  [ -f "$PUBLIC_DIR/card.json" ]
+  SN2_NOW=1700000000 python3 "$ROOT/scripts/discord-notify.py" status
+  [ ! -e "$PUBLIC_DIR/card.json" ]
+}
+
 @test "card.yaml rewords the card line by line; a bad line is logged and the shipped one kept" {
   printf '{"ts":1700000000,"players":[]}' >"$CONTROL_DIR/status.json"
   cat >"$DATA_DIR/card.yaml" <<'YAML'
