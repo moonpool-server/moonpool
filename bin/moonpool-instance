@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Compose scopes resources, but it does not allocate friendly per-world env files and ports.
+set -euo pipefail
+
+ROOT=${SN2_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+INSTANCES=$ROOT/instances
+COMPOSE=$ROOT/compose.yaml
+
+usage() {
+  cat <<'EOF'
+Usage: moonpool-instance add <slug> [public|experimental]
+       moonpool-instance list
+       moonpool-instance rm <slug> [--volumes --volumes]
+
+Repeat --volumes twice to permanently delete that world's Docker volume.
+EOF
+}
+
+valid_slug() { [[ ${1:-} =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; }
+env_file() { printf '%s/%s/.env' "$INSTANCES" "$1"; }
+
+compose() {
+  local slug=$1; shift
+  docker compose -p "sn2-$slug" --env-file "$(env_file "$slug")" -f "$COMPOSE" "$@"
+}
+
+used_port() {
+  local wanted=$1 file value
+  local default_viewer=8080 default_mods=8081
+  if [ -f "$ROOT/.env" ]; then
+    value=$(sed -n 's/^NOVNC_PORT=//p' "$ROOT/.env" | tail -n1); default_viewer=${value:-$default_viewer}
+    value=$(sed -n 's/^SN2_MODS_PORT=//p' "$ROOT/.env" | tail -n1); default_mods=${value:-$default_mods}
+  fi
+  [ "$wanted" != "$default_viewer" ] && [ "$wanted" != "$default_mods" ] || return 0
+  while IFS= read -r -d '' file; do
+    while IFS='=' read -r _ value; do [ "$value" != "$wanted" ] || return 0; done < <(grep -E '^(NOVNC_PORT|SN2_MODS_PORT)=' "$file" || true)
+  done < <(find "$INSTANCES" -mindepth 2 -maxdepth 2 -name .env -print0 2>/dev/null)
+  docker ps --format '{{.Ports}}' 2>/dev/null | grep -Eq "(^|[^0-9])$wanted->" && return 0
+  return 1
+}
+
+next_port() {
+  local port=$1
+  while used_port "$port"; do port=$((port + 1)); done
+  printf '%s' "$port"
+}
+
+set_env() {
+  local file=$1 key=$2 value=$3
+  if grep -q "^$key=" "$file"; then sed -i "s|^$key=.*|$key=$value|" "$file"
+  else printf '\n%s=%s\n' "$key" "$value" >>"$file"; fi
+}
+
+add() {
+  local slug=${1:-} branch=${2:-} dir file viewer mods
+  valid_slug "$slug" || { echo "moonpool-instance: slugs use lowercase letters, digits and single hyphens" >&2; return 64; }
+  case ${branch:-public} in public|experimental) ;; *) echo "moonpool-instance: branch must be public or experimental" >&2; return 64 ;; esac
+  dir=$INSTANCES/$slug; file=$dir/.env
+  [ ! -e "$dir" ] || { echo "moonpool-instance: instance '$slug' already exists" >&2; return 65; }
+  # The mods port is checked against the viewer's too, not only against what is in use.
+  viewer=$(next_port 8080)
+  mods=$(next_port 8081)
+  while [ "$mods" = "$viewer" ]; do mods=$(next_port $((mods + 1))); done
+  mkdir -p "$dir"; cp "$ROOT/.env.example" "$file"
+  set_env "$file" NOVNC_PORT "$viewer"
+  set_env "$file" SN2_MODS_PORT "$mods"
+  set_env "$file" WORLD_NAME "$slug"
+  set_env "$file" HOST_NAME "SN2 $slug"
+  set_env "$file" COMPOSE_PROJECT_NAME "sn2-$slug"
+  set_env "$file" SN2_CONTAINER_NAME "sn2-$slug"
+  set_env "$file" SN2_ENV_FILE "instances/$slug/.env"
+  [ -z "$branch" ] || set_env "$file" STEAM_BRANCH "$branch"
+  set_env "$file" BACKUP_DIR "./instances/$slug/backups"
+  printf "Added %s (project/container sn2-%s; viewer %s, mods %s).\nStart it with: docker compose -p sn2-%s --env-file instances/%s/.env up -d --build\n" "$slug" "$slug" "$viewer" "$mods" "$slug" "$slug"
+}
+
+list_instances() {
+  local file slug state ports
+  printf '%-20s %-20s %-20s %-25s %s\n' WORLD PROJECT CONTAINER PORTS STATE
+  state=$(docker compose -f "$COMPOSE" ps --status running -q sn2 2>/dev/null || true)
+  [ -n "$state" ] && state=up || state=down
+  local default_viewer=8080 default_mods=8081 value
+  if [ -f "$ROOT/.env" ]; then
+    value=$(sed -n 's/^NOVNC_PORT=//p' "$ROOT/.env" | tail -n1); default_viewer=${value:-$default_viewer}
+    value=$(sed -n 's/^SN2_MODS_PORT=//p' "$ROOT/.env" | tail -n1); default_mods=${value:-$default_mods}
+  fi
+  printf '%-20s %-20s %-20s %-25s %s\n' default moonpool moonpool "$default_viewer,$default_mods" "$state"
+  while IFS= read -r -d '' file; do
+    slug=$(basename "$(dirname "$file")")
+    ports=$(awk -F= '/^(NOVNC_PORT|SN2_MODS_PORT)=/{printf "%s%s", sep, $2; sep=","}' "$file")
+    state=$(compose "$slug" ps --status running -q sn2 2>/dev/null || true)
+    [ -n "$state" ] && state=up || state=down
+    printf '%-20s %-20s %-20s %-25s %s\n' "$slug" "sn2-$slug" "sn2-$slug" "$ports" "$state"
+  done < <(find "$INSTANCES" -mindepth 2 -maxdepth 2 -name .env -print0 2>/dev/null | sort -z)
+}
+
+remove_instance() {
+  local slug=${1:-}; shift || true
+  valid_slug "$slug" || { echo "moonpool-instance: invalid slug" >&2; return 64; }
+  [ -f "$(env_file "$slug")" ] || { echo "moonpool-instance: instance '$slug' does not exist" >&2; return 66; }
+  [ -z "$(compose "$slug" ps --status running -q 2>/dev/null)" ] || { echo "moonpool-instance: '$slug' is running; stop it before removal" >&2; return 69; }
+  local volume_flags=0 arg
+  for arg in "$@"; do [ "$arg" = --volumes ] || { usage >&2; return 64; }; volume_flags=$((volume_flags + 1)); done
+  [ "$volume_flags" -ne 1 ] || { echo "moonpool-instance: repeat --volumes to confirm permanent volume deletion" >&2; return 64; }
+  [ "$volume_flags" -le 2 ] || { usage >&2; return 64; }
+  if [ "$volume_flags" -eq 2 ]; then compose "$slug" down --volumes
+  else compose "$slug" down; fi
+  rm -rf -- "${INSTANCES:?}/$slug"
+  printf "Removed %s%s.\n" "$slug" "$([ "$volume_flags" -eq 2 ] && echo ' and its volume' || echo '; its volume was kept')"
+}
+
+case ${1:-} in
+  add) [ $# -ge 2 ] && [ $# -le 3 ] || { usage >&2; exit 64; }; add "$2" "${3:-}" ;;
+  list) [ $# -eq 1 ] || { usage >&2; exit 64; }; list_instances ;;
+  rm) [ $# -ge 2 ] || { usage >&2; exit 64; }; shift; remove_instance "$@" ;;
+  *) usage >&2; exit 64 ;;
+esac

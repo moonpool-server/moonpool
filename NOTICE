@@ -1,0 +1,101 @@
+moonpool
+Copyright (c) 2026 the moonpool contributors
+
+The files in this repository are licensed under the MIT License (see LICENSE),
+except where a file states otherwise. This repository contains no Steam, Wine,
+UE4SS or Subnautica 2 binaries, no game files and no prebuilt image; the
+project is unofficial and non-commercial. The container image built from it, and the
+volume it creates at run time, contain or download the third-party components
+below under their own licenses.
+
+------------------------------------------------------------------------------
+UE4SS (RE-UE4SS)
+  Project: https://github.com/UE4SS-RE/RE-UE4SS
+  License: MIT License, Copyright (c) the UE4SS contributors
+  Not included in this repository or the image. At install time
+  scripts/install-ue4ss.sh downloads the pinned release (from this project's
+  release mirror of the pinned builds, because the upstream tag moves, then from
+  https://github.com/UE4SS-RE/RE-UE4SS/releases; tag and asset named in that
+  script) into the operator's own volume, verifies its SHA-256, and fetches the
+  VTableLayout template from the same repository. When a server lists a UE4SS
+  mod, it also serves that same unmodified archive to its players from its web
+  root, for the player launcher in client/. The release archive carries its own
+  LICENSE, which applies.
+
+------------------------------------------------------------------------------
+Wine and Wine Staging
+  Project: https://www.winehq.org/ and https://gitlab.winehq.org/wine/wine-staging
+  License: GNU Lesser General Public License v2.1 or later
+  Installed into the image from the distribution's packages by the Dockerfile.
+  Source is available from the projects above and from the distribution's
+  source packages for the installed version.
+
+------------------------------------------------------------------------------
+noVNC, x11vnc, Xvfb (panel target only)
+  noVNC: Mozilla Public License 2.0, https://github.com/novnc/noVNC
+  x11vnc: GNU GPL v2, Xvfb: MIT/X11 license
+  Installed from distribution packages; not modified.
+
+------------------------------------------------------------------------------
+BeaconServer (HumanGenome/BeaconServer, v0.3.137)
+  Project: https://github.com/HumanGenome/BeaconServer
+  License: MIT
+  Prior art for a headless retail host, credited here. Its launch line
+  (-nullrhi -unattended -NoSplash -SaveToUserDir -NoVerifyGC, with Engine.ini
+  rewritten each launch for a 30 FPS cap and a silent FMOD mixer) is recorded here.
+  This project's own launch line shares -nullrhi -unattended with it.
+  Ported from it: the host-prune and lifepod story-goal unlock steps (from
+  ue4ss/Mods/BeaconNoPhantomHost/Scripts/main.lua and
+  ue4ss/Mods/BeaconStoryGoalUnlock/Scripts/main.lua, off by default here), and
+  the rule never to search the whole object list on a timer (applied in
+  mod/SN2SlotFreeHost/Scripts/status.lua).
+
+  MIT License
+
+  Copyright (c) 2026 HumanGenome
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+------------------------------------------------------------------------------
+Subnautica 2 is a trademark of its owners. This project is not affiliated with,
+endorsed by or authorized by Unknown Worlds, KRAFTON or Valve.
+
+Older releases
+  Releases up to v0.2.1 included ue4ss/layouts: engine struct offsets and virtual
+  function lists for two game builds, measured from a running copy of the game,
+  plus UE4SS settings and two scripts that generated scan patterns from the
+  operator's own copy. They held no game code or assets. They're in no release, tag
+  or branch now. The commits that held them stay reachable by their hashes until
+  GitHub purges them on request. Rights holders can ask through GitHub issues.
+
+Leaflet (map page only)
+  Project: https://leafletjs.com, License: BSD 2-Clause
+  Not included here. web/map.html loads version 1.9.4 from unpkg.com, checked by
+  its hash, into the viewer's browser.
+
+Map backgrounds
+  No map picture is included. map-background.example.json points at joric's
+  Subnautica 2 tileset (https://github.com/joric/subnautica2_tileset, Unlicense),
+  a community capture of the game loaded from joric's site by the viewer's browser.
+  That licence covers joric's work and can't speak for the game's own rights.
+
+SN2SlotFreeHost (this project's host mod)
+  mod/SN2SlotFreeHost is this project's own Lua mod, written for the first
+  working host on 2026-10-30. It is part of this repository and under its MIT
+  licence (LICENSE); it has no upstream.

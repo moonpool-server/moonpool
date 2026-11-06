@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+# Deterministic fake CurseForge API and CDN responses keep these tests offline.
+"""What the publisher reads out of an archive, and the policies it holds to."""
+import hashlib
+import http.server
+import importlib.util
+import io
+from pathlib import Path
+import tempfile
+import threading
+import unittest
+from unittest import mock
+import zipfile
+
+ROOT = Path(__file__).parents[1]
+SPEC = importlib.util.spec_from_file_location("publish_mods", ROOT / "scripts/publish-mods.py")
+PUBLISH = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(PUBLISH)
+
+
+class Response(io.BytesIO):
+    def __enter__(self): return self
+    def __exit__(self, *_args): self.close()
+
+
+def zip_of(path, members):
+    with zipfile.ZipFile(path, "w") as bundle:
+        for name in members:
+            bundle.writestr(name, name.encode())
+    return path
+
+
+class ArchiveRootsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self): self.temp.cleanup()
+
+    def test_a_zip_that_is_one_ue4ss_mod_has_one_root(self):
+        roots = PUBLISH.archive_roots(zip_of(self.root / "a.zip", ["Scripts/main.lua", "readme.md"]), "ue4ss")
+        self.assertEqual(roots, [{"name": "", "prefix": ""}])
+
+    def test_nested_mods_are_found_by_their_main_file(self):
+        roots = PUBLISH.archive_roots(zip_of(self.root / "b.zip",
+                                             ["Mods/Voice/Scripts/main.lua", "Mods/Voice/Scripts/lib.lua",
+                                              "Mods/Cap/dlls/main.dll", "Mods/Cap/enabled.txt"]), "ue4ss")
+        self.assertEqual(roots, [{"name": "Voice", "prefix": "Mods/Voice"}, {"name": "Cap", "prefix": "Mods/Cap"}])
+
+    def test_a_pak_trio_is_one_root_and_an_incomplete_one_is_refused(self):
+        roots = PUBLISH.archive_roots(zip_of(self.root / "c.zip", ["Fov.pak", "Fov.ucas", "Fov.utoc"]), "pak")
+        self.assertEqual(roots, [{"name": "Fov", "prefix": "Fov"}])
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            PUBLISH.archive_roots(zip_of(self.root / "d.zip", ["Fov.pak", "Fov.ucas"]), "pak")
+
+    def test_a_path_that_climbs_out_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "unsafe path"):
+            PUBLISH.archive_roots(zip_of(self.root / "e.zip", ["../Scripts/main.lua"]), "ue4ss")
+
+    def test_several_roots_need_install_folder(self):
+        roots = [{"name": "A", "prefix": "A"}, {"name": "B", "prefix": "B"}]
+        with self.assertRaisesRegex(ValueError, "install.folder"):
+            PUBLISH.choose_root(roots, {}, "Bundle")
+        self.assertEqual(PUBLISH.choose_root(roots, {"folder": "B"}, "Bundle"), roots[1])
+        with self.assertRaisesRegex(ValueError, "not in the archive"):
+            PUBLISH.choose_root(roots, {"folder": "C"}, "Bundle")
+
+
+class GitHubPinTests(unittest.TestCase):
+    def test_bytes_that_change_under_a_tag_are_refused_until_repinned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_dir = Path(tmp)
+            install = {"type": "github", "repo": "a/b", "tag": "v1", "asset": "x.zip"}
+            bodies = iter([b"first", b"second", b"second"])
+
+            def fake_fetch(_url, dest, headers=None):
+                Path(dest).write_bytes(next(bodies))
+            pins = {}
+            with mock.patch.object(PUBLISH, "fetch", fake_fetch):
+                PUBLISH.resolve_github({}, install, pins, temp_dir, "X")
+                first = pins["github:a/b@v1/x.zip"]["sha256"]
+                self.assertEqual(first, hashlib.sha256(b"first").hexdigest())
+                with self.assertRaisesRegex(ValueError, "changed"):
+                    PUBLISH.resolve_github({}, install, pins, temp_dir, "X")
+                pins["github:a/b@v1/x.zip"]["sha256"] = hashlib.sha256(b"second").hexdigest()
+                source, _archive = PUBLISH.resolve_github({}, install, pins, temp_dir, "X")
+                self.assertEqual(source["hashes"][0]["value"], hashlib.sha256(b"second").hexdigest())
+
+
+class CurseForgeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("Example/Scripts/main.lua", b"print(1)")
+        self.body = archive.getvalue()
+        self.sha1 = hashlib.sha1(self.body).hexdigest()
+
+    def tearDown(self): self.temp.cleanup()
+
+    def fake_get(self, path, _key):
+        if path == "/mods/123":
+            return {"allowModDistribution": self.allowed, "links": {"websiteUrl": "https://curseforge.test/example"}}
+        if path == "/mods/123/files/456":
+            return {"id": 456, "fileName": "example.zip", "fileLength": len(self.body), "isAvailable": True,
+                    "downloadUrl": "https://edge.forgecdn.net/example.zip", "hashes": [{"algo": 1, "value": self.sha1}]}
+        raise AssertionError(path)
+
+    def resolve(self, allowed=True, body=None):
+        self.allowed = allowed
+        install = {"type": "curseforge", "project_id": 123, "file_id": 456}
+        with mock.patch.object(PUBLISH, "cf_get", self.fake_get), \
+             mock.patch.object(PUBLISH.urllib.request, "build_opener") as opener:
+            opener.return_value.open.return_value = Response(self.body if body is None else body)
+            return PUBLISH.resolve_curseforge({}, install, "secret", self.root, "Example", "ue4ss")
+
+    def test_a_distributable_file_is_fetched_and_verified(self):
+        source, archive = self.resolve()
+        self.assertTrue(source["allow_mod_distribution"])
+        self.assertEqual(source["url"], "https://edge.forgecdn.net/example.zip")
+        self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"), [{"name": "Example", "prefix": "Example"}])
+
+    def test_a_non_distributable_file_is_a_page_the_player_downloads_from(self):
+        source, archive = self.resolve(False)
+        self.assertIsNone(archive)
+        self.assertEqual(source["url"], "")
+        self.assertEqual(source["page"], "https://curseforge.test/example")
+
+    def test_a_hash_mismatch_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "failed its sha1 check"):
+            self.resolve(body=b"not the archive")
+
+    def test_latest_is_never_a_pin(self):
+        with mock.patch.object(PUBLISH, "cf_get", self.fake_get):
+            self.allowed = True
+            with self.assertRaisesRegex(ValueError, "file_id is required"):
+                PUBLISH.resolve_curseforge({}, {"type": "curseforge", "project_id": 123}, "k", self.root, "Example", "ue4ss")
+
+
+class CurseForgeKeyTests(unittest.TestCase):
+    def test_only_curseforges_own_https_hosts_may_receive_the_key(self):
+        for url in ("https://edge.forgecdn.net/f.zip", "https://www.curseforge.com/f.zip"):
+            PUBLISH.check_cf_host(url)
+        for url in ("http://edge.forgecdn.net/f.zip", "https://forgecdn.net.evil.example/f.zip",
+                    "https://evilforgecdn.net/f.zip", "https://evil.example/f.zip",
+                    "https://edge.forgecdn.net@evil.example/f.zip"):
+            with self.subTest(url), self.assertRaisesRegex(ValueError, "refusing"):
+                PUBLISH.check_cf_host(url)
+
+    def test_a_redirect_is_held_to_the_same_hosts(self):
+        request = PUBLISH.urllib.request.Request("https://www.curseforge.com/f.zip", headers={"x-api-key": "secret"})
+        handler = PUBLISH.CurseForgeRedirects()
+        kept = handler.redirect_request(request, None, 302, "Found", {}, "https://edge.forgecdn.net/f.zip")
+        self.assertEqual(kept.full_url, "https://edge.forgecdn.net/f.zip")
+        for url in ("https://evil.example/f.zip", "http://edge.forgecdn.net/f.zip"):
+            with self.subTest(url), self.assertRaisesRegex(ValueError, "refusing"):
+                handler.redirect_request(request, None, 302, "Found", {}, url)
+
+    def test_a_real_redirect_to_another_host_never_carries_the_key(self):
+        seen = []
+
+        class Elsewhere(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append(self.headers.get("x-api-key"))
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *_args): pass
+
+        elsewhere = http.server.HTTPServer(("127.0.0.1", 0), Elsewhere)
+
+        class First(Elsewhere):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", f"http://127.0.0.1:{elsewhere.server_port}/stolen")
+                self.end_headers()
+
+        first = http.server.HTTPServer(("127.0.0.1", 0), First)
+        for server in (first, elsewhere):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(server.server_close)
+            self.addCleanup(server.shutdown)
+        real_check = PUBLISH.check_cf_host
+        # The first hop is a local server standing in for CurseForge; only that one call is waved through.
+        hops = [lambda _url: None]
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(PUBLISH, "check_cf_host", lambda url: (hops.pop() if hops else real_check)(url)), \
+             self.assertRaisesRegex(ValueError, "refusing"):
+            PUBLISH.fetch_with_cf_key(f"http://127.0.0.1:{first.server_port}/f.zip", Path(tmp) / "f.zip", "secret")
+        self.assertEqual(seen, [])
+
+
+if __name__ == "__main__": unittest.main()

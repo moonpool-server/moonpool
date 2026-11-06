@@ -1,0 +1,106 @@
+---
+name: CI
+
+"on":
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint, tests and policy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install luacheck (bats runs from its official image)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lua-check=1.1.2-1
+      - name: Install pre-commit and uv (two hooks run their tests through uv)
+        run: python -m pip install "pre-commit==4.7.0" "uv==0.13.7"
+      - name: Run every pre-commit hook
+        # On a tag push the policy hook refuses the placeholder CONTACT line.
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan the whole history
+        run: >-
+          docker run --rm -v "$PWD:/r:ro"
+          zricethezav/gitleaks:v8.21.2@sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46
+          detect --source /r --no-banner --redact
+
+  build:
+    name: Docker build
+    runs-on: ubuntu-24.04
+    needs: lint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the image (not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: panel
+          load: true
+          push: false
+          tags: moonpool:panel
+      - name: Scan the image for known critical vulnerabilities with a fix (Grype)
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9
+          moonpool:panel --only-fixed --fail-on critical
+      - name: Validate the compose files
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+  launcher:
+    name: Player launcher (Windows PowerShell 5.1)
+    runs-on: windows-2022
+    needs: lint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run the launcher tests
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File client\tests\moonpool.tests.ps1
+
+  # A release only exists if every check above passed on that tag.
+  release:
+    name: Publish the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint, secrets, build, launcher]
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Stamp the launcher with this run, so an update can never go backwards
+        run: sed -i "s/^\$LauncherBuild = 0/\$LauncherBuild = $GITHUB_RUN_NUMBER/" client/moonpool/moonpool.ps1
+      - name: Record where the player launcher came from
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: client/moonpool/moonpool*
+      - name: Create a draft for scripts/sign-release.sh to sign and publish
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          draft: true
+          generate_release_notes: true
+          files: client/moonpool/moonpool*

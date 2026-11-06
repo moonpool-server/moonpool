@@ -1,0 +1,19 @@
+# Server settings players can see. Copy to settings.yaml beside .env, then:
+#   bin/moonpool settings apply
+# The mod also reads it once the session is hosted.
+#
+# A setting is applied only through a call proven on a host nobody plays on,
+# with a readback that followed it. All three are proven (2026-11-01:
+# SetTimeOfDay HH:MM, FreezeTime and UnfreezeTime, the world clock in
+# status.json followed each; the weather type handed to the game's weather
+# component, status.json's weather followed it twice). An unknown key or value
+# is shown on the status card as not applied; nothing is guessed. status.json
+# keeps, per key, what was asked, whether it ran, what the world shows and when
+# the two first matched.
+
+# time_of_day: "08:00"     # HH:MM, 24-hour; applied once the session is hosted
+# daylight: normal         # normal (the clock runs) or frozen (the clock holds)
+# weather: clear           # a weather type: clear, cloudyA, cloudyB, misty,
+#                          # sparseClouds, distantStormy, stormA, stormB, storm_Quick
+#                          # (status.json weather_types lists what the host loaded);
+#                          # the game's own weather cycle moves on from it

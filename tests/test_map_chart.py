@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+# Drives this repository's chart script against a fake status file.
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPT = ROOT / "scripts" / "map-chart.py"
+
+
+def run(tmp, now, players, **env):
+    control = tmp / "control"
+    control.mkdir(exist_ok=True)
+    (control / "status.json").write_text(json.dumps({
+        "ts": now, "players": players, "bases": json.loads(env.pop("BASES", "{}")), "lifepods": [{"x": 100000, "y": 200000}]}))
+    full = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW=str(now), HOST_NAME="Host", WEB_MAP="true", **env)
+    subprocess.run([sys.executable, str(SCRIPT)], check=True, env=full)
+    return tmp / "public" / "map.json"
+
+
+def test_a_position_shows_only_after_the_delay_and_a_revisit_stays_hidden_history() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        alice = {"name": "Alice", "x": 123456, "y": -7000, "z": -9000, "depth_m": 90}
+        published = run(tmp, 1000, [alice, {"name": "Host", "x": 1, "y": 1}])
+        assert json.loads(published.read_text())["cells"] == []  # now is never published
+        day = json.loads(run(tmp, 1000 + 900, []).read_text())
+        assert day["cells"] == [[1200, -100, 90]]  # one cell, the host never charted
+        assert day["lifepods"] == [[1000, 2000]] and day["bases"] == []
+        text = published.read_text()
+        assert "Alice" not in text and "Host" not in text  # no names on the page
+
+
+def test_a_deeper_visit_and_a_new_base_wait_out_the_delay_too() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        spot = {"name": "Alice", "x": 500, "y": 500, "depth_m": 10}
+        run(tmp, 1000, [spot])
+        run(tmp, 3000, [dict(spot, depth_m=300)], BASES='[{"x":70000,"y":80000}]')
+        now = json.loads((tmp / "public" / "map.json").read_text())
+        assert now["cells"] == [[0, 0, 10]] and now["bases"] == []  # the deeper visit is not shown yet
+        later = json.loads(run(tmp, 3000 + 900, [], BASES='[{"x":70000,"y":80000}]').read_text())
+        assert later["cells"] == [[0, 0, 300]] and later["bases"] == [[700, 800]]
+
+
+def test_the_map_file_gives_each_game_branch_its_own_background() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        (tmp / "chart.png").write_bytes(b"picture")
+        tiles = "https://tiles.example/{z}/{y}/{x}.webp"
+        (tmp / "map-background.json").write_text(json.dumps({
+            "public": {"url": tiles, "bounds": [0, 100, 200, 300]},
+            "experimental": {"url": "chart.png", "bounds": [0, 100, 200, 300], "max_zoom": 4},
+            "broken": {"url": tiles}}))
+        one = json.loads(run(tmp, 1000, [], STEAM_BRANCH="public").read_text())["background"]
+        assert one == {"url": tiles, "tiles": True, "max_zoom": 8, "bounds": [0, 1, 2, 3]}
+        two = json.loads(run(tmp, 1000, [], STEAM_BRANCH="experimental").read_text())["background"]
+        assert two["url"] == "map-background.png" and not two["tiles"] and two["max_zoom"] == 4
+        assert (tmp / "public" / "map-background.png").read_bytes() == b"picture"
+        assert json.loads(run(tmp, 1000, [], STEAM_BRANCH="broken").read_text())["background"] is None
+        assert json.loads(run(tmp, 1000, [], STEAM_BRANCH="other").read_text())["background"] is None
+
+
+def test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        control = tmp / "control"
+        control.mkdir()
+        env = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                   MAP_PAGE=str(ROOT / "web" / "map.html"), WEB_MAP="true", HOST_NAME="Host", MAP_DELAY_MINUTES="0")
+        for save, now in (("One", 1000), ("Two", 1001)):
+            (control / "status.json").write_text(json.dumps({"ts": now, "save": save, "branch": "public", "players": [
+                {"name": "A", "x": 5000 if save == "One" else 50000, "y": 0, "depth_m": 1}]}))
+            subprocess.run([sys.executable, str(SCRIPT)], check=True, env=dict(env, SN2_NOW=str(now)))
+        assert json.loads((tmp / "public" / "map.json").read_text())["cells"] == [[500, 0, 1]]  # save One's isn't here
+        env["MAP_DELAY_MINUTES"] = "15"
+        (control / "status.json").write_text(json.dumps({"ts": 2000, "save": "Two", "branch": "public",
+                                                         "lifepods": [{"x": 700, "y": 800}]}))
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=dict(env, SN2_NOW="2000"))
+        assert json.loads((tmp / "public" / "map.json").read_text())["lifepods"] == []
+
+
+def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        published = run(tmp, 1000, [])
+        assert (tmp / "public" / "map.html").exists()
+        control = tmp / "control"
+        (control / "status.json").write_text(json.dumps({"ts": 1, "players": [{"name": "A", "x": 5, "y": 5}]}))
+        env = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                   MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW="1000000", WEB_MAP="true", MAP_DELAY_MINUTES="0")
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
+        assert json.loads(published.read_text())["cells"] == []
+        env["WEB_MAP"] = "false"
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
+        assert not published.exists() and not (tmp / "public" / "map.html").exists()
+
+
+if __name__ == "__main__":
+    test_a_position_shows_only_after_the_delay_and_a_revisit_stays_hidden_history()
+    test_a_deeper_visit_and_a_new_base_wait_out_the_delay_too()
+    test_the_map_file_gives_each_game_branch_its_own_background()
+    test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits()
+    test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing()
+    print("map chart: ok")

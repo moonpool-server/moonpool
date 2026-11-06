@@ -1,0 +1,55 @@
+# Local settings with passwords
+.env
+backup.env
+instances/
+
+# Anything that could hold a Steam session, game files or a Wine prefix.
+# The container keeps these in its Docker volume; they never belong here.
+data/
+volumes/
+saved-data/
+steam/
+wine/
+*.vdf
+ssfn*
+config/loginusers.vdf
+# Test fixtures: invented accounts, no tokens.
+!tests/fixtures/*.vdf
+steamapps/
+*.pak
+*.ucas
+*.utoc
+*.exe
+*.dll
+*.sav
+
+# Logs, dumps and screenshots
+logs/
+*.log
+*.dmp
+*.png
+*.jpg
+*.jpeg
+*.bmp
+screenshots/
+
+# Tool caches and editor files
+.vscode/
+.idea/
+__pycache__/
+scripts/__pycache__/
+
+# Files derived from the game binaries: generated at install time, never committed
+MemberVariableLayout.ini
+VTableLayout.ini
+UE4SS_Signatures/
+vc_redist*.exe
+HOST_ARMED
+CXXHeaderDump/
+*.usmap
+ue4ss-local/
+ue4ss-layouts/
+backups/
+mod-signing/
+settings.yaml
+__pycache__/

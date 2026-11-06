@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moonpool.invalid/schema/receipt.schema.json",
+  "title": "moonpool audit receipt v1",
+  "type": "object",
+  "required": ["schema_version", "request_id", "actor", "source", "command", "arguments", "started_at", "completed_at", "duration_ms", "exit_code", "ok", "state", "code", "protocol_result", "message"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "actor": {"type": "string"}, "source": {"type": "string"}, "command": {"type": "string"},
+    "arguments": {"type": "object"}, "started_at": {"type": "string"}, "completed_at": {"type": "string"},
+    "duration_ms": {"type": "number", "minimum": 0}, "exit_code": {"type": "integer"}, "ok": {"type": "boolean"},
+    "state": {"enum": ["verified", "submitted", "refused", "partial", "failed"]}, "code": {"type": "string"},
+    "protocol_result": {"type": "object"}, "message": {"type": "string"}, "next_action": {"type": ["string", "null"]}
+  }
+}

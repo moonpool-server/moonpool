@@ -1,0 +1,55 @@
+---
+name: Compatibility report
+description: Report a game, loader, host, or Docker compatibility result
+title: "[Compatibility]: "
+labels: [compatibility]
+body:
+  - type: input
+    id: build
+    attributes:
+      label: Game build ID
+      placeholder: "26283380"
+    validations:
+      required: true
+  - type: dropdown
+    id: branch
+    attributes:
+      label: Steam branch
+      options: [public, experimental, other]
+    validations:
+      required: true
+  - type: input
+    id: ue4ss
+    attributes:
+      label: UE4SS channel and version
+      placeholder: pinned, v3.0.1-1188 f885e8d2
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host OS
+      placeholder: Windows 11 with Docker Desktop WSL2, or Linux distribution and version
+    validations:
+      required: true
+  - type: input
+    id: docker
+    attributes:
+      label: Docker and Compose versions
+      placeholder: docker version; docker compose version
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: moonpool diagnostics
+      description: Paste redacted `bin/moonpool --json status` and `bin/moonpool diag receipt`. No tokens.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Result and reproduction steps
+    validations:
+      required: true

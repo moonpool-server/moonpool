@@ -1,0 +1,2 @@
+#!/command/with-contenv bash
+exec /opt/sn2/bin/sn2-service.sh xvfb

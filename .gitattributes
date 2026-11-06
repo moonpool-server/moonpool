@@ -1,0 +1,6 @@
+# Shell scripts and container files must keep LF endings, even on Windows checkouts.
+* text=auto eol=lf
+*.ini -text
+# Windows-only player kit: cmd.exe needs CRLF batch files.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

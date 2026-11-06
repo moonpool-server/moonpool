@@ -1,0 +1,8 @@
+[2026-10-31 12:03:10.0000000] Locating KismetStringLibrary...
+[2026-10-31 12:03:11.0000000] Starting mods (from enabled.txt (Z:\game\Subnautica2\Binaries\Win64\ue4ss\Mods), no defined load order)...
+[2026-10-31 12:03:11.1000000] Starting Lua mod 'SN2SlotFreeHost'
+[2026-10-31 12:03:12.0000000] [Lua] [SN2SlotFreeHost] Mod loaded successfully. control dir "Z:\data\control"
+[2026-10-31 12:05:00.0000000] [Lua] [SN2SlotFreeHost] Hooked GameMode -> GameSession.MaxPlayers set to 9
+[2026-10-31 12:05:01.0000000] [Lua] [SN2SlotFreeHost] hosted: Host call ok, session limit read back 9
+[2026-10-31 12:05:02.0000000] [Lua] [SN2SlotFreeHost] postmap: world GameSession.MaxPlayers 4 -> 9
+[2026-10-31 12:05:03.0000000] [Lua] [SN2SlotFreeHost] postmap: prune host PlayerState: ok, PlayerArray count now 0

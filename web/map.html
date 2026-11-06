@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+html,body{height:100%;margin:0;background:#071923;color:#eaf7fb;font:15px system-ui,-apple-system,"Segoe UI",sans-serif}
+body{display:flex;flex-direction:column}
+header{padding:12px 16px}
+h1{margin:0;font-size:20px}
+p{margin:4px 0 0;color:#9fc2cf}
+#chart{flex:1;min-height:0}
+.key{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:#9fc2cf}
+.ramp{width:140px;height:10px;background:linear-gradient(90deg,#8fe9e4,#2b8fc4,#31408f,#27124f)}
+.leaflet-container{background:#071923;font:inherit}
+</style>
+</head>
+<body>
+<header>
+<h1 id="title">World map</h1>
+<p id="about"></p>
+<div class="key"><span>Surface</span><span class="ramp"></span><span>Deep</span><span id="credit"></span></div>
+</header>
+<div id="chart"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+var TILE = 512, map, marks;
+var stops = [[0, [143, 233, 228]], [100, [43, 143, 196]], [300, [49, 64, 143]], [800, [39, 18, 79]]];
+function colour(depth) {
+  for (var i = 1; i < stops.length; i++) {
+    if (depth <= stops[i][0]) {
+      var a = stops[i - 1], b = stops[i], t = (depth - a[0]) / (b[0] - a[0]);
+      return 'rgb(' + a[1].map(function (v, n) { return Math.round(v + (b[1][n] - v) * t); }).join(',') + ')';
+    }
+  }
+  return 'rgb(39,18,79)';
+}
+// Latitude and longitude here are the game's y and x in metres, so markers need no
+// conversion and the scale bar is true. Zoom 0 fits the background in one tile.
+function setup(bg) {
+  var b = bg ? bg.bounds : [0, 0, 3000, 3000], s = TILE / Math.abs(b[2] - b[0]);
+  var sy = b[3] > b[1] ? s : -s;
+  var crs = L.extend({}, L.CRS.Simple, {transformation: new L.Transformation(s, -b[0] * s, sy, -b[1] * sy)});
+  map = L.map('chart', {crs: crs, minZoom: -2, maxZoom: bg ? bg.max_zoom + 1 : 8, zoomSnap: 0.5, attributionControl: false, preferCanvas: true});
+  L.control.scale({imperial: false, position: 'bottomleft'}).addTo(map);
+  var area = [[b[1], b[0]], [b[3], b[2]]];
+  if (bg && bg.tiles) {
+    L.tileLayer(bg.url, {tileSize: TILE, minZoom: -2, maxZoom: bg.max_zoom + 1, maxNativeZoom: bg.max_zoom, bounds: area}).addTo(map);
+  } else if (bg) {
+    L.imageOverlay(bg.url, area).addTo(map);
+  }
+  if (bg) {
+    map.fitBounds(area);
+    if (/^https?:/.test(bg.url)) document.getElementById('credit').textContent = 'Background from ' + new URL(bg.url).hostname;
+  }
+  marks = L.layerGroup().addTo(map);
+}
+function pin(p, label, fill) {
+  L.circleMarker([p[1], p[0]], {radius: 6, color: '#eaf7fb', weight: 2, fillColor: fill, fillOpacity: 1})
+    .bindTooltip(label, {permanent: true, direction: 'right', offset: [8, 0]}).addTo(marks);
+}
+function draw(d) {
+  if (!map) setup(d.background);
+  marks.clearLayers();
+  var seen = [];
+  d.cells.forEach(function (c) {
+    var at = [c[1] + d.cell_m / 2, c[0] + d.cell_m / 2];
+    L.circleMarker(at, {radius: 4, color: '#eaf7fb', weight: 1, fillColor: colour(c[2]), fillOpacity: 1}).bindTooltip(c[2] + ' m deep').addTo(marks);
+    seen.push(at);
+  });
+  d.lifepods.forEach(function (p) { pin(p, 'Lifepod', '#ff5a4f'); seen.push([p[1], p[0]]); });
+  d.bases.forEach(function (p) { pin(p, 'Base', '#7ee787'); seen.push([p[1], p[0]]); });
+  if (d.world) {
+    document.title = d.world + ' map';
+    document.getElementById('title').textContent = d.world;
+  }
+  document.getElementById('about').textContent = d.cells.length
+    ? 'Where players have been, about ' + d.delay_minutes + ' minutes behind. No live positions.'
+    : 'Nobody has charted this world yet. Trails appear here as people explore, about ' + d.delay_minutes + ' minutes behind.';
+  if (!d.background && !map.fitted && seen.length) {
+    map.fitBounds(seen, {padding: [48, 48], maxZoom: 3});
+    map.fitted = true;
+  }
+  if (!d.background && !map.fitted) map.setView([0, 0], 0);
+}
+function load() {
+  fetch('map.json', {cache: 'no-store'}).then(function (r) { return r.json(); }).then(draw).catch(function () {});
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

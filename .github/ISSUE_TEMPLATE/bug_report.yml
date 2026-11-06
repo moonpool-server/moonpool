@@ -1,0 +1,39 @@
+---
+name: Bug report
+description: Report a reproducible problem with the container or tooling
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, session files, webhook URLs, saves, or private player information.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include what you expected and the smallest reproducible sequence.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste redacted `bin/moonpool --json status` and `bin/moonpool diag receipt`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Include only the relevant, redacted lines.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed credentials, tokens, webhook URLs, save data, and private player information.
+          required: true
+        - label: I searched existing issues for this problem.
+          required: true

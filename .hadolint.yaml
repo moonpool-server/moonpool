@@ -1,0 +1,8 @@
+failure-threshold: info
+ignored:
+  # Debian and WineHQ package versions are not pinned: old versions leave the
+  # mirrors and the build breaks. Rebuild to pick up security updates.
+  - DL3008
+trustedRegistries:
+  - docker.io
+  - ghcr.io

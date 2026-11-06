@@ -1,0 +1,1292 @@
+#!/usr/bin/env bash
+# The admin verbs over our file-drop queue; no game tool or panel offers
+# them for this game.
+# moonpool: admin commands for a Subnautica 2 headless host.
+#
+# On the Docker host it drives the container with docker compose and forwards
+# in-game commands into the container. Inside the container (SN2_IN_CONTAINER=1,
+# set in the image) it talks to the SN2SlotFreeHost mod through the file-drop queue
+# in $SN2_CONTROL_DIR: write JSON to tmp/, rename into inbox/, wait for outbox/.
+#
+# Every run ends in finish(): one result (code, state, message, next action,
+# data) that is printed as prose by default or, with --json anywhere on the
+# line, as one JSON object on stdout and nothing else. The exit code follows
+# the code (table in usage). The request id is made once, in the outermost
+# process, and travels into the container as SN2_REQUEST_ID.
+#
+# A mutating command runs under one lock, $SN2_CONTROL_DIR/moonpool.lock in the
+# data volume, taken by the container copy (the volume is a named Docker
+# volume: the host copy cannot reach the file, so it never locks; it forwards
+# and the container copy locks), and ends with one receipt line appended to
+# $SN2_CONTROL_DIR/receipts.jsonl. Read-only commands take no lock and leave
+# no receipt. SN2_LOCK_HELD=1 says a caller already holds that same lock.
+set -euo pipefail
+
+SN2_SERVICE="${SN2_SERVICE:-sn2}"
+# Every path comes from the common.sh the services source, so moonpool and the
+# service agree on DATA_DIR.
+SN2_COMMON="${SN2_COMMON:-/opt/sn2/bin/common.sh}"
+[ -f "$SN2_COMMON" ] || SN2_COMMON="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../scripts/common.sh"
+# shellcheck source=scripts/common.sh
+. "$SN2_COMMON"
+SN2_CONTROL_DIR="${SN2_CONTROL_DIR:-$CONTROL_DIR}"
+# The game's save folder, measured in the running container.
+SN2_SAVE_DIR="${SN2_SAVE_DIR:-$SAVE_DIR}"
+SN2_TIMEOUT="${SN2_TIMEOUT:-15}"
+SN2_PROTOCOL_VERSION=1
+SN2_REQUEST_MAX_BYTES=4096
+SN2_RESPONSE_MAX_BYTES=65536
+SN2_QUEUE_MAX_FILES=128
+SN2_RUN_DIR="${SN2_RUN_DIR:-$RUN_DIR}"
+SN2_LOG_DIR="${SN2_LOG_DIR:-$LOG_DIR}"
+SN2_STEAM_DIR="${SN2_STEAM_DIR:-$STEAM_DIR}"
+# Seconds between stopping the game and allowing the supervisor to start it.
+SN2_RESTART_WAIT="${SN2_RESTART_WAIT:-5}"
+SN2_RECEIPTS="${SN2_RECEIPTS:-$SN2_CONTROL_DIR/receipts.jsonl}"
+SN2_LOCK_FILE="${SN2_LOCK_FILE:-$SN2_CONTROL_DIR/moonpool.lock}"
+# Seconds a mutating command waits for the lock before it is refused.
+SN2_LOCK_WAIT="${SN2_LOCK_WAIT:-5}"
+
+# The next actions, one fixed sentence per situation, so a caller can match
+# on them; the mod's error codes themselves are never changed, only read.
+NEXT_PLAYERS="Refresh the player list with: moonpool players, and use a name from it."
+NEXT_HOSTED="Wait until moonpool status shows a hosted session, then retry."
+NEXT_PLAYERS_ONLINE="Ask the players to leave, or run again with --force (owner only)."
+NEXT_WEATHER="Choose a weather type from the loaded list: weather_types in status.json."
+NEXT_SETTING="Fix the refused key in settings.yaml (the row names the reason) and apply again."
+NEXT_STALE="Inspect the host's health (moonpool status) and wait for a fresh status write."
+NEXT_TIMEOUT="Inspect the logs (moonpool logs game, moonpool status) before sending again; do not resubmit a mutating command blindly."
+NEXT_RETRY="Retry after the current operation completes."
+NEXT_ENABLE="Add the command to enabled_commands in sn2headless.json, recreate the host and retry."
+NEXT_BODY="Wait until the player has a body in the world (a position in status.json), then retry."
+NEXT_CHOICE="Pass the argument named under data.argument; the valid choices are under data.options."
+
+usage() {
+  cat <<'EOF'
+Usage: moonpool [--instance <slug>] [--json] <command> [args]
+
+Who is in
+  status                       container state, the mod's readiness and the host receipt
+  players                      who is connected (PlayerState names)
+  players kick <name>          the game's own KickPlayer <name>, run as the host
+  players invite <steamid64|profile link>
+                               let them in: their friend request is accepted within a minute
+  players friends              the host's friend code and its friends, from Steam's files
+  ban add <name|steamid64> [reason]
+  ban remove <name|steamid64>  manage permanent access blocks
+  ban list                     list permanent access blocks
+
+The world
+  world                        the clock, the daylight hold, the weather and the loaded
+                               weather types, from status.json
+  world time <HH:MM>           set the clock (settings.yaml time_of_day, then apply)
+  world time frozen|normal     hold the clock, or let it run (daylight)
+  world weather <type>         set the weather to a loaded type (DA_ prefix optional)
+  settings apply               copy ./settings.yaml (beside .env) to the mod and re-read it
+  mods list                    the mods this server asks players for, as published
+  mods publish                 turn control/plugins.yaml into the signed manifest now
+  mods pin <name> <archive>    record a hand-downloaded archive (Nexus) for one entry
+  mods enable|disable <name>   switch one entry on or off in plugins.yaml and republish
+  map where <player>           where that player is now, in game units, to line up a map
+  map bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>
+                               the bounds for map-background.json: a picture's size in
+                               pixels and two spots on it, each as pixel then game position
+
+A player
+  unlocks [player]             replay the starter set, the host's base-piece and
+                               scanned-tool unlocks (default: every connected player)
+
+The server
+  server start | stop [--now]  the container (on the Docker host, next to compose.yaml)
+  server restart [--now]       stop the game, then recreate the container so .env
+                               is re-read (compose up -d --force-recreate); refused
+                               --force remains an alias for --now
+  server arm | disarm          let the mod call the game's Host code once ready, or hold
+                               it off (AUTO_HOST=true arms by itself)
+  server saves                 list the saves: name, last played (UTC), size
+  server host [save] [--now]   restart the game on <save> (default SAVE_NAME, else the
+                               newest save, else a new world); it hosts once armed
+  server cancel                cancel a pending restart countdown
+  notify <text>                show a short operator announcement to online players
+  server slots <N>             N real player slots on the running session, no re-host
+  server backup                stage a copy of the saves now (backup-staging; offen
+                               archives that folder on its schedule)
+  server restore <backup.tar.gz> [save]
+                               stage the current saves, put the backup back, host on [save]
+  server save                  force an asynchronous world save on the host controller
+
+Looking inside
+  logs [game|steam|services|join_watch] [-f]
+                               tail a log from the volume (default: game)
+  diag verify-fresh            read-only proof that a fresh install hosted by itself
+  diag receipt                 the last Host-call receipt
+  diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
+  diag console <player> <line...>
+                               one of the game's console commands, run server-side as
+                               that player (one line; ; | and newlines are refused).
+                               Off unless enabled_commands in sn2headless.json has player
+  diag screenshot <file.png>   what the viewer shows
+  welcome [--dry-run]          post the Discord "how to join" card, or edit it in place
+  discord setup                make its channel read-only and create the opt-in alert role
+
+--json, before or after the command: one JSON object on stdout and nothing
+else: {schema_version, request_id, command, ok, state, code, message,
+next_action, data, started_at, completed_at, duration_ms}. The same exit
+codes apply without it. The older one-word spellings (kick, slots, host,
+player <name> ...) still work and print the current one.
+Environment: SN2_SERVICE (compose service, default sn2), SN2_TIMEOUT (seconds
+to wait for the mod, default 15), SN2_CONTROL_DIR (inside the container),
+SN2_REQUEST_ID (32 lowercase hex; made here when unset), SN2_ACTOR and
+SN2_SOURCE (ssh, discord, local, automation) for the receipt a mutating
+command appends to control/receipts.jsonl; mutating commands serialize on
+control/moonpool.lock (SN2_LOCK_WAIT seconds, default 5, then refused).
+Exit codes: 0 ok/accepted/pending, 64 invalid_argument, 69 unavailable or
+not_implemented, 70 protocol_error or internal_error, 75 timeout or stale,
+77 refused, 78 partial_refusal, 79 not_observed.
+EOF
+}
+
+in_container() { [ "${SN2_IN_CONTAINER:-0}" = "1" ]; }
+
+compose() {
+  local instance_args=() dir=.
+  # The default world is found from any working directory: compose runs in the
+  # repository, where compose.yaml and .env are, in a subshell so the caller's
+  # relative paths (a screenshot file) stay where they were.
+  if [ -z "${SN2_INSTANCE:-}" ] && [ -f "${SN2_REPO_ROOT:-}/compose.yaml" ]; then dir=$SN2_REPO_ROOT; fi
+  if [ -n "${SN2_INSTANCE:-}" ]; then
+    instance_args=(-p "sn2-$SN2_INSTANCE" --env-file "$SN2_REPO_ROOT/instances/$SN2_INSTANCE/.env" -f "$SN2_REPO_ROOT/compose.yaml")
+  fi
+  if docker compose version >/dev/null 2>&1; then (cd "$dir" && docker compose "${instance_args[@]}" "$@")
+  elif command -v docker-compose >/dev/null 2>&1; then (cd "$dir" && docker-compose "${instance_args[@]}" "$@")
+  else die "docker compose not found"; fi
+}
+
+# ---- the result envelope ------------------------------------------------------
+
+utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+# Milliseconds since the epoch: bash 5's EPOCHREALTIME (its decimal separator
+# follows the locale), else whole seconds.
+now_ms() {
+  local t=${EPOCHREALTIME:-}
+  t=${t//,/.}
+  [ -n "$t" ] || t="$(date +%s).000000"
+  echo $(( ${t%.*} * 1000 + 10#${t#*.} / 1000 ))
+}
+
+# Globals finish() reads. SN2_COMMAND and SN2_MUTATING come from route();
+# SN2_ARGS is the command's allowlisted argument summary (JSON) and
+# SN2_PROTOCOL the mod's own {ok, error, data}, both for the receipt;
+# SN2_HUMAN_DONE=1 says the handler already printed its prose, so a success
+# adds no line. The start time is the outermost process's, handed in.
+SN2_JSON=0
+SN2_COMMAND=unknown
+SN2_MUTATING=0
+SN2_ARGS='{}'
+SN2_PROTOCOL='{}'
+SN2_HUMAN_DONE=0
+STARTED_AT=${SN2_STARTED_AT:-$(utc_now)}
+START_MS=${SN2_START_MS:-$(now_ms)}
+
+# code -> state and exit code (the one table; usage repeats it).
+state_of() {
+  case $1 in
+    ok) echo "verified 0" ;;
+    accepted) echo "submitted 0" ;;
+    pending) echo "pending 0" ;;
+    invalid_argument) echo "refused 64" ;;
+    not_implemented | unavailable) echo "failed 69" ;;
+    refused) echo "refused 77" ;;
+    partial_refusal) echo "partial 78" ;;
+    not_observed) echo "failed 79" ;;
+    timeout | stale) echo "failed 75" ;;
+    protocol_error | internal_error) echo "failed 70" ;;
+    *) echo "" ;;
+  esac
+}
+
+# Append this run's receipt: one JSON line in one write, while the lock is
+# still held. Strings are redacted (URLs, paths, long tokens); the arguments
+# are the per-command summary, never argv. A receipt that cannot be written
+# does not change the result of work that already ran.
+write_receipt() { # code state exit message
+  local okj=false
+  [ "$3" -eq 0 ] && okj=true
+  jq -cn --arg rid "$SN2_REQUEST_ID" --arg actor "$SN2_ACTOR" --arg source "$SN2_SOURCE" \
+    --arg cmd "$SN2_COMMAND" --argjson args "$SN2_ARGS" --arg s "$STARTED_AT" --arg c "$(utc_now)" \
+    --argjson ms "$(( $(now_ms) - START_MS ))" --argjson rc "$3" --argjson ok "$okj" --arg state "$2" \
+    --arg code "$1" --argjson proto "$SN2_PROTOCOL" --arg msg "$4" '
+    def redact: walk(if type == "string" then
+        gsub("https?://[^ \"]+"; "[url]") | gsub("/[^ \"]+/[^ \"]*"; "[path]")
+        | gsub("[A-Za-z0-9_-]{40,}"; "[secret]")
+      else . end);
+    {schema_version: 1, request_id: $rid, actor: $actor, source: $source, command: $cmd,
+     arguments: ($args | redact), started_at: $s, completed_at: $c, duration_ms: $ms,
+     exit_code: $rc, ok: $ok, state: $state, code: $code, protocol_result: ($proto | redact),
+     postcondition: {}, message: ($msg | redact)}' >>"$SN2_RECEIPTS" 2>/dev/null || true
+  if [ -f "$SN2_RECEIPTS" ] && [ "$(wc -l <"$SN2_RECEIPTS")" -gt 1000 ]; then
+    tail -n 1000 "$SN2_RECEIPTS" >"$SN2_RECEIPTS.tmp" && mv "$SN2_RECEIPTS.tmp" "$SN2_RECEIPTS"
+  fi
+}
+
+# The one lock every mutating command runs under, in the data volume. A
+# caller that already holds it says so with SN2_LOCK_HELD=1 and hands it in
+# on file descriptor 9 (exec 9>>control/moonpool.lock; flock 9; SN2_LOCK_HELD=1
+# moonpool ...): the claim is checked, never trusted, because flock on the same
+# open file description succeeds at once and on any other one does not.
+# Contention past SN2_LOCK_WAIT is a refusal, receipted. The wait is a
+# non-blocking try four times a second: BusyBox's flock (the test image) has
+# no -w, util-linux's does, and this runs the same on both.
+take_lock() {
+  if [ "${SN2_LOCK_HELD:-0}" = 1 ]; then
+    if [ "$(readlink "/proc/$$/fd/9" 2>/dev/null)" = "$(readlink -f "$SN2_LOCK_FILE" 2>/dev/null)" ] && flock -n 9 2>/dev/null; then
+      return 0
+    fi
+    finish refused "SN2_LOCK_HELD=1, but file descriptor 9 does not hold $SN2_LOCK_FILE; nothing was sent" \
+      "$NEXT_RETRY" '{"protocol_error":"lock_not_held"}'
+  fi
+  { : >>"$SN2_LOCK_FILE"; } 2>/dev/null || unavailable "cannot open the lock file $SN2_LOCK_FILE (has the container started?)"
+  exec 9>>"$SN2_LOCK_FILE"
+  local tries=0
+  until flock -n 9; do
+    if [ "$tries" -ge $((SN2_LOCK_WAIT * 4)) ]; then
+      finish refused "another moonpool operation is running ($SN2_LOCK_FILE is held); nothing was sent" \
+        "$NEXT_RETRY" '{"protocol_error":"lock_held"}'
+    fi
+    sleep 0.25
+    tries=$((tries + 1))
+  done
+}
+
+# finish CODE MESSAGE [NEXT_ACTION] [DATA_JSON]: print the result and exit.
+# Prose by default (the message on stdout when the exit is 0, else on stderr
+# with the next action); with --json the one envelope on stdout. DATA must be
+# a JSON object; anything else is wrapped as {"value": ...}.
+finish() {
+  local code=$1 msg=$2 next=${3:-} data=${4:-'{}'} st rc
+  st=$(state_of "$code")
+  if [ -z "$st" ]; then msg="unknown result code $code: $msg"; code=internal_error; st=$(state_of "$code"); fi
+  rc=${st#* }; st=${st% *}
+  if [ -z "$next" ]; then
+    case $code in timeout) next=$NEXT_TIMEOUT ;; stale) next=$NEXT_STALE ;; esac
+  fi
+  [ "$SN2_MUTATING" != 1 ] || write_receipt "$code" "$st" "$rc" "$msg"
+  if [ "$SN2_JSON" = 1 ]; then
+    command -v jq >/dev/null 2>&1 || { printf 'moonpool: --json needs jq on this machine\n' >&2; exit 70; }
+    data=$(printf '%s' "$data" | jq -c 'if type == "object" then . else {value: .} end' 2>/dev/null) || data='{}'
+    local okj=false completed dur
+    [ "$rc" -eq 0 ] && okj=true
+    completed=$(utc_now); dur=$(( $(now_ms) - START_MS ))
+    jq -cn --arg rid "$SN2_REQUEST_ID" --arg cmd "$SN2_COMMAND" --argjson ok "$okj" --arg state "$st" \
+      --arg code "$code" --arg msg "$msg" --arg next "$next" --argjson data "$data" \
+      --arg s "$STARTED_AT" --arg c "$completed" --argjson ms "$dur" \
+      '{schema_version: 1, request_id: $rid, command: $cmd, ok: $ok, state: $state, code: $code,
+        message: $msg, next_action: (if $next == "" then null else $next end), data: $data,
+        started_at: $s, completed_at: $c, duration_ms: $ms}'
+  elif [ "$rc" -eq 0 ]; then
+    [ "$SN2_HUMAN_DONE" = 1 ] || printf '%s\n' "$msg"
+  else
+    printf 'moonpool: %s\n' "$msg" >&2
+    [ -z "$next" ] || printf 'moonpool: next: %s\n' "$next" >&2
+  fi
+  exit "$rc"
+}
+
+# The four ways a command stops short, by the code each one means.
+usage_error() { finish invalid_argument "$*"; }     # a bad argument or value: exit 64
+# A missing or invalid argument with the valid choices: data.argument and
+# data.options (a JSON array), and the choices in the message.
+choose_error() { # message argument options-json
+  local opts
+  opts=$(printf '%s' "$3" | jq -r 'join(", ")' 2>/dev/null || true)
+  finish invalid_argument "$1${opts:+ (choose one of: $opts)}" "$NEXT_CHOICE" \
+    "{\"argument\":$(json_escape "$2"),\"options\":$3}"
+}
+unavailable() { finish unavailable "$*"; }          # container, game, mod, queue or state missing: 69
+refuse() { finish refused "$*"; }                   # policy or game state says no: 77
+die() { finish internal_error "$*"; }               # anything unexpected: 70
+
+# ---- JSON helpers (no jq needed) -------------------------------------------
+
+json_escape() {
+  local s=$1 out='' c i
+  for ((i = 0; i < ${#s}; i++)); do
+    c=${s:i:1}
+    # shellcheck disable=SC1003  # the backslash branch is a literal, quoted as intended
+    case $c in
+      '"') out+='\"' ;;
+      '\') out+='\\' ;;
+      $'\n') out+='\n' ;;
+      $'\r') out+='\r' ;;
+      $'\t') out+='\t' ;;
+      *)
+        if [[ $c == [[:cntrl:]] ]]; then printf -v c '\\u%04x' "'$c"; fi
+        out+=$c ;;
+    esac
+  done
+  printf '"%s"' "$out"
+}
+
+new_nonce() {
+  od -An -tx1 -N16 /dev/urandom | tr -d ' \n'
+}
+
+build_request() {
+  local id=$1 cmd=$2; shift 2
+  local args='{}'
+  case $cmd in
+    player)
+      args="{\"player\":$(json_escape "$1"),\"command\":$(json_escape "$2")}" ;;
+    kick) args="{\"player\":$(json_escape "$1")}" ;;
+    slots) args="{\"slots\":$1}" ;; # digits only, checked by the caller
+    friend_code) [ "${1:-}" = --force ] && args='{"force":true}' ;;
+    unlocks) [ -n "${1:-}" ] && args="{\"player\":$(json_escape "$1")}" ;;
+  esac
+  printf '{"v":%s,"id":"%s","cmd":"%s","args":%s,"ts":%s}\n' \
+    "$SN2_PROTOCOL_VERSION" "$id" "$cmd" "$args" "$(date +%s)"
+}
+
+check_control_dir() {
+  [ -d "$SN2_CONTROL_DIR" ] && [ ! -L "$SN2_CONTROL_DIR" ] || unavailable "control queue is missing or is a symlink: $SN2_CONTROL_DIR"
+  local d
+  for d in inbox outbox tmp receipts; do
+    [ -d "$SN2_CONTROL_DIR/$d" ] && [ ! -L "$SN2_CONTROL_DIR/$d" ] ||
+      unavailable "control queue $d must be a real directory, not a symlink or other file"
+  done
+  local mode
+  mode=$(stat -c '%a' "$SN2_CONTROL_DIR")
+  [ "$mode" = "700" ] || refuse "refusing: $SN2_CONTROL_DIR has mode $mode, expected 700"
+}
+
+queue_housekeeping() {
+  # A killed client can leave only a temp file; it was never submitted.
+  find "$SN2_CONTROL_DIR/tmp" -mindepth 1 -maxdepth 1 -type f ! -name 'mod-*' -mmin +5 -delete 2>/dev/null || true
+  local bad
+  bad=$(find "$SN2_CONTROL_DIR/inbox" "$SN2_CONTROL_DIR/outbox" -mindepth 1 -maxdepth 1 \
+    \( -type l -o ! -type f \) ! -name .pending -print -quit 2>/dev/null)
+  [ -z "$bad" ] || finish protocol_error "control queue contains a symlink or non-regular file: $bad" \
+    "Remove that entry from the control volume and retry."
+}
+
+# The mod's error codes that mean its own protocol check failed (the request
+# never ran); every other error is the game or the mod refusing the request.
+mod_protocol_error() {
+  case $1 in
+    not_object | bad_version | bad_nonce | nonce_filename_mismatch | bad_timestamp | stale | bad_json | \
+      invalid_utf8 | unreadable_or_too_large | response_too_large | non_regular_file | replay | \
+      not_allowlisted | args_not_object | unknown_arg:* | missing_arg:* | bad_arg_type:* | \
+      bad_arg_length:* | bad_console_line) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# What a stable mod error means, and what to do next: E_WHAT (prose) and
+# E_NEXT (one of the fixed sentences above, or empty). Golden-tested.
+present_error() {
+  E_NEXT=''
+  case $1 in
+    unknown_player | unknown_target) E_WHAT="no connected player has that name ($1)"; E_NEXT=$NEXT_PLAYERS ;;
+    host_controller_not_found) E_WHAT="no session is hosted yet, so the host has no controller to run it ($1)"; E_NEXT=$NEXT_HOSTED ;;
+    players_online) E_WHAT="players are in the world ($1)"; E_NEXT=$NEXT_PLAYERS_ONLINE ;;
+    disabled_by_config) E_WHAT="the command is disabled in the mod's config ($1)"; E_NEXT=$NEXT_ENABLE ;;
+    player_has_no_body | target_has_no_body) E_WHAT="the player has no body in the world yet ($1)"; E_NEXT=$NEXT_BODY ;;
+    *) E_WHAT=$1 ;;
+  esac
+}
+
+# Send one command through the queue and judge the answer. Sets Q_CODE,
+# Q_MSG, Q_NEXT and Q_DATA for finish(), and SN2_PROTOCOL to the mod's own
+# {ok, error, data}. The request id is this run's id, so the mod's answer
+# carries the same id as the envelope. Without --json the raw answer is
+# printed first, as it always was.
+queue_call() {
+  local cmd=$1; shift
+  check_control_dir
+  queue_housekeeping
+  local id=$SN2_REQUEST_ID tmp dest out waited=0
+  tmp="$SN2_CONTROL_DIR/tmp/$id.json"
+  dest="$SN2_CONTROL_DIR/inbox/$id.json"
+  out="$SN2_CONTROL_DIR/outbox/$id.json"
+  local queued
+  queued=$(find "$SN2_CONTROL_DIR/inbox" -mindepth 1 -maxdepth 1 -type f -name '*.json' | wc -l)
+  [ "$queued" -lt "$SN2_QUEUE_MAX_FILES" ] || finish unavailable \
+    "control inbox is full ($queued requests; limit $SN2_QUEUE_MAX_FILES)" "Wait for the mod to drain the inbox, then retry."
+  (umask 077; build_request "$id" "$cmd" "$@" >"$tmp")
+  [ "$(wc -c <"$tmp")" -le "$SN2_REQUEST_MAX_BYTES" ] || { rm -f "$tmp"; finish protocol_error "request exceeds $SN2_REQUEST_MAX_BYTES bytes"; }
+  mv "$tmp" "$dest"
+  : >"$SN2_CONTROL_DIR/inbox/.pending"
+  while [ ! -e "$out" ] && [ ! -L "$out" ]; do
+    if [ "$waited" -ge $((SN2_TIMEOUT * 4)) ]; then
+      rm -f "$dest"
+      finish timeout "no answer from the mod within ${SN2_TIMEOUT}s (is the game running with SN2SlotFreeHost loaded? see: moonpool status)"
+    fi
+    sleep 0.25
+    waited=$((waited + 1))
+  done
+  [ -f "$out" ] && [ ! -L "$out" ] || { rm -f "$out"; finish protocol_error "the mod answer is not a regular file"; }
+  [ "$(wc -c <"$out")" -le "$SN2_RESPONSE_MAX_BYTES" ] || { rm -f "$out"; finish protocol_error "the mod answer exceeds $SN2_RESPONSE_MAX_BYTES bytes"; }
+  local reply verdict
+  reply=$(cat "$out"); rm -f "$out"
+  [ "$SN2_JSON" = 1 ] || { printf '%s\n' "$reply"; SN2_HUMAN_DONE=1; }
+  # One structural check: the version, this run's id, and the {ok, data, error} contract.
+  verdict=$(printf '%s' "$reply" | jq -r --arg id "$id" --argjson version "$SN2_PROTOCOL_VERSION" '
+    if type != "object" then "not an object"
+    elif .v == null then "missing protocol version (deploy the current mod before using this moonpool)"
+    elif .v != $version then "protocol version \(.v) is not supported; this moonpool supports \($version)"
+    elif ((.accepts // []) | index($version)) == null then "the mod does not accept protocol version \($version)"
+    elif .id != $id then "answer id \(.id) is not the request id"
+    elif (.ok | type) != "boolean" then "ok is not a boolean"
+    elif (.data | type) != "object" then "data is not an object"
+    elif .ok == false and (.error | type) != "string" then "error is not a string"
+    elif (.meta.game_build_id | type) != "string" or (.meta.mod_version | type) != "string" then "missing game build id or mod version"
+    else "valid" end' 2>/dev/null) || verdict="not JSON or not UTF-8"
+  if [ "$verdict" != valid ]; then
+    Q_CODE=protocol_error Q_MSG="the mod's answer is incompatible or malformed: $verdict" \
+      Q_NEXT="Deploy matching copies of bin/moonpool and the SN2SlotFreeHost Lua files, then retry."
+    Q_DATA=$(jq -cn --arg r "${reply:0:2000}" --arg w "$verdict" '{protocol_error: $w, reply: $r}')
+    return 0
+  fi
+  SN2_PROTOCOL=$(printf '%s' "$reply" | jq -c '{ok: .ok, error: (.error // null), data: .data}')
+  Q_DATA=$(printf '%s' "$reply" | jq -c '.data')
+  Q_NEXT=""
+  case $(printf '%s' "$reply" | jq -r 'if .ok then (if .data.queued == true then "queued" else "ok" end) else "error" end') in
+    ok) Q_CODE=ok Q_MSG="$SN2_COMMAND: the mod answered ok" ;;
+    queued) Q_CODE=accepted Q_MSG="$SN2_COMMAND: queued by the mod for the game thread; its effect is not read back here" ;;
+    error)
+      local err
+      err=$(printf '%s' "$reply" | jq -r '.error')
+      Q_DATA=$(printf '%s' "$reply" | jq -c '.data + {protocol_error: .error}')
+      if mod_protocol_error "$err"; then
+        Q_CODE=protocol_error Q_MSG="the mod did not run $SN2_COMMAND: $err"
+      else
+        present_error "$err"
+        Q_CODE=refused Q_MSG="$SN2_COMMAND refused by the mod: $E_WHAT" Q_NEXT=$E_NEXT
+      fi ;;
+  esac
+}
+
+# The settings answer (settings.lua status_block): one row per key, applied
+# true when its call ran as the host (not read back: accepted), false with
+# the reason when it was refused. A refusal beside a call that ran is
+# partial_refusal; every key refused is refused; no key at all is ok.
+settings_verdict() {
+  [ "$Q_CODE" = ok ] || return 0
+  local n ran refused
+  n=$(jq '[.values[]?] | length' <<<"$Q_DATA")
+  ran=$(jq '[.values[]? | select(.applied == true)] | length' <<<"$Q_DATA")
+  refused=$(jq -r '[.values[]? | select(.applied == false) | "\(.key) (\(.reason // "refused"))"] | join(", ")' <<<"$Q_DATA")
+  if [ "$n" -eq 0 ]; then
+    Q_MSG="$SN2_COMMAND: the mod read the file; it names no setting to apply"
+  elif [ -z "$refused" ]; then
+    Q_CODE=accepted Q_MSG="$SN2_COMMAND: $ran call(s) ran as the host; the values are not read back here (status.json shows them)"
+  else
+    if [ "$ran" -gt 0 ]; then Q_CODE=partial_refusal; else Q_CODE=refused; fi
+    Q_MSG="$SN2_COMMAND: $ran ran, refused: $refused"
+    if jq -e '[.values[]? | select(.applied == false and .key == "weather")] | length > 0' <<<"$Q_DATA" >/dev/null; then
+      Q_NEXT=$NEXT_WEATHER
+    else Q_NEXT=$NEXT_SETTING; fi
+  fi
+}
+
+# Send one command through the queue and end the run on its answer.
+queue_send() {
+  queue_call "$@"
+  finish "$Q_CODE" "$Q_MSG" "$Q_NEXT" "$Q_DATA"
+}
+
+valid_save() { [[ $1 =~ ^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$ ]]; }
+
+# Real save files only: the game's settings and cache .sav files are not worlds.
+list_saves() {
+  find "$1" -type f -name '*.sav' ! -name '*Settings.sav' ! -name '*Cache.sav' \
+    ! -name '*SavedState.sav' "${@:2}"
+}
+
+# The console line for a player command: the words as given. One line, no
+# separators (the mod checks this too).
+# Printed (unless PLAYER_LINE_QUIET=1) and left in PLAYER_LINE, for a caller
+# that must not fork: a refusal inside a subshell would lose its envelope.
+player_line() {
+  [ $# -ge 2 ] || usage_error "usage: moonpool diag console <player> <line...>"
+  shift
+  local line="$*"
+  case $line in *[\;\|\`]* | *$'\n'*) refuse "refusing: one console command, no ; | \` or newline" ;; esac
+  PLAYER_LINE=$line
+  [ "${PLAYER_LINE_QUIET:-0}" = 1 ] || printf '%s\n' "$line"
+}
+
+not_implemented() {
+  finish not_implemented "$1 is not implemented: the game exposes no $1 function the mod can call."
+}
+
+# ---- the command table --------------------------------------------------------
+
+WORLD_USAGE="usage: moonpool world [time <HH:MM|frozen|normal> | weather <type>]"
+MAP_USAGE="usage: moonpool map where <player> | bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>"
+MODS_USAGE="usage: moonpool mods list | publish | pin <name> <archive.zip> | enable <name> | disable <name>"
+
+# The one table: the words typed -> the canonical dotted command name the
+# envelope and the receipt carry (R_CMD), the handler (R_OP), whether it
+# mutates (R_MUT: lock and receipt), the receipt's argument summary (R_ARGS)
+# and the handler's arguments (R_ARGV). The older one-word spellings are
+# rewritten to the current words first and leave R_HINT for the prose mode;
+# R_WORDS is the current spelling, which the host copy forwards. A rename is
+# one line here.
+route() {
+  R_CMD='' R_OP='' R_MUT=0 R_LOCK=0 R_ARGS='{}' R_HINT='' R_USAGE=''
+  R_WORD=${1:-help}
+  local w=$R_WORD; shift || true
+  case $w in
+    start | stop | restart | cancel | arm | disarm | saves | host | restore | slots | save)
+      R_HINT="moonpool server $w"; set -- server "$w" "$@" ;;
+    kick | invite | friends) R_HINT="moonpool players $w"; set -- players "$w" "$@" ;;
+    receipt | friend-code | screenshot | verify-fresh) R_HINT="moonpool diag $w"; set -- diag "$w" "$@" ;;
+    unlocks) if [ "${1:-}" = replay ]; then R_HINT="moonpool unlocks [player]"; shift; fi; set -- unlocks "$@" ;;
+    player) R_HINT="moonpool diag console <player> <line...>"; set -- diag console "$@" ;;
+    *) set -- "$w" "$@" ;;
+  esac
+  R_WORDS=("$@")
+  w=$1; shift || true
+  R_CMD=$w
+  case $w in
+    status) R_OP=status ;;
+    players)
+      case ${1:-} in
+        '') R_OP=players ;;
+        kick) R_CMD=players.kick R_OP=kick R_MUT=1; shift; R_ARGS="{\"player\":$(json_escape "${1:-}")}" ;;
+        invite) R_CMD=players.invite R_OP=invite R_MUT=1; shift ;;
+        friends) R_CMD=players.friends R_OP=friends; shift ;;
+        *) R_OP=usage R_USAGE="usage: moonpool players [kick <name> | invite <steamid64|profile link> | friends]" ;;
+      esac ;;
+    ban)
+      case ${1:-} in
+        add) R_CMD=ban.add R_OP=ban_add R_MUT=1; shift
+          R_ARGS="{\"identifier\":$(json_escape "${1:-}"),\"reason\":$(json_escape "${*:2}")}" ;;
+        remove) R_CMD=ban.remove R_OP=ban_remove R_MUT=1; shift
+          R_ARGS="{\"identifier\":$(json_escape "${1:-}")}" ;;
+        list) R_CMD=ban.list R_OP=ban_list; shift ;;
+        *) R_OP=usage R_USAGE="usage: moonpool ban add <name|steamid64> [reason] | remove <name|steamid64> | list" ;;
+      esac ;;
+    world)
+      case ${1:-} in
+        '') R_OP=world ;;
+        time | weather) R_CMD=world.$1 R_OP=world_set R_MUT=1
+          R_ARGS="{\"setting\":\"$1\",\"value\":$(json_escape "${2:-}")}" ;;
+        *) R_OP=usage R_USAGE=$WORLD_USAGE ;;
+      esac ;;
+    settings) R_CMD=settings.apply R_OP=settings R_MUT=1 ;;
+    map)
+      case ${1:-} in
+        where) R_CMD=map.where R_OP=map_where ;;
+        bounds) R_CMD=map.bounds R_OP=map_bounds ;;
+        *) R_OP=usage R_USAGE=$MAP_USAGE ;;
+      esac
+      [ $# -eq 0 ] || shift ;;
+    mods)
+      case ${1:-} in
+        list) R_CMD=mods.list R_OP=mods_list ;;
+        publish) R_CMD=mods.publish R_OP=mods_publish R_MUT=1 ;;
+        pin) R_CMD=mods.pin R_OP=mods_pin R_MUT=1
+          R_ARGS="{\"name\":$(json_escape "${2:-}"),\"archive\":$(json_escape "$(basename -- "${3:-}")")}" ;;
+        enable | disable) R_CMD=mods.$1 R_OP=mods_toggle R_MUT=1; R_ARGS="{\"name\":$(json_escape "${2:-}")}" ;;
+        *) R_OP=usage R_USAGE=$MODS_USAGE ;;
+      esac
+      [ $# -eq 0 ] || shift ;;
+    unlocks) R_OP=unlocks R_MUT=1; R_ARGS="{\"player\":$(json_escape "${1:-}")}" ;;
+    server)
+      case ${1:-} in
+        start | arm | disarm | backup | save) R_CMD=server.$1 R_OP=$1 R_MUT=1 ;;
+        stop | cancel) R_CMD=server.$1 R_OP=$1 ;;
+        restart) R_CMD=server.restart R_OP=restart
+          R_ARGS="{\"force\":$([ "${2:-}" = --force ] && echo true || echo false)}" ;;
+        saves) R_CMD=server.saves R_OP=saves ;;
+        host) R_CMD=server.host R_OP=host; R_ARGS="{\"save\":$(json_escape "${2:-}")}" ;;
+        slots) R_CMD=server.slots R_OP=slots R_MUT=1; R_ARGS="{\"slots\":$(json_escape "${2:-}")}" ;;
+        restore) R_CMD=server.restore R_OP=restore R_MUT=1
+          R_ARGS="{\"backup\":$(json_escape "$(basename -- "${2:-}")"),\"save\":$(json_escape "${3:-}")}" ;;
+        *) R_OP=usage R_USAGE="usage: moonpool server start | stop [--now] | restart [--now|--force] | cancel | arm | disarm | saves | host [save] [--now] | slots <N> | backup | restore <backup> [save] | save" ;;
+      esac
+      [ $# -eq 0 ] || shift ;;
+    logs) R_OP=logs ;;
+    notify) R_OP=notify R_MUT=1 ;;
+    diag)
+      case ${1:-} in
+        verify-fresh) R_CMD=diag.verify_fresh R_OP=verify_fresh ;;
+        receipt | screenshot) R_CMD=diag.$1 R_OP=$1 ;;
+        friend-code) R_CMD=diag.friend_code R_OP=friend_code ;;
+        console) R_CMD=diag.console R_OP=console R_MUT=1
+          R_ARGS="{\"player\":$(json_escape "${2:-}"),\"command\":$(json_escape "${3:-}"),\"line\":$(json_escape "${*:3}")}" ;;
+        *) R_OP=usage R_USAGE="usage: moonpool diag verify-fresh | receipt | friend-code [--force] | screenshot <file.png> | console <player> <line...>" ;;
+      esac
+      [ $# -eq 0 ] || shift ;;
+    welcome) R_OP=welcome ;;
+    discord)
+      if [ "${1:-}" = setup ]; then R_CMD=discord.setup R_OP=discord_setup R_MUT=1; shift
+      else R_OP=usage R_USAGE="usage: moonpool discord setup"; fi ;;
+    # The host copy's own commands record their receipt through this, inside
+    # the container, where the receipts file is: record <command> <code> <message> [args-json]
+    record) R_OP=record R_LOCK=1 ;;
+    # Plumbing between the host copy and the container copy; not for operators.
+    # The ones that change something run under the lock (R_LOCK) with no
+    # receipt of their own: the host command they serve records one.
+    settings-install | stop-game | start-game | restart-warning) R_OP=$w R_LOCK=1 ;;
+    session-up) R_OP=$w ;;
+    help | -h | --help) R_CMD=help R_OP=help ;;
+    *) R_CMD=unknown R_OP=unknown ;;
+  esac
+  R_ARGV=("$@")
+}
+
+# ---- inside the container ---------------------------------------------------
+
+do_stop_game() {
+  mkdir -p "$SN2_RUN_DIR"
+  : >"$SN2_RUN_DIR/stopped"
+  if [ -f "$SN2_RUN_DIR/game.pid" ]; then
+    kill "$(cat "$SN2_RUN_DIR/game.pid")" 2>/dev/null || true
+  fi
+}
+
+do_start_game() { rm -f "$SN2_RUN_DIR/stopped" "$SN2_RUN_DIR/idle-stopped"; }
+
+# Restart the game on [save]: the supervisor relaunches it, and the mod hosts
+# once armed. Ends the run.
+do_host() {
+  local now=0 save=''
+  for arg in "$@"; do if [ "$arg" = --now ]; then now=1; else save=$arg; fi; done
+  set -- "$save"
+  if [ $# -ge 1 ] && [ -n "$1" ]; then
+    valid_save "$1" || usage_error "save names are letters, digits, _ and - only"
+    printf '%s\n' "$1" >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  fi
+  # Said first, so the watcher reads the stop as a planned restart, never an
+  # outage (a re-host posted "stopped unexpectedly").
+  if [ "$now" != 1 ] && CONTROL_DIR="$SN2_CONTROL_DIR" session_up; then
+    "${SN2_BIN:-/opt/sn2/bin}/restart-warning.sh" run "re-hosting on ${1:-the default save}" || finish pending "restart countdown was cancelled or another countdown is running"
+  fi
+  do_stop_game; sleep "$SN2_RESTART_WAIT"; do_start_game
+  finish accepted "re-hosting on ${1:-the default save}: the game restarts and hosts once armed (moonpool logs game); the hosted session is not read back here" \
+    "" "$(jq -cn --arg s "${1:-}" '{save: (if $s == "" then null else $s end)}')"
+}
+
+# One file's JSON, or null when it is missing or not JSON.
+file_json() { [ -f "$1" ] && jq -c . "$1" 2>/dev/null || echo null; }
+
+# What status.json offers as choices: the connected players (the host left
+# out) and the loaded weather types. Each is a JSON
+# array, [] when there is no status.json yet.
+status_json() { echo "$SN2_CONTROL_DIR/status.json"; }
+player_options() {
+  jq -c --arg h "${SN2_HOST_NAME:-$HOST_NAME}" '[.players[]? | .name | select(. != $h)]' "$(status_json)" 2>/dev/null || echo '[]'
+}
+weather_options() { jq -c '[.weather_types[]?]' "$(status_json)" 2>/dev/null || echo '[]'; }
+
+# Rewrite one top-level key in the control folder's settings.yaml (the flat
+# `key: value` subset the mod parses; the mods list and every other line stay
+# as they are; the file is created when missing), then let the mod re-read it.
+settings_set_key() { # key value
+  local f="$SN2_CONTROL_DIR/settings.yaml" tmp
+  tmp=$(mktemp)
+  if [ -f "$f" ]; then
+    awk -v k="$1" -v v="$2" 'BEGIN { done = 0 }
+      $0 ~ ("^" k ":") { if (!done) { print k ": " v; done = 1 }; next }
+      { print }
+      END { if (!done) print k ": " v }' "$f" >"$tmp"
+  else
+    printf '%s: %s\n' "$1" "$2" >"$tmp"
+  fi
+  if ! install -m 600 "$tmp" "$f.tmp" || ! mv -f "$f.tmp" "$f"; then rm -f "$tmp"; die "could not write $f"; fi
+  rm -f "$tmp"
+}
+
+# world time <HH:MM|frozen|normal> and world weather <type>: the value goes
+# into settings.yaml, the mod re-reads it, and this key's own row decides.
+world_set() { # setting value
+  [ $# -le 2 ] || usage_error "$WORLD_USAGE"
+  local setting=$1 value=${2:-} key
+  case $setting in
+    time)
+      case $value in
+        frozen | normal) key=daylight ;;
+        *)
+          [[ $value =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] ||
+            choose_error "world time needs a 24-hour HH:MM, frozen or normal, not '$value'" time '["HH:MM","frozen","normal"]'
+          key=time_of_day; value="\"$value\"" ;;
+      esac ;;
+    weather)
+      local types; types=$(weather_options)
+      [[ $value =~ ^[A-Za-z0-9_]+$ ]] || choose_error "world weather needs a loaded weather type" weather "$types"
+      if [ "$types" != '[]' ] && ! jq -e --arg v "$value" 'map(ascii_downcase) | (index($v | ascii_downcase) != null) or (index("da_" + ($v | ascii_downcase)) != null)' <<<"$types" >/dev/null; then
+        choose_error "no loaded weather type is named $value" weather "$types"
+      fi
+      key=weather ;;
+  esac
+  check_control_dir
+  settings_set_key "$key" "$value"
+  SN2_ARGS=$(jq -cn --arg s "$setting" --arg k "$key" --arg v "$value" '{setting: $s, key: $k, value: $v}')
+  queue_call settings
+  settings_verdict
+  if [ "$Q_CODE" = accepted ] || [ "$Q_CODE" = partial_refusal ] || [ "$Q_CODE" = refused ]; then
+    local row others
+    row=$(jq -c --arg k "$key" '[.values[]? | select(.key == $k)][0] // empty' <<<"$Q_DATA")
+    others=$(jq -r --arg k "$key" '[.values[]? | select(.applied == false and .key != $k) | .key] | join(", ")' <<<"$Q_DATA")
+    if [ -n "$row" ] && [ "$(jq -r .applied <<<"$row")" = false ]; then
+      Q_CODE=refused Q_MSG="$SN2_COMMAND: $key not applied: $(jq -r '.reason // "refused"' <<<"$row")"
+      if [ "$key" = weather ]; then Q_NEXT=$NEXT_WEATHER; else Q_NEXT=$NEXT_SETTING; fi
+    elif [ -n "$row" ]; then
+      Q_CODE=accepted Q_NEXT=''
+      Q_MSG="$SN2_COMMAND: $key set to $value as the host; status.json shows when it took (moonpool world)${others:+; still refused in settings.yaml: $others}"
+    fi
+  fi
+  finish "$Q_CODE" "$Q_MSG" "$Q_NEXT" "$Q_DATA"
+}
+
+# Put one settings file where the mod reads it, mode 600 like the rest of
+# the control folder.
+install_settings() { # file
+  [ -f "$1" ] || usage_error "no such settings file: $1"
+  check_control_dir
+  if ! install -m 600 "$1" "$SN2_CONTROL_DIR/settings.yaml.tmp" ||
+    ! mv -f "$SN2_CONTROL_DIR/settings.yaml.tmp" "$SN2_CONTROL_DIR/settings.yaml"; then
+    die "could not install settings.yaml into $SN2_CONTROL_DIR"
+  fi
+}
+
+# One player command as a console line: the name first, then the line.
+player_console() { # player line-words...
+  local p=${1:-}
+  [ -n "$p" ] || choose_error "which player? (moonpool players lists them)" player "$(player_options)"
+  PLAYER_LINE_QUIET=1 player_line "$@"
+  queue_send player "$p" "$PLAYER_LINE"
+}
+
+inner() {
+  local op=$R_OP
+  case $op in
+    usage) usage_error "$R_USAGE" ;;
+    players | receipt) [ $# -eq 0 ] || usage_error "usage: moonpool $R_CMD takes no argument"; queue_send "$op" ;;
+    console)
+      [ -n "${1:-}" ] || choose_error "usage: moonpool diag console <player> <line...>" player "$(player_options)"
+      [ $# -ge 2 ] || usage_error "usage: moonpool diag console <player> <line...>"
+      player_console "$@" ;;
+    slots)
+      [[ $# -eq 1 && $1 =~ ^[0-9]{1,2}$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 63 ] ||
+        usage_error "usage: moonpool server slots <1-63>   (real player slots; the host takes one more)"
+      queue_send slots "$((10#$1))" ;;
+    mods_list)
+      [ $# -eq 0 ] || usage_error "$MODS_USAGE"
+      local manifest="${DATA_DIR:-/data}/public/mods.json" pubj data
+      pubj=$(cat "$SN2_RUN_DIR/mod-publish.json" 2>/dev/null) || pubj=''
+      jq -e . >/dev/null 2>&1 <<<"$pubj" || pubj='{}'
+      if [ -f "$manifest" ]; then
+        data=$(jq -c --argjson pub "$pubj" '{schema, game, session,
+          ue4ss: (.ue4ss.asset // null),
+          mods: [.mods[] | {name, version, required, kind, folder, source: .source.type, page: .source.page,
+                            automatic: (.source.url != "")}],
+          skipped: ($pub.skipped // []), linked: ($pub.linked // [])}' "$manifest") ||
+          die "published mods.json is not JSON"
+      else
+        data=$(jq -c '{schema: null, mods: [], skipped: (.skipped // []), linked: (.linked // [])}' <<<"$pubj")
+      fi
+      if [ "$SN2_JSON" != 1 ]; then
+        jq -r '(.mods[] | "\(.name) \(.version)  \(if .required then "required" else "optional" end)  \(.kind) -> \(.folder)  \(if .automatic then "installed by the launcher" else "player downloads it from \(.page)" end)"),
+          (.linked[] | "\(.) (link only: no install block)"),
+          (.skipped[] | "NOT PUBLISHED \(.name): \(.reason)"),
+          (if (.mods | length) == 0 then "no installable mods published (add install: blocks to control/plugins.yaml)" else empty end)' <<<"$data"
+        SN2_HUMAN_DONE=1
+      fi
+      finish ok "published mod list read" "" "$data" ;;
+    mods_publish)
+      [ $# -eq 0 ] || usage_error "usage: moonpool mods publish"
+      local out rc=0
+      mkdir -p "$SN2_RUN_DIR"
+      out=$("${SN2_BIN:-/opt/sn2/bin}/mod-service.sh" publish) || rc=$?
+      [ "$rc" -eq 0 ] || finish refused "mod publish failed: $(jq -r '.error // "unknown error"' <<<"$out" 2>/dev/null)" "Fix that entry in control/plugins.yaml and publish again." "$out"
+      printf '%s' "$out" >"$SN2_RUN_DIR/mod-publish.json"
+      "${SN2_BIN:-/opt/sn2/bin}/join-page.sh" >/dev/null 2>&1 || true
+      finish ok "$(jq -r 'if .enabled then "signed mod manifest published: \(.mods) mod(s)" + (if (.skipped | length) > 0 then "; \(.skipped | length) not published (moonpool mods list says why)" else "" end) else "no installable mods: nothing published" + (if (.skipped | length) > 0 then "; \(.skipped | length) entries could not be resolved (moonpool mods list says why)" else "" end) end' <<<"$out")" "" "$out" ;;
+    mods_pin)
+      # From the host the archive arrives under this run's id as --from.
+      local name=${1:-} file=${2:-} out rc=0
+      [ "${2:-}" = --from ] && file=${3:-}
+      [ -n "$name" ] && [ -n "$file" ] || usage_error "usage: moonpool mods pin <name> <archive.zip>"
+      [ -f "$file" ] || usage_error "no such archive: $file"
+      out=$("${SN2_BIN:-/opt/sn2/bin}/mod-service.sh" pin "$name" "$file") || rc=$?
+      [ "${2:-}" != --from ] || rm -f "$file"
+      [ "$rc" -eq 0 ] || finish refused "pin failed: $(jq -r '.error // "unknown error"' <<<"$out" 2>/dev/null)" "" "$out"
+      mkdir -p "$SN2_RUN_DIR"
+      "${SN2_BIN:-/opt/sn2/bin}/mod-service.sh" publish >"$SN2_RUN_DIR/mod-publish.json" 2>/dev/null || true
+      finish ok "pinned $name to $(jq -r .file_name <<<"$out") and republished" "" "$out" ;;
+    mods_toggle)
+      local name=${1:-} verb=${R_CMD#mods.} out rc=0
+      [ -n "$name" ] && [ $# -eq 1 ] || usage_error "usage: moonpool mods enable|disable <name>"
+      out=$("${SN2_BIN:-/opt/sn2/bin}/mod-service.sh" "$verb" "$name") || rc=$?
+      [ "$rc" -eq 0 ] || finish refused "$verb failed: $(jq -r '.error // "unknown error"' <<<"$out" 2>/dev/null)" "" "$out"
+      mkdir -p "$SN2_RUN_DIR"
+      "${SN2_BIN:-/opt/sn2/bin}/mod-service.sh" publish >"$SN2_RUN_DIR/mod-publish.json" 2>/dev/null || true
+      finish ok "$name ${verb}d and the manifest republished" "" "$out" ;;
+    settings)
+      # settings.yaml sits beside .env; the host copy uploads it under this
+      # run's id and passes --from, so the install and the apply happen in
+      # this one locked run (two callers cannot apply each other's file).
+      [ "${1:-}" = apply ] || usage_error "usage: moonpool settings apply"
+      if [ $# -eq 3 ] && [ "$2" = --from ]; then
+        install_settings "$3"
+        rm -f "$3"
+      elif [ $# -ne 1 ]; then usage_error "usage: moonpool settings apply"; fi
+      [ -f "$SN2_CONTROL_DIR/settings.yaml" ] || unavailable "no settings.yaml in $SN2_CONTROL_DIR"
+      SN2_ARGS=$(grep -oE '^[A-Za-z0-9_]+:' "$SN2_CONTROL_DIR/settings.yaml" | tr -d : | jq -Rn '{keys: [inputs]}')
+      queue_call settings
+      settings_verdict
+      finish "$Q_CODE" "$Q_MSG" "$Q_NEXT" "$Q_DATA" ;;
+    map_where)
+      [ -n "${1:-}" ] || choose_error "usage: moonpool map where <player>" player "$(player_options)"
+      local spot
+      spot=$(jq -c --arg n "$1" '[.players[]? | select(.name == $n and .x != null) | {x, y}][0] // empty' "$(status_json)" 2>/dev/null)
+      [ -n "$spot" ] || refuse "no position for $1 in status.json: are they in the world?"
+      finish ok "$1 is at $(jq -r '"\(.x) \(.y)"' <<<"$spot")" "" "$spot" ;;
+    map_bounds)
+      [ $# -eq 10 ] || usage_error "$MAP_USAGE"
+      local v bounds
+      for v in "$@"; do [[ $v =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || usage_error "$MAP_USAGE"; done
+      jq -en --args '$ARGS.positional | map(tonumber) | .[0] > 0 and .[1] > 0 and .[2] != .[6] and .[3] != .[7] and .[4] != .[8] and .[5] != .[9]' "$@" >/dev/null ||
+        refuse "the picture needs a size, and the two spots must differ across and up and down, or the scale can't be worked out"
+      bounds=$(jq -cn --args '$ARGS.positional | map(tonumber) as [$w,$h,$p1,$q1,$x1,$y1,$p2,$q2,$x2,$y2]
+        | (($x2-$x1)/($p2-$p1)) as $sx | (($y2-$y1)/($q2-$q1)) as $sy
+        | ($x1-$p1*$sx) as $left | ($y1-$q1*$sy) as $top | [$left, $top, $left+$w*$sx, $top+$h*$sy]' "$@")
+      finish ok "bounds for map-background.json: $bounds" "" "{\"bounds\":$bounds}" ;;
+    world)
+      [ $# -eq 0 ] || usage_error "$WORLD_USAGE"
+      local sj d
+      sj=$(status_json)
+      [ -f "$sj" ] || unavailable "no status.json yet in $SN2_CONTROL_DIR: the mod has not written one (is the game running?)"
+      d=$(jq -c '{time_of_day, day_fraction, clock_frozen, weather, weather_types: [.weather_types[]?], settings}' "$sj" 2>/dev/null) ||
+        die "status.json is not JSON"
+      if [ "$SN2_JSON" != 1 ]; then
+        jq -r '"time: \(.time_of_day // "unknown") (day fraction \(.day_fraction // "unknown"))",
+          "clock: \(if .clock_frozen == true then "frozen" else "running" end)",
+          "weather: \(.weather // "unknown")",
+          "loaded weather types: \(.weather_types | join(", "))"' <<<"$d"
+        SN2_HUMAN_DONE=1
+      fi
+      finish ok "the world as status.json last wrote it" "" "$d" ;;
+    world_set) world_set "$@" ;;
+    kick)
+      [ $# -le 1 ] || usage_error "usage: moonpool players kick <name>"
+      [ -n "${1:-}" ] || choose_error "usage: moonpool players kick <name>" player "$(player_options)"
+      queue_send kick "$1" ;;
+    ban_add)
+      [ $# -ge 1 ] || usage_error "usage: moonpool ban add <name|steamid64> [reason]"
+      local ident=$1 reason=${*:2} f="$SN2_CONTROL_DIR/bans.txt" tmp
+      [[ -n $ident && $ident != *$'\t'* && $ident != *$'\n'* && ${#ident} -le 128 ]] || usage_error "ban identifier must be one name or Steam ID64 (no tabs or newlines)"
+      [[ $reason != *$'\n'* && ${#reason} -le 512 ]] || usage_error "ban reason must be at most 512 characters on one line"
+      check_control_dir; tmp=$(mktemp)
+      if [ -f "$f" ]; then awk -F'\t' -v id="$ident" 'tolower($1) != tolower(id)' "$f" >"$tmp"; fi
+      printf '%s\t%s\n' "$ident" "$reason" >>"$tmp"
+      if ! install -m 600 "$tmp" "$f.tmp" || ! mv -f "$f.tmp" "$f"; then
+        rm -f "$tmp"; die "could not update $f"
+      fi
+      rm -f "$tmp"
+      if [[ $ident =~ ^7656[0-9]{13}$ ]]; then
+        local out rc=0
+        out=$(STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" "${SN2_BIN:-/opt/sn2/bin}/friend-accept.py" --remove "$ident" 2>&1) || rc=$?
+        [ "$rc" -eq 0 ] || finish refused "$ident is banned, but Steam friend removal could not complete: ${out:0:160}. The minute watcher will retry while the ID stays banned."
+      fi
+      finish ok "$ident is banned; matching friend requests are refused and a matching in-game name is removed" "" \
+        "$(jq -cn --arg i "$ident" --arg r "$reason" '{identifier:$i,reason:$r}')" ;;
+    ban_remove)
+      [ $# -eq 1 ] || usage_error "usage: moonpool ban remove <name|steamid64>"
+      local ident=$1 f="$SN2_CONTROL_DIR/bans.txt" tmp before after
+      check_control_dir; [ -f "$f" ] || finish ok "$ident was not banned" "" '{"removed":false}'
+      before=$(wc -l <"$f"); tmp=$(mktemp)
+      awk -F'\t' -v id="$ident" 'tolower($1) != tolower(id)' "$f" >"$tmp"; after=$(wc -l <"$tmp")
+      if ! install -m 600 "$tmp" "$f.tmp" || ! mv -f "$f.tmp" "$f"; then
+        rm -f "$tmp"; die "could not update $f"
+      fi
+      rm -f "$tmp"
+      finish ok "$ident ban removed" "" "{\"removed\":$([ "$before" -ne "$after" ] && echo true || echo false)}" ;;
+    ban_list)
+      [ $# -eq 0 ] || usage_error "usage: moonpool ban list"
+      local f="$SN2_CONTROL_DIR/bans.txt" data
+      check_control_dir
+      data=$(awk -F'\t' 'NF && $1 !~ /^[[:space:]]*#/ { reason=$0; sub(/^[^\t]*\t?/, "", reason); print $1 "\t" reason }' "$f" 2>/dev/null |
+        jq -Rn '{bans:[inputs | split("\t") | {identifier:.[0],reason:(.[1:]|join("\t"))}]}')
+      if [ "$SN2_JSON" != 1 ]; then jq -r '.bans[] | "\(.identifier)\(if .reason == "" then "" else " — " + .reason end)"' <<<"$data"; SN2_HUMAN_DONE=1; fi
+      finish ok "$(jq '.bans|length' <<<"$data") bans" "" "$data" ;;
+    saves)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server saves"
+      local d=${SN2_SAVE_DIR:?SN2_SAVE_DIR not set} rows
+      [ -d "$d" ] || unavailable "no save folder yet: $d"
+      # stat, not find -printf: the same output from GNU and busybox tools.
+      rows=$(list_saves "$d" -maxdepth 1 -exec stat -c '%Y %s %n' {} + | sort -rn)
+      if [ "$SN2_JSON" = 1 ]; then
+        finish ok "saves listed" "" "$(printf '%s\n' "$rows" | jq -Rn '{saves: [inputs | select(length > 0) | split(" ") as $f
+          | {name: ($f[2:] | join(" ") | split("/") | last | sub("\\.sav$"; "")),
+             last_played_utc: ($f[0] | tonumber | todate), bytes: ($f[1] | tonumber)}]}')"
+      fi
+      printf '%-24s %-20s %s\n' SAVE LAST_PLAYED_UTC BYTES
+      printf '%s\n' "$rows" | while read -r t s p; do
+        [ -n "$p" ] || continue
+        n=${p##*/}
+        printf '%-24s %-20s %s\n' "${n%.sav}" "$(date -u -d "@$t" '+%F %T')" "$s"
+      done
+      SN2_HUMAN_DONE=1
+      finish ok "$(printf '%s\n' "$rows" | grep -c .) saves" ;;
+    host)
+      [ $# -le 2 ] || usage_error "usage: moonpool server host [save] [--now]"
+      do_host "$@" ;;
+    cancel)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server cancel"
+      "${SN2_BIN:-/opt/sn2/bin}/restart-warning.sh" cancel
+      finish accepted "restart countdown cancellation requested" ;;
+    notify)
+      [ $# -ge 1 ] || usage_error "usage: moonpool notify <text>"
+      local message="${*:1}"; [ "${#message}" -le 200 ] || usage_error "announcement is limited to 200 characters"
+      jq -cn --arg t "$message" '{kind:"info",header:"Server announcement",text:$t,duration:8}' >"$SN2_CONTROL_DIR/notify-request.json.tmp"
+      mv "$SN2_CONTROL_DIR/notify-request.json.tmp" "$SN2_CONTROL_DIR/notify-request.json"
+      finish accepted "announcement queued for online players" ;;
+    backup)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server backup"
+      local out rc=0 latest
+      out=$("${SN2_BIN:-/opt/sn2/bin}/save-stage.sh" --now 2>&1) || rc=$?
+      [ "$rc" -eq 0 ] || refuse "refused: the saves could not be staged: ${out##*$'\n'}"
+      latest=$(find "${SN2_STAGING_DIR:-$STAGING_DIR}" -mindepth 1 -maxdepth 1 -type d -name '20*' 2>/dev/null | sort | tail -n1)
+      [ -n "$latest" ] || finish not_observed "save-stage.sh returned ok, but no staged folder is in ${SN2_STAGING_DIR:-$STAGING_DIR}"
+      finish ok "saves staged as $(basename "$latest") (offen archives the staging folder on its schedule)" "" \
+        "{\"staged\":$(json_escape "$(basename "$latest")")}" ;;
+    restore)
+      { [ $# -ge 1 ] && [ -f "$1" ]; } || usage_error "restore needs a backup .tar.gz that exists"
+      [ $# -le 2 ] || usage_error "usage: moonpool server restore <backup.tar.gz> [save]"
+      [ $# -lt 2 ] || valid_save "$2" || usage_error "save names are letters, digits, _ and - only"
+      local x src timestamp_dir safety
+      x=$(mktemp -d)
+      tar -xzf "$1" -C "$x" 2>/dev/null || usage_error "cannot read $1"
+      timestamp_dir=$(find "$x" -type d -name '20??????T??????Z' | LC_ALL=C sort | tail -n 1)
+      src=${timestamp_dir:+$timestamp_dir/SaveGames}
+      if [ ! -d "$src" ]; then
+        src=$(list_saves "$x" | head -n 1); src=${src:+$(dirname "$src")}
+      fi
+      [ -n "$src" ] || refuse "refused: $1 holds no save (.sav) file"
+      list_saves "$src" | grep -q . || refuse "refused: $1 holds no save (.sav) file"
+      [ $# -lt 2 ] || [ -f "$src/$2.sav" ] || refuse "refused: $1 has no $2.sav"
+      "${SN2_BIN:-/opt/sn2/bin}/save-stage.sh" --now || refuse "refused: could not snapshot the current saves first"
+      if CONTROL_DIR="$SN2_CONTROL_DIR" session_up; then
+        "${SN2_BIN:-/opt/sn2/bin}/restart-warning.sh" run "restoring $(basename "$1")" || finish pending "restore countdown was cancelled or another countdown is running"
+      fi
+      do_stop_game; sleep "$SN2_RESTART_WAIT"
+      safety="${SN2_SAVE_DIR:?}.pre-restore-$(date -u +%Y%m%dT%H%M%SZ)"
+      [ ! -e "$safety" ] || safety="$safety-$$"
+      mv "$SN2_SAVE_DIR" "$safety"
+      mkdir -p "$SN2_SAVE_DIR"
+      cp -a "$src"/. "${SN2_SAVE_DIR:?}"/
+      [ "$SN2_JSON" = 1 ] || echo "restored from $1 (the current saves were staged first and kept at $safety)"
+      do_host --now "${2:-}" ;;
+    arm)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server arm"
+      rm -f "$SN2_CONTROL_DIR/HOST_DISARMED"
+      : >"$SN2_CONTROL_DIR/HOST_ARMED"
+      finish ok "armed: the mod calls the game's Host code once, when ready" "" '{"armed":true}' ;;
+    disarm)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server disarm"
+      rm -f "$SN2_CONTROL_DIR/HOST_ARMED"
+      : >"$SN2_CONTROL_DIR/HOST_DISARMED"
+      finish ok "disarmed: the mod idles, and AUTO_HOST will not re-arm until: moonpool server arm" "" '{"armed":false}' ;;
+    screenshot)
+      # The display the Steam client and the viewer use ($DISPLAY from common.sh),
+      # grabbed with Pillow's X capture; a receipt may grab another one.
+      [ $# -eq 1 ] || usage_error "usage: moonpool diag screenshot <file.png>"
+      DISPLAY=${DISPLAY:-:99} python3 -c 'import os, sys; from PIL import ImageGrab; ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).save(sys.argv[1], "PNG")' "$1" \
+        || die "could not capture display ${DISPLAY:-:99}"
+      finish ok "captured display ${DISPLAY:-:99} to $1" "" "$(jq -cn --arg f "$1" '{file: $f}')" ;;
+    friends)
+      [ $# -eq 0 ] || usage_error "usage: moonpool players friends"
+      # host_steamid and friend_code are common.sh's (Steam's loginusers.vdf).
+      local sd=$SN2_STEAM_DIR code lc rows
+      code=$(friend_code "$sd")
+      [ -n "$code" ] || unavailable "no signed-in account in $sd/config/loginusers.vdf (sign in on the viewer page)"
+      lc="$sd/userdata/$code/config/localconfig.vdf"
+      [ -f "$lc" ] || unavailable "no friends list yet: $lc"
+      rows=$(awk '/^[[:space:]]*"friends"[[:space:]]*$/ { inf = 1; depth = 0; next }
+        inf && /\{/ { depth++ } inf && /\}/ { if (--depth == 0) exit }
+        inf && depth == 1 && match($0, /"[0-9]+"/) { id = substr($0, RSTART + 1, RLENGTH - 2) }
+        inf && depth == 2 && id != "" && $1 == "\"name\"" {
+          n = $0; sub(/^[[:space:]]*"name"[[:space:]]*"/, "", n); sub(/"[[:space:]]*$/, "", n)
+          printf "%s\t%s\n", id, n; id = "" }' "$lc")
+      if [ "$SN2_JSON" = 1 ]; then
+        finish ok "host friend code: $code" "" "$(printf '%s\n' "$rows" | jq -Rn --arg c "$code" \
+          '{friend_code: $c, friends: [inputs | select(length > 0) | split("\t") | {id: .[0], name: (.[1:] | join("\t"))}]}')"
+      fi
+      echo "host friend code: $code"
+      echo "friends (account id, name), from Steam's localconfig.vdf:"
+      printf '%s\n' "$rows" | awk -F'\t' 'NF { printf "  %s  %s\n", $1, $2 }'
+      SN2_HUMAN_DONE=1
+      finish ok "$(printf '%s\n' "$rows" | grep -c .) friends" ;;
+    friend_code)
+      # EXPERIMENTAL: the Sonar code for players not on Steam. The mod asks the
+      # game's Friends view model; the code lands in the game log and status.json.
+      [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --force ]; } || usage_error "usage: moonpool diag friend-code [--force]"
+      queue_send friend_code "$@" ;;
+    unlocks)
+      # The host's scan unlocks do not reach clients on a pruned host; the mod
+      # replays the proven Unlock forms as each player.
+      [ $# -le 1 ] || usage_error "usage: moonpool unlocks [player]"
+      [ $# -eq 0 ] || [ -n "$1" ] || choose_error "usage: moonpool unlocks [player]" player "$(player_options)"
+      queue_send unlocks "$@" ;;
+    invite)
+      [ $# -eq 1 ] || usage_error "usage: moonpool players invite <steamid64|profile link>"
+      local id f="$SN2_CONTROL_DIR/allowlist.txt"
+      [[ $1 =~ ^(https?://(www\.)?steamcommunity\.com/profiles/)?(7656[0-9]{13})/?$ ]] ||
+        usage_error "need a steamid64 or a steamcommunity.com/profiles/<id> link, not a custom /id/ link"
+      id=${BASH_REMATCH[3]}
+      check_control_dir
+      grep -qs "^$id" "$f" || printf '%s\n' "$id" >>"$f"
+      finish ok "$id is invited: their friend request is accepted within a minute" "" "$(jq -cn --arg i "$id" '{steamid: $i}')" ;;
+    save)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server save"
+      queue_send save ;;
+    status)
+      if [ "$SN2_JSON" = 1 ]; then
+        finish ok "readiness and the last host receipt, as the mod wrote them" "" \
+          "$(jq -cn --argjson r "$(file_json "$SN2_CONTROL_DIR/readiness.json")" \
+            --argjson h "$(file_json "$SN2_CONTROL_DIR/host_receipt.json")" '{readiness: $r, host_receipt: $h}')"
+      fi
+      echo "== readiness (written by the mod every poll)"
+      if [ -f "$SN2_CONTROL_DIR/readiness.json" ]; then cat "$SN2_CONTROL_DIR/readiness.json"; echo
+      else echo "no readiness report yet: the mod has not run"; fi
+      echo "== last host receipt"
+      if [ -f "$SN2_CONTROL_DIR/host_receipt.json" ]; then cat "$SN2_CONTROL_DIR/host_receipt.json"; echo
+      else echo "none: HostSessionAsync has not been called"; fi
+      exit 0 ;;
+    verify_fresh)
+      [ $# -eq 0 ] || usage_error "usage: moonpool diag verify-fresh [--json]"
+      if [ "$SN2_JSON" = 1 ]; then
+        local out rc=0
+        out=$("${SN2_BIN:-/opt/sn2/bin}/verify-fresh.sh" --json) || rc=$?
+        printf '%s' "$out" | jq -e 'type == "object" and (.stages | type) == "array"' >/dev/null 2>&1 ||
+          die "verify-fresh.sh gave no JSON (exit $rc)"
+        if [ "$rc" -eq 0 ]; then finish ok "verify-fresh: every check passed" "" "$out"; fi
+        finish unavailable "verify-fresh: $(printf '%s' "$out" | jq -r '[.stages[] | select(.status != "PASS") | .name] | join(", ")') failed" \
+          "Read the failed stages (moonpool diag verify-fresh) and the logs they name before going on." "$out"
+      fi
+      "${SN2_BIN:-/opt/sn2/bin}/verify-fresh.sh" ;;
+    settings-install)
+      # A settings file put where the mod reads it, owned like the rest of the
+      # control folder (the live check uses it; the host copy's own path is
+      # settings apply --from, one locked install-and-apply).
+      [ $# -eq 1 ] || usage_error "usage: moonpool settings-install <file>"
+      install_settings "$1"
+      finish ok "settings.yaml installed" ;;
+    welcome)
+      [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --dry-run ]; } || usage_error "usage: moonpool welcome [--dry-run]"
+      if [ "$SN2_JSON" = 1 ]; then
+        local out rc=0
+        out=$("${SN2_BIN:-/opt/sn2/bin}/discord-notify.sh" "$@" welcome 2>&1) || rc=$?
+        [ "$rc" -eq 0 ] || die "discord-notify.sh welcome exited $rc: ${out:0:500}"
+        finish accepted "welcome card ${1:+(dry run) }sent to discord-notify.sh; Discord's answer is in its log" "" \
+          "$(jq -cn --arg o "$out" --argjson d "$([ $# -eq 1 ] && echo true || echo false)" '{dry_run: $d, output: $o}')"
+      fi
+      "${SN2_BIN:-/opt/sn2/bin}/discord-notify.sh" "$@" welcome ;;
+    discord_setup)
+      [ $# -eq 0 ] || usage_error "usage: moonpool discord setup"
+      "${SN2_BIN:-/opt/sn2/bin}/discord-notify.sh" setup ;;
+    logs)
+      local which=game follow=''
+      for a in "$@"; do
+        case $a in -f) follow=1 ;; *) which=$a ;; esac
+      done
+      case $which in game | steam | services | join_watch) ;; *) usage_error "unknown log: $which" ;; esac
+      local f="$SN2_LOG_DIR/$which.log"
+      [ -f "$f" ] || unavailable "no log at $f yet"
+      if [ "$SN2_JSON" = 1 ]; then
+        [ -z "$follow" ] || usage_error "logs -f streams; it has no JSON form"
+        finish ok "last 200 lines of $which.log" "" "$(tail -n 200 "$f" | jq -Rn --arg l "$which" '{log: $l, lines: [inputs]}')"
+      fi
+      if [ -n "$follow" ]; then tail -n 200 -F "$f"; else tail -n 200 "$f"; fi ;;
+    record)
+      [ $# -ge 3 ] && [ -n "$(state_of "$2")" ] || usage_error "usage: moonpool record <command> <code> <message> [args-json]"
+      SN2_COMMAND=$1 SN2_MUTATING=1 SN2_ARGS=${4:-'{}'}
+      printf '%s' "$SN2_ARGS" | jq -e 'type == "object"' >/dev/null 2>&1 || SN2_ARGS='{}'
+      local st; st=$(state_of "$2")
+      write_receipt "$2" "${st% *}" "${st#* }" "$3"
+      exit 0 ;;
+    stop-game) do_stop_game; finish accepted "game stop requested" ;;
+    restart-warning)
+      "${SN2_BIN:-/opt/sn2/bin}/restart-warning.sh" run "${*:-restart requested}"
+      finish accepted "restart warning completed" ;;
+    session-up)
+      # Exit 0 when the mod has hosted and a player other than the host is in.
+      if CONTROL_DIR="$SN2_CONTROL_DIR" session_up; then finish ok "a session is up with players in" "" '{"session_up":true}'; fi
+      finish unavailable "no session with players in" "" '{"session_up":false}' ;;
+    start-game) do_start_game; finish accepted "game start allowed; the supervisor launches it within 10s" ;;
+    help) usage; exit 0 ;;
+    *) [ "$SN2_JSON" = 1 ] || usage >&2; usage_error "unknown command: $R_WORD" ;;
+  esac
+}
+
+# ---- on the Docker host ------------------------------------------------------
+
+# The container's id when it is running, else nothing.
+container_id() {
+  local id
+  id=$(compose ps -q "$SN2_SERVICE" 2>/dev/null | head -n1)
+  [ -n "$id" ] || return 1
+  [ "$(docker inspect -f '{{.State.Running}}' "$id" 2>/dev/null)" = true ] || return 1
+  echo "$id"
+}
+
+# Run the same words in the container, with this run's id, actor and source,
+# and --json when it was given here. The container copy prints the result.
+forward() {
+  container_id >/dev/null || unavailable "the $SN2_SERVICE container is not running (moonpool start)"
+  local j=()
+  [ "$SN2_JSON" != 1 ] || j=(--json)
+  compose exec -T -e "SN2_REQUEST_ID=$SN2_REQUEST_ID" -e "SN2_ACTOR=$SN2_ACTOR" -e "SN2_SOURCE=$SN2_SOURCE" \
+    -e "SN2_STARTED_AT=$STARTED_AT" -e "SN2_START_MS=$START_MS" "$SN2_SERVICE" moonpool "${j[@]}" "$@"
+}
+
+# The receipt for a command the host copy ran itself (start, stop, restart):
+# appended by the container copy, where the receipts file is. Nothing to
+# record when the container is not there to take it.
+record() { # code message
+  forward_quiet record "$SN2_COMMAND" "$1" "$2" "$R_ARGS" 2>/dev/null || true
+}
+
+# Plumbing calls into the container: never --json, output discarded, a
+# container that is not running is a plain failure the caller judges.
+forward_quiet() {
+  compose exec -T -e "SN2_REQUEST_ID=$SN2_REQUEST_ID" -e "SN2_ACTOR=$SN2_ACTOR" -e "SN2_SOURCE=$SN2_SOURCE" \
+    -e "SN2_STARTED_AT=$STARTED_AT" -e "SN2_START_MS=$START_MS" "$SN2_SERVICE" moonpool "$@" >/dev/null
+}
+
+# docker compose, ending the run on a failure; in --json mode its chatter
+# stays off stdout and reaches the envelope only when the command fails.
+run_compose() {
+  local out='' rc=0
+  if [ "$SN2_JSON" = 1 ]; then out=$(compose "$@" 2>&1) || rc=$?
+  else compose "$@" || rc=$?; fi
+  [ "$rc" -eq 0 ] || finish internal_error "docker compose $1 failed (exit $rc)" "" "{\"output\":$(json_escape "${out: -2000}")}"
+}
+
+outer() {
+  local op=$R_OP
+  case $op in
+    start)
+      [ $# -eq 0 ] || usage_error "usage: moonpool server start"
+      run_compose up -d "$SN2_SERVICE"
+      forward_quiet start-game || unavailable "the container did not come up (docker compose ps $SN2_SERVICE)"
+      record accepted "container started"
+      finish accepted "container started; the game launches within 10s and hosts once armed (moonpool status)" ;;
+    stop)
+      { [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --now ]; }; } || usage_error "usage: moonpool server stop [--now]"
+      [ "${1:-}" = --now ] || forward_quiet restart-warning "container stopping" || finish pending "stop countdown was cancelled or another countdown is running"
+      # Recorded before the container goes, so the receipt says requested.
+      forward_quiet stop-game || true
+      record accepted "stop requested"
+      run_compose stop "$SN2_SERVICE"
+      finish accepted "stop requested: the game was told to stop and compose stop returned" ;;
+    restart)
+      # A plain restart keeps the old environment; .env is read only on create
+      # so recreate it when absent.
+      # Never recreate under a live session unless asked: it drops every player.
+      [ $# -eq 0 ] || { [ $# -eq 1 ] && { [ "$1" = --force ] || [ "$1" = --now ]; }; } || usage_error "usage: moonpool server restart [--now|--force]"
+      if [ "${1:-}" != --force ] && [ "${1:-}" != --now ]; then forward_quiet restart-warning "container restarting" || finish pending "restart countdown was cancelled or another countdown is running"; fi
+      forward_quiet stop-game || true
+      forward_quiet stop-game || true
+      run_compose up -d --force-recreate "$SN2_SERVICE"
+      forward_quiet start-game || unavailable "the container did not come up (docker compose ps $SN2_SERVICE)"
+      record accepted "container recreated"
+      finish accepted "container recreated; the game launches within 10s and hosts once armed (moonpool status)" \
+        "" "{\"force\":$([ "${1:-}" = --force ] && echo true || echo false)}" ;;
+    status)
+      [ "$SN2_JSON" = 1 ] || compose ps "$SN2_SERVICE"
+      forward status "$@" ;;
+    mods_pin)
+      [ $# -eq 2 ] || usage_error "usage: moonpool mods pin <name> <archive.zip>"
+      [ -f "$2" ] || usage_error "pin needs the downloaded archive on this host: $2"
+      local staged
+      staged="/tmp/sn2-pin-$SN2_REQUEST_ID-$(basename -- "$2")"
+      run_compose cp "$2" "$SN2_SERVICE:$staged"
+      forward mods pin "$1" --from "$staged" ;;
+    settings)
+      # Beside .env: compose runs from the recipe folder, so its current one.
+      # Uploaded under this run's id; the container copy installs and applies
+      # it in one locked run.
+      [ "${1:-}" = apply ] && [ $# -eq 1 ] || usage_error "usage: moonpool settings apply"
+      local f=${SN2_SETTINGS_FILE:-./settings.yaml} staged="/tmp/sn2-settings-$SN2_REQUEST_ID.yaml"
+      [ -f "$f" ] || unavailable "no settings file: $f (copy settings.example.yaml beside .env)"
+      run_compose cp "$f" "$SN2_SERVICE:$staged"
+      forward settings apply --from "$staged" ;;
+    screenshot)
+      [ $# -eq 1 ] || usage_error "usage: moonpool diag screenshot <file.png>"
+      local shot="/tmp/sn2-screenshot-$SN2_REQUEST_ID.png"
+      forward_quiet screenshot "$shot" || die "the container could not capture its display (moonpool logs services)"
+      run_compose cp "$SN2_SERVICE:$shot" "$1"
+      finish ok "saved $1" "" "{\"file\":$(json_escape "$1")}" ;;
+    restore)
+      # Everything the container copy would refuse is refused here first, before any upload.
+      [ $# -ge 1 ] && [ $# -le 2 ] || usage_error "usage: moonpool server restore <backup.tar.gz> [save]"
+      [ -f "$1" ] || usage_error "restore needs a backup file on this host"
+      [ $# -lt 2 ] || valid_save "$2" || usage_error "save names are letters, digits, _ and - only"
+      local staged="/tmp/sn2-restore-$SN2_REQUEST_ID.tar.gz"
+      run_compose cp "$1" "$SN2_SERVICE:$staged"
+      shift; forward server restore "$staged" "$@" ;;
+    save) forward server save ;;
+    usage) usage_error "$R_USAGE" ;;
+    help) usage; exit 0 ;;
+    unknown) [ "$SN2_JSON" = 1 ] || usage >&2; usage_error "unknown command: $R_WORD" ;;
+    *) forward "${R_WORDS[@]}" ;;
+  esac
+}
+
+# ---- entry ----------------------------------------------------------------------
+
+main() {
+  # --json may sit before or after the command; it is taken out here and
+  # forwarded into the container by forward().
+  local a expect_instance=0
+  ORIG=()
+  for a in "$@"; do
+    if [ "$expect_instance" = 1 ]; then SN2_INSTANCE=$a; expect_instance=0; continue; fi
+    case $a in
+      --json) SN2_JSON=1 ;;
+      --instance) expect_instance=1 ;;
+      *) ORIG+=("$a") ;;
+    esac
+  done
+  [ "$expect_instance" = 0 ] || INSTANCE_PARSE_ERROR="--instance needs a slug"
+  set -- "${ORIG[@]}"
+  if [[ ${SN2_REQUEST_ID:-} =~ ^[0-9a-f]{32}$ ]]; then :
+  elif [ -n "${SN2_REQUEST_ID:-}" ]; then
+    local bad=$SN2_REQUEST_ID
+    SN2_REQUEST_ID=$(new_nonce)
+    usage_error "SN2_REQUEST_ID '$bad' is not 32 lowercase hex characters"
+  else
+    SN2_REQUEST_ID=$(new_nonce)
+  fi
+  export SN2_REQUEST_ID
+  [ -z "${INSTANCE_PARSE_ERROR:-}" ] || usage_error "$INSTANCE_PARSE_ERROR"
+  if [ -n "${SN2_INSTANCE:-}" ]; then
+    [[ $SN2_INSTANCE =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || usage_error "instance slugs use lowercase letters, digits and single hyphens"
+    SN2_REPO_ROOT=${SN2_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+    [ -f "$SN2_REPO_ROOT/instances/$SN2_INSTANCE/.env" ] || usage_error "instance '$SN2_INSTANCE' does not exist"
+  fi
+  SN2_ACTOR=${SN2_ACTOR:-$(id -un 2>/dev/null || echo unknown)}
+  SN2_SOURCE=${SN2_SOURCE:-$([ -n "${SSH_CONNECTION:-}" ] && echo ssh || echo local)}
+  case $SN2_SOURCE in ssh | discord | local | automation) ;; *) usage_error "SN2_SOURCE must be ssh, discord, local or automation, not '$SN2_SOURCE'" ;; esac
+  route "$@"
+  SN2_COMMAND=$R_CMD SN2_ARGS=$R_ARGS
+  # An older spelling still works; the prose mode says the current one once
+  # (the host copy forwards the current words, so the container copy stays quiet).
+  [ "$SN2_JSON" = 1 ] || [ -z "$R_HINT" ] || printf 'moonpool: use: %s\n' "$R_HINT" >&2
+  if in_container; then
+    # The container copy is where the lock and the receipts live; the host
+    # copy's receipt for its own commands goes through record().
+    if [ "$R_MUT" = 1 ]; then SN2_MUTATING=1; take_lock; elif [ "$R_LOCK" = 1 ]; then take_lock; fi
+    inner "${R_ARGV[@]}"
+  else outer "${R_ARGV[@]}"; fi
+}
+
+# Tests source this file with MOONPOOL_LIB=1 to reach the helpers.
+# shellcheck disable=SC2317  # exit runs only when executed, not sourced
+if [ "${MOONPOOL_LIB:-0}" = "1" ]; then return 0 2>/dev/null || exit 0; fi
+main "$@"
