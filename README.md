@@ -18,7 +18,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 Run these in a terminal on the machine that will host the server
 
 ```sh
-git clone --branch v0.3.7 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
+git clone --branch v0.3.8 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -32,7 +32,7 @@ docker compose logs -f sn2
 docker compose ps
 ```
 
-It's ready when `ps` says healthy. Invite each friend with `bin/moonpool players invite <their steamid64 or profile link>`. They send the hosting account a Steam friend request and it's accepted within a minute. Then they hit Join Game or use the page at `http://<server>:8081/join`
+It's ready when `bin/moonpool status` says it's hosting. `docker compose ps` saying healthy means Steam and the game process are up, not that a world is hosted. Invite each friend with `bin/moonpool players invite <their steamid64 or profile link>`. They send the hosting account a Steam friend request and it's accepted within a minute: Moonpool reads the Steam client's own web session out of the data volume and answers as the host account, and `AUTO_ACCEPT_FRIENDS=0` turns that off so you accept in the viewer. Then they hit Join Game or use the page at `http://<server>:8081/join`
 
 Anyone already friends with the hosting account can join too, so use a fresh account or remove them. Want anyone who finds the account to get in? Set `ALLOWLIST_ONLY=false`
 
@@ -44,7 +44,7 @@ The Discord card and the join page, as players see them
 
 ## What's exposed
 
-- Port 8081 (`SN2_MODS_PORT`) serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel
+- Port 8081 (`SN2_MODS_PORT`) serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel. The first time a player presses Play with mods their launcher saves this server's signing key from that address and holds every later list to it, so over plain http that first fetch trusts the network; the launcher allows http only on a private network and anything else needs the tunnel or HTTPS. `PUBLISH_CARD=true` adds `/card.json`, what the Discord card shows, player names included
 - With `WEB_MAP=true` the map page shows explored areas and base positions to anyone with the link
 - The viewer on 8080 controls the signed-in Steam so it listens on this machine only unless you set `VIEWER_BIND` and a password
 - The data volume holds the hosting account's Steam session. Keep it and your backups private
@@ -76,7 +76,7 @@ Players install the launcher once, [moonpool-setup.cmd](https://github.com/moonp
 
 Mods run with the player's Windows rights and nobody here reviews them, so only say yes to a host you trust. A saved yes stays until the list changes and a new key at the same address counts as a new server
 
-The launcher comes only from this repo's releases. Setup and every update check its signature and the private key isn't on GitHub. It has no Windows code signing so Windows may warn about it. To check a copy against its release
+The launcher comes only from this repo's releases. Setup and every update check its signature and the private key isn't on GitHub. It has no Windows code signing so Windows may warn about it. The setup file itself isn't signed: it comes from GitHub over TLS with a build attestation you can check with `gh attestation verify moonpool-setup.cmd -R moonpool-server/moonpool`, and everything it downloads is held to the release key. To check a copy against its release
 
 ```sh
 gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-workflow moonpool-server/moonpool/.github/workflows/ci.yml
@@ -84,9 +84,9 @@ gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-work
 
 ## Does it work
 
-Tested by hand with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. The fix in v0.3.0 for the crash on join and the mod install through the launcher have had short sessions only, one player on experimental build `26283380`. CI runs the code's own tests but not the real game
+Tested by hand by the maintainer, with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. The fix in v0.3.0 for the crash on join and the mod install through the launcher have had short sessions only, one player on experimental build `26283380`. CI runs the code's own tests but not the real game
 
-A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. Moonpool supports the game's public branch. Other branches need files for their exact build that this project doesn't ship
+A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. It ran on public build `25400633` and experimental `26283380`; a newer build is unproven until a host comes up on it. Other branches need files for their exact build that this project doesn't ship
 
 ## More
 
@@ -109,7 +109,7 @@ Owning the game doesn't override the game's or Steam's terms and nothing here ch
 
 The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is with KRAFTON. It limits the game to personal non-commercial use. It bars modifying the game and using it with unauthorized software, bots or scripts and it says breaking its terms can end your licence. Moonpool loads a mod into the game so running it goes against those terms as written
 
-The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) applies too. Without Valve's written consent section 2.G restricts modifying Steam content, and hosting or matchmaking through emulation, tunneling, added components or similar tools. Section 4.B restricts tampering with how Steam content runs. Section 4.C restricts scripts and bots that interact with Steam content. An unattended host and automatic friend accepting sit close to those rules and this project has no consent from Valve
+The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) applies too. Without Valve's written consent section 2.G restricts modifying Steam content, and hosting or matchmaking through emulation, tunneling, added components or similar tools. Section 4.B restricts tampering with how Steam content runs. Section 4.C restricts scripts and bots that interact with Steam content. An unattended host, scripted clicks in the viewer and automatic friend accepting are the kind of automation those sections describe, and this project has no consent from Valve
 
 Unknown Worlds doesn't officially support mods yet. KRAFTON, Unknown Worlds or Valve could act against this project or the hosting account. Use a spare account you can afford to lose and decide for yourself. This isn't legal advice
 

@@ -73,12 +73,23 @@ make_zip() { # out.zip version path...
   [ "$(jq -r 'has("launcher")' "$m")" = false ]
 }
 
-@test "off, host-only and link-only entries never reach players; link-only ones are reported" {
+@test "an entry for the host side is refused and names where a host mod goes" {
+  cat >"$SN2_CONTROL_DIR/plugins.yaml" <<'EOF'
+plugins:
+  - { name: Cap Raiser, side: host, install: { type: github, repo: a/b, tag: v1, asset: x.zip } }
+EOF
+  run "$ROOT/scripts/mod-service.sh" publish
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.skipped[0].name' <<<"$output")" = "Cap Raiser" ]
+  reason=$(jq -r '.skipped[0].reason' <<<"$output")
+  [[ "$reason" == *"side: host is not supported"* ]] && [[ "$reason" == *"ue4ss-local/Mods/<name>/"* ]]
+}
+
+@test "off and link-only entries never reach players; link-only ones are reported" {
   cat >"$SN2_CONTROL_DIR/plugins.yaml" <<'EOF'
 plugins:
   - { name: Loader, tier: mandatory, install: { type: local, kind: ue4ss } }
   - { name: Switched Off, tier: mandatory, enabled: false, install: { type: local, kind: ue4ss } }
-  - { name: Cap Raiser, side: host, install: { type: github, repo: a/b, tag: v1, asset: x.zip } }
   - { name: Just A Link, source: "https://www.nexusmods.com/subnautica2/mods/1", tier: optional }
 EOF
   run "$ROOT/scripts/mod-service.sh" publish

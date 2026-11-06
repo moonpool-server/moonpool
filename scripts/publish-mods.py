@@ -116,11 +116,28 @@ def zip_bytes(members):
     return out.getvalue()
 
 
+MAX_DOWNLOAD = 512 * 1024 * 1024
+
+
+def copy_capped(response, output, url, cap=None):
+    """Stream a download to disk and refuse one past the cap, so a mod page cannot fill the disk."""
+    cap = MAX_DOWNLOAD if cap is None else cap
+    total = 0
+    while True:
+        chunk = response.read(1024 * 1024)
+        if not chunk:
+            return total
+        total += len(chunk)
+        if total > cap:
+            raise ValueError(f"download of {url} passed {cap // (1024 * 1024)} MB; refused")
+        output.write(chunk)
+
+
 def fetch(url, dest, headers=None):
     request = urllib.request.Request(url, headers=headers or {"User-Agent": "moonpool publisher"})
     try:
         with urllib.request.urlopen(request, timeout=120) as response, Path(dest).open("wb") as output:
-            shutil.copyfileobj(response, output)
+            copy_capped(response, output, url)
     except urllib.error.URLError as exc:
         raise ValueError(f"download failed for {url}: {exc}") from exc
 
@@ -145,7 +162,7 @@ def fetch_with_cf_key(url, dest, key):
     try:
         with urllib.request.build_opener(CurseForgeRedirects).open(request, timeout=120) as response, \
                 Path(dest).open("wb") as output:
-            shutil.copyfileobj(response, output)
+            copy_capped(response, output, url)
     except urllib.error.URLError as exc:
         raise ValueError(f"download failed for {url}: {exc}") from exc
 
@@ -365,6 +382,10 @@ def resolve_local(entry, install, data, public, name):
     files = sorted(p for p in folder.rglob("*") if p.is_file())
     if not files:
         raise ValueError(f"{name}: client-mods/{name}/ is empty")
+    top = folder.resolve()
+    for path in files:
+        if path.is_symlink() or not path.resolve().is_relative_to(top):
+            raise ValueError(f"{name}: client-mods/{name}/{path.relative_to(folder).as_posix()} is a link; only plain files are published")
     out_dir = public / "files"
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", name) + ".zip"
@@ -388,10 +409,9 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
     if kind not in ("ue4ss", "pak"):
         raise ValueError(f"{name}: install.kind must be ue4ss or pak")
     side = str(entry.get("side", "client")).lower()
-    if side not in ("client", "host", "both"):
-        raise ValueError(f"{name}: side must be client, host or both")
-    if side == "host":
-        return None
+    if side != "client":
+        raise ValueError(f"{name}: side: {side} is not supported; this list is what players install. "
+                         "A mod the host runs goes in ue4ss-local/Mods/<name>/ (docs/operating.md)")
     source_type = str(install.get("type", "")).lower()
     archive = None
     if source_type == "github":

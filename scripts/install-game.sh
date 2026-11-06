@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Asks the signed-in Windows Steam client to download the game; SteamCMD
-# would need a password.
 # Ask the running Windows Steam client to install (or update) the game into
 # the volume, using its own download. No SteamCMD and no password: the client
 # must already be signed in through the noVNC page (docs/operating.md).

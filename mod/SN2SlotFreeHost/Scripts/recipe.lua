@@ -36,19 +36,10 @@ local DEFAULTS = {
     return 'Z:\\data\\control' -- outside the container only
   end)(),
   poll_ms = 2000,
-  ready_timeout_s = 600,
   host = {
-    enabled = true,
-    allow_all_friends = true,
-    game_mode_alias = '',
     save_slot = 'Slot1',
-    save_checkpoint = '',
-    voice_chat_mode = 0,
     max_players = 4,
-    hook_host_async = false,
   },
-  required_checks = { 'game_instance', 'local_player', 'player_controller',
-    'session_subsystem', 'steam_identity', 'session_lookup' },
   enabled_commands = { 'status', 'players', 'host', 'receipt', 'kick', 'slots',
     'friend_code' },
 }

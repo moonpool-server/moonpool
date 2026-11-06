@@ -57,7 +57,7 @@ services:
       AUTO_ACCEPT_FRIENDS: "${AUTO_ACCEPT_FRIENDS:-1}"  # 0 = accept requests by hand
       ALLOWLIST_ONLY: "${ALLOWLIST_ONLY:-true}"  # false = accept anyone who asks
       HOST_NAME: "${HOST_NAME:-SN2 Host}"  # the Steam persona players see
-      ADMINS: "${ADMINS:-}"  # exact names or preferred Steam ID64 values; empty disables in-game admin
+      ADMINS: "${ADMINS:-}"  # EOS player ids, space separated (see .env.example); empty disables in-game admin
       ADMIN_PREFIX: "${ADMIN_PREFIX:-!}"
       WORLD_NAME: "${WORLD_NAME:-Subnautica 2 server}"  # the session and save name
       MOTD: "${MOTD:-}"  # greeting each player gets once on joining; empty = none
@@ -83,10 +83,10 @@ services:
       DISCORD_CHANNEL_ID: "${DISCORD_CHANNEL_ID:-}"
       # CURSEFORGE_API_KEY comes from .env only; it is a secret.
       # DISCORD_WEBHOOK_URL comes from .env only; it is a secret.
-    # Healthy = the viewer answers and the game process is up. Docker only
-    # marks health; the pieces inside are restarted by their supervisor and
-    # the container by unless-stopped when it exits. Bounded: a build with no
-    # shipped layout runs without the loader instead of looping.
+    # Healthy = Windows Steam runs and, once the game is installed, so does the game
+    # process. It never says a world is hosted; `bin/moonpool status` does. Docker only
+    # marks health; the pieces inside are restarted by their supervisor and the
+    # container by unless-stopped when it exits.
     healthcheck:
       test: ["CMD", "/opt/sn2/bin/healthcheck.sh"]
       interval: 60s
@@ -163,7 +163,9 @@ services:
     image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
     profiles: ["tunnel-token"]
     restart: unless-stopped
-    command: ["tunnel", "--no-autoupdate", "run", "--token", "${TUNNEL_TOKEN:-}"]
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN:-}"
     depends_on:
       - sn2
 

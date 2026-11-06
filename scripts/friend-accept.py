@@ -82,6 +82,9 @@ def wine_unprotect(b: bytes, user: str) -> bytes:
     return p[:-p[-1]]
 
 
+SESSION_COOKIES = ("sessionid", "steamLoginSecure")  # the two Steam Community reads; nothing else leaves the store
+
+
 def community_cookies(htmlcache: str, user: str) -> dict[str, str]:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     with open(os.path.join(htmlcache, "Local State"), encoding="utf-8") as f:
@@ -102,7 +105,7 @@ def community_cookies(htmlcache: str, user: str) -> dict[str, str]:
         os.remove(tmp)
     out = {}
     for name, ev in rows:
-        if ev[:3] in (b"v10", b"v11"):
+        if name in SESSION_COOKIES and ev[:3] in (b"v10", b"v11"):
             out[name] = AESGCM(key).decrypt(ev[3:15], ev[15:], None).decode()
     return out
 

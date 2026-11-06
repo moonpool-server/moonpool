@@ -485,8 +485,9 @@ def publish_card(container, world):
         return
     try:
         PUBLIC.mkdir(parents=True, exist_ok=True)
-        write(PUBLIC / "card.json.tmp", dumps({"ts": now(), "world": world, "container": container}))
-        os.replace(PUBLIC / "card.json.tmp", PUBLIC / "card.json")
+        if E.get("PUBLISH_CARD") == "true":  # what the card shows, for another world's board; names included
+            write(PUBLIC / "card.json.tmp", dumps({"ts": now(), "world": world, "container": container}))
+            os.replace(PUBLIC / "card.json.tmp", PUBLIC / "card.json")
     except OSError:
         pass
 

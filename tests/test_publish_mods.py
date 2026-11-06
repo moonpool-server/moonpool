@@ -247,4 +247,29 @@ class CurseForgeKeyTests(unittest.TestCase):
         self.assertEqual(seen, [])
 
 
+class DownloadsAndLinks(unittest.TestCase):
+    def test_a_download_past_the_cap_is_refused_and_a_smaller_one_lands_whole(self):
+        out = io.BytesIO()
+        with self.assertRaises(ValueError):
+            PUBLISH.copy_capped(io.BytesIO(b"x" * 11), out, "https://example/x.zip", cap=10)
+        out = io.BytesIO()
+        self.assertEqual(PUBLISH.copy_capped(io.BytesIO(b"y" * 10), out, "https://example/y.zip", cap=10), 10)
+        self.assertEqual(out.getvalue(), b"y" * 10)
+
+    def test_a_link_under_client_mods_is_not_published(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"; public = Path(tmp) / "public"
+            folder = data / "client-mods" / "Linked"; folder.mkdir(parents=True)
+            (folder / "Scripts").mkdir(); (folder / "Scripts" / "main.lua").write_text("print(1)")
+            secret = Path(tmp) / "secret.pem"; secret.write_text("private")
+            try:
+                (folder / "key.pem").symlink_to(secret)
+            except (OSError, NotImplementedError):
+                self.skipTest("this account cannot make symlinks")
+            with self.assertRaises(ValueError) as caught:
+                PUBLISH.resolve_local({"name": "Linked"}, {"type": "local"}, data, public, "Linked")
+            self.assertIn("is a link", str(caught.exception))
+            self.assertFalse((public / "files" / "Linked.zip").exists())
+
+
 if __name__ == "__main__": unittest.main()

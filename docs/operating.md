@@ -4,7 +4,7 @@ Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. T
 
 ## Size
 
-4 players need about 4 cores 8 GB of memory 40 GB of SSD and 10 Mbit upload. Measured at 2 players it used 2.3 cores and 6 GB
+4 players need about 4 cores 8 GB of memory 40 GB of SSD and 10 Mbit upload. Measured at 2 players it used 2.3 cores and 6 GB and the 4 player line is scaled up from that
 
 8 players is a guess at 6 cores 12 GB 60 GB and 25 Mbit. `metrics.csv` in the data volume shows what your host really uses
 
@@ -14,7 +14,7 @@ The viewer controls a signed in Steam so keep it off the internet. It always ask
 
 Use the hosting account with Steam Guard on and pick Remember me. To paste open the noVNC side panel and put it in the clipboard there then press Ctrl+V in Steam
 
-Moonpool never sees your password and it's not in `.env`. The sign in stays in the data volume and anything running in the container can use it. To accept friend requests by itself Moonpool reads the Steam client's own web session out of its cookie store in the volume and talks to Steam as that account; `AUTO_ACCEPT_FRIENDS=0` turns that off and you accept requests in the viewer. So use a dedicated account, keep Steam Guard on and keep the volume private
+Moonpool never sees your password and it's not in `.env`. The sign in stays in the data volume and anything running in the container can use it. To accept friend requests by itself Moonpool reads the Steam client's own web session out of its cookie store in the volume and talks to Steam as that account, and it reads which lobby the account is in through the same session for the join link; `AUTO_ACCEPT_FRIENDS=0` turns the accepting off and you accept requests in the viewer. So use a dedicated account, keep Steam Guard on and keep the volume private
 
 Lost the machine? Deauthorize devices in Steam and change the password. `docker compose down -v` deletes the world and its saves for good
 

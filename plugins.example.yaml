@@ -4,7 +4,7 @@
 # just join with no mods. Every entry is ON unless it says `enabled: false`.
 #
 # An entry WITH an `install:` block is installed for players by the launcher
-# (the "Play with mods" button on the join page, moonpool.cmd): the server
+# (the "Play with mods" button on the join page, which opens the launcher): the server
 # publishes a signed list with each mod's exact file and its hash, and the
 # launcher puts those files on the player's PC, keeps them current on every
 # start, removes what the server stops asking for, and joins. An entry WITHOUT
@@ -34,8 +34,8 @@
 #   source:   the mod's page (shown as the link)
 #   tier:     mandatory | optional   (default optional; optional ones install too; a player can
 #             leave one out: moonpool -Skip "name")
-#   side:     client | host | both   (host = the server runs it, players never
-#             need it: listed nowhere; default client)
+#   (A mod the host itself runs is not listed here: it goes in ue4ss-local/Mods/<name>/
+#   in the data volume, see docs/operating.md)
 #   version:  what you call this version, shown to players
 #   enabled:  true | false            (default true)
 #   install:
@@ -52,10 +52,6 @@
 # Example (delete these and add your own):
 #
 # plugins:
-#   - name: "Too Many Divers"
-#     summary: "Raises the player cap; the server runs it, players do not need it."
-#     source:  "https://github.com/Zeusfail/Too-Many-Divers"
-#     side:    host
 #   - name: "Simple Minimap"
 #     summary: "A minimap in the top right. M for the big map, H hides it."
 #     source:  "https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap"

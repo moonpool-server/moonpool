@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Extracts seven DLLs from Microsoft's own vc_redist and scopes them to the
-# game process; winetricks installs them prefix-wide.
 # Fetch Microsoft's C++ runtime and place seven of its DLLs in the game folder.
 #
 # Why: under Wine's builtin C++ runtime the UE4SS loader stalled right after finding
