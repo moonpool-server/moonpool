@@ -133,6 +133,14 @@ map_status() {
   [ "$(jq -r '[.. | objects | select(.type == 12)][0].items[0].media.url' <<<"$body")" = 'https://play.example/map.png?v=abc123' ]
 }
 
+@test "Discord card sends players with mods to the join page's Play with mods, never to a file the server no longer serves" {
+  mkdir -p "$PUBLIC_DIR"
+  printf '{"schema":3,"mods":[{"name":"A"},{"name":"B"}]}' >"$PUBLIC_DIR/mods.json"
+  body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ "$body" == *'**Mods** (2)'*'**Play with mods**'*'https://play.example/join)'* ]]
+  [[ "$body" != *moonpool.cmd* ]]
+}
+
 @test "Discord card lists known player ping and omits unknown ping" {
   printf '{"ts":1700000000,"players":[{"name":"Host","ping_ms":1},{"name":"Alice","ping_ms":23},{"name":"Bob"}]}' \
     >"$CONTROL_DIR/status.json"

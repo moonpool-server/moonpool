@@ -326,7 +326,7 @@ def world_container():
     if url:
         n = len((read_json(PUBLIC / "mods.json", {}) or {}).get("mods") or [])
         if n:
-            mods = f"• **Mods** ({n}): run [moonpool.cmd]({url}/moonpool.cmd) once instead of Join Game; it installs them at the server's versions and joins"
+            mods = f"• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins"
     stats = world_stats()
 
     h = esc(HOST)
