@@ -8,9 +8,9 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 
 ## What you need
 
-- A Linux box or Docker Desktop with Docker Engine 26 and Compose 2.25 or newer. On Windows run everything here from the WSL shell Docker Desktop uses, since `bin/moonpool` is a Python script that leans on bash
-- About 4 cores 8 GB of memory and 40 GB of SSD for 4 players. That's the game's own limit and the default. You can raise `PLAYER_SLOTS` but it's less proven
-- A copy of the game on a Steam account you only use for hosting. An account can only be signed in one place so it can't be the one you play on
+- A Linux box or Docker Desktop with Docker Engine 26 and Compose 2.25 or newer. On Windows run everything here from the WSL shell Docker Desktop uses, since `bin/moonpool` is Python and calls bash
+- About 4 cores 8 GB of memory and 40 GB of SSD for 4 players. That's the game's stock limit and the default. You can raise `PLAYER_SLOTS` but it's less proven
+- A copy of the game on a Steam account you only use for hosting. Signing that account in anywhere else logs the host out, so it can't be the one you play on
 - Your friends need their own copy of the game on Steam. Xbox and Game Pass joining is experimental, see the [guide](docs/operating.md#xbox-and-game-pass-players)
 
 ## Start it
@@ -44,7 +44,7 @@ The Discord card and the join page, as players see them
 
 ## What's exposed
 
-- Port 8081 serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel
+- Port 8081 (`SN2_MODS_PORT`) serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel
 - With `WEB_MAP=true` the map page shows explored areas and base positions to anyone with the link
 - The viewer on 8080 controls the signed-in Steam so it listens on this machine only unless you set `VIEWER_BIND` and a password
 - The data volume holds the hosting account's Steam session. Keep it and your backups private

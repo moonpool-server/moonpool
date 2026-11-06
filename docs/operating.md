@@ -20,13 +20,13 @@ Lost the machine? Deauthorize devices in Steam and change the password. `docker 
 
 ## Joining
 
-There's no port to forward. Invite each player with `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request, it's accepted within a minute, and they hit Join Game or use the join page. `ALLOWLIST_ONLY=false` lets in anyone who asks. Anyone already friends with the account can join either way until you remove them with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
+There's no port to forward. Invite each player with `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request, it's accepted within a minute (`AUTO_ACCEPT_FRIENDS=0` leaves that to you), and they hit Join Game or use the join page. `ALLOWLIST_ONLY=false` lets in anyone who asks. Anyone already friends with the account can join either way until you remove them with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
 
 `moonpool ban add` blocks someone for good and `players kick` only removes them for now
 
 ## Xbox and Game Pass players
 
-Experimental. They can't be invited through Steam. They add the hosting account by its in-game friend code and join from the game's own friends list. The game makes that code only while its Friends screen is open, so `bin/moonpool diag friend-code` opens that screen the way a click would, reads the code and closes it again. Run it once while nobody is on. Each run makes a new code, and the last one survives restarts. From then on it shows on the Discord card and in that command. It's marked experimental because it's read off the game's own screen
+Experimental. They can't be invited through Steam. They add the hosting account by its in-game friend code and join from the game's own friends list. The game makes that code only while its Friends screen is open, so `bin/moonpool diag friend-code` opens that screen the way a click would, reads the code and closes it again. Run it once while nobody is on, or with `--force` while players are. Each run makes a new code, and the last one survives restarts. From then on it shows on the Discord card and in that command. It's marked experimental because it's read off the game's own screen
 
 ## Mods
 
@@ -36,9 +36,11 @@ bin/moonpool mods publish plugins.yaml
 bin/moonpool mods list
 ```
 
-An entry needs the mod's download link and nothing else: a GitHub release file, a CurseForge file page or a Nexus file page. CurseForge needs your own API key in `.env` (`CURSEFORGE_API_KEY`, free at console.curseforge.com) and a mod whose author allows distribution; otherwise players download that one from its page
+An entry needs the mod's download link: a GitHub release file, a CurseForge file page or a Nexus file page. CurseForge needs your own API key in `.env` (`CURSEFORGE_API_KEY`, free at console.curseforge.com) and a mod whose author allows distribution; otherwise players download that one from its page
 
 A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players then download it themselves and the launcher checks it matches
+
+A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. Everything optional installs by default; a player can leave one out
 
 ## In game admin
 
@@ -92,7 +94,7 @@ A new build only hosts if the loader works on it. The public branch uses a loade
 
 ## Events and your own automation
 
-Moonpool has no events system. It gives you two doors and you decide what happens
+Moonpool has no event bus. It gives you two doors and you decide what happens
 
 `hooks/on-event` in the data volume, if it's executable, runs on each `join` `leave` `up` `restart` `update` and `outage` with the event and its detail as arguments. Its output goes to `logs/hooks.log`. It runs inside the container with the host's rights so treat it like any admin script
 
@@ -137,6 +139,7 @@ The example points at [joric's Subnautica 2 tileset](https://github.com/joric/su
 
 ## When something's wrong
 
+- Not sure the host is right: `bin/moonpool diag verify-fresh` checks each stage from Steam to the hosted save
 - No session: `bin/moonpool diag receipt` then `bin/moonpool logs game`
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`

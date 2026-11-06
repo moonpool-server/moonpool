@@ -32,7 +32,7 @@
 #   name:     short display name
 #   summary:  one line on what it does
 #   source:   the mod's page (shown as the link)
-#   tier:     mandatory | optional   (optional ones install too; a player can
+#   tier:     mandatory | optional   (default optional; optional ones install too; a player can
 #             leave one out: moonpool -Skip "name")
 #   side:     client | host | both   (host = the server runs it, players never
 #             need it: listed nowhere; default client)

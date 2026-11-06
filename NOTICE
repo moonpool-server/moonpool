@@ -16,8 +16,8 @@ UE4SS (RE-UE4SS)
   scripts/install-ue4ss.sh downloads the pinned release (from this project's
   release mirror of the pinned builds, because the upstream tag moves, then from
   https://github.com/UE4SS-RE/RE-UE4SS/releases; tag and asset named in that
-  script) into the operator's own volume, verifies its SHA-256, and fetches the
-  VTableLayout template from the same repository. When a server lists a UE4SS
+  script) into the operator's own volume and verifies its SHA-256. Layout files
+  for a build come only from the operator's own set, never from here. When a server lists a UE4SS
   mod, it also serves that same unmodified archive to its players from its web
   root, for the player launcher in client/. The release archive carries its own
   LICENSE, which applies.
@@ -46,7 +46,7 @@ BeaconServer (HumanGenome/BeaconServer, v0.3.137)
   This project's own launch line shares -nullrhi -unattended with it.
   Ported from it: the host-prune and lifepod story-goal unlock steps (from
   ue4ss/Mods/BeaconNoPhantomHost/Scripts/main.lua and
-  ue4ss/Mods/BeaconStoryGoalUnlock/Scripts/main.lua, off by default here), and
+  ue4ss/Mods/BeaconStoryGoalUnlock/Scripts/main.lua, on by default here), and
   the rule never to search the whole object list on a timer (applied in
   mod/SN2SlotFreeHost/Scripts/status.lua).
 
@@ -84,10 +84,12 @@ Older releases
   or branch now. The commits that held them stay reachable by their hashes until
   GitHub purges them on request. Rights holders can ask through GitHub issues.
 
-Leaflet (map page only)
-  Project: https://leafletjs.com, License: BSD 2-Clause
-  Not included here. web/map.html loads version 1.9.4 from unpkg.com, checked by
-  its hash, into the viewer's browser.
+Leaflet, Leaflet.heat and Leaflet.fullscreen (map page only)
+  Leaflet: https://leafletjs.com, BSD 2-Clause, version 1.9.4
+  Leaflet.heat: https://github.com/Leaflet/Leaflet.heat, BSD 2-Clause, version 0.2.0
+  Leaflet.fullscreen: https://github.com/brunob/leaflet.fullscreen, MIT, version 3.0.0
+  None is included here. web/map.html loads them from cdnjs.cloudflare.com, each
+  checked by its hash, into the viewer's browser.
 
 Map backgrounds
   No map picture is included. map-background.example.json points at joric's
