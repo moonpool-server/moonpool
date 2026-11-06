@@ -138,7 +138,7 @@ build_id() { local m; m=$(manifest); [ -z "$m" ] || vdf_val "$m" buildid; }
 world_name() { local w; w=$(sj '.world_name // empty'); printf '%s' "${w:-${WORLD_NAME:-Subnautica 2 server}}"; }
 
 world_container() {
-  local st since n names world sid code sonar branch build host slots url join='' map='' stats tod weather scans
+  local st since n names world sid code sonar branch build host slots url join='' map='' still='' stats tod weather scans
   st=$(state); since=$(since_for "$st"); n=$(player_count); names=$(players); world=$(world_name)
   sid=$(host_steamid); code=$(friend_code); sonar=$(sj '.sonar_code // empty')
   # The host's in-game friend code: the mod's status, else the code it kept
@@ -148,6 +148,8 @@ world_container() {
   slots=$(sj '.player_slots // empty'); case $slots in '' | *[!0-9]*) slots='' ;; esac
   url=$(public_url); [ -z "$url" ] || join="$url/join"
   [ -z "$url" ] || [ "${WEB_MAP:-false}" != true ] || map="$url/map"
+  # The still, by its own signature so Discord fetches a changed one and caches an unchanged one.
+  [ -z "$map" ] || still=$(jq -r '.still // empty' "$DATA_DIR/public/map.json" 2>/dev/null | tr -dc '0-9a-f')
   tod=$(sj '.time_of_day // empty'); weather=$(sj '.weather // empty')
   scans=$(sj '(.unlocks.scans // []) | if type == "array" then .[-3:] | join(", ") else empty end')
   # The server's mods, when the publisher has turned plugins.yaml into a manifest:
@@ -164,7 +166,7 @@ world_container() {
   jq -cn --arg st "$st" --argjson since "$since" --arg world "$world" --argjson count "$n" \
     --arg names "$names" --arg host "$host" --arg slots "$slots" --arg sid "$sid" --arg code "$code" \
     --arg sonar "$sonar" --arg branch "$branch" --arg build "$build" --arg join "$join" \
-    --arg mods "$mods" --argjson stats "$stats" --arg map "$map" --arg tod "$tod" --arg weather "$weather" --arg scans "$scans" '
+    --arg mods "$mods" --argjson stats "$stats" --arg map "$map" --arg still "$still" --arg tod "$tod" --arg weather "$weather" --arg scans "$scans" '
     def esc: gsub("(?<c>[\\\\*_`~|>#])"; "\\\(.c)");
     def clamp($n): if length > $n then .[0:($n - 1)] + "…" else . end;
     def state_label: {up:"Open",starting:"Starting",updating:"Updating",down:"Down"}[.] // "Down";
@@ -211,6 +213,7 @@ world_container() {
         + (if $statline == "" then [] else [{type:10, content:("-# " + $statline | clamp(160))}] end)
         + [ {type:14, divider:false, spacing:2},
             {type:10, content:$codes} ]
+        + (if $map == "" or $still == "" then [] else [{type:12, items:[{media:{url:"\($map).png?v=\($still)"}, description:"Where players have been"}]}] end)
         + (if $map == "" then [] else [{type:1, components:[{type:2, style:5, label:"Map", url:$map}]}] end))}'
 }
 

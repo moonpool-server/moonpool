@@ -165,7 +165,7 @@ heartbeat() {
     cnt=$(printf '%s' "$cur" | grep -c . || true)
     container_usage
     echo "$(stamp),$cpu,$mem,$cnt" >>"$METRICS"
-    CONTROL_DIR="$CONTROL_DIR" python3 "$(dirname "$0")/map-chart.py" >>"$OUT" 2>&1 || true
+    CONTROL_DIR="$CONTROL_DIR" MAP_PUBLIC_URL="$(public_url)" python3 "$(dirname "$0")/map-chart.py" >>"$OUT" 2>&1 || true
     "$NOTIFY" status >/dev/null 2>&1 || true
     title="SN2 host - $now - $cnt/$PLAYER_SLOTS online: $(printf '%s' "$cur" | paste -sd, -)"
     grep -q FAILED "$BACKUP_STATUS" 2>/dev/null && title="$title - BACKUP FAILED"

@@ -62,7 +62,7 @@ repos:
         files: ^(scripts/friend-accept\.py|tests/test_friend_accept\.py)$
       - id: map-chart-test
         name: map chart test
-        entry: python3 tests/test_map_chart.py
+        entry: uv run --no-project --with pillow python tests/test_map_chart.py
         language: system
         pass_filenames: false
         files: ^(scripts/map-chart\.py|tests/test_map_chart\.py|web/map\.html)$

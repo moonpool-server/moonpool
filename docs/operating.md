@@ -111,9 +111,13 @@ Moonpool ships no map picture. To put one behind the trails, copy a map file int
 docker compose cp map-background.example.json sn2:/home/container/map-background.json
 ```
 
-The file has one entry per game branch, so public and experimental can use different maps. Each `url` is tile addresses with `{z}`, a picture's address or a file you put in the data volume. `bounds` are the picture's left, top, right and bottom edges in game units
+The file has one entry per game branch, so public and experimental can use different maps. A branch's entry is one picture or a list of pictures laid side by side. Each `url` is tile addresses with `{z}`, a picture's address or a file you put in the data volume. `bounds` are the picture's left, top, right and bottom edges in game units
+
+The experimental build carries its own top-down region pictures in the game folder under `Subnautica2/Content/Debug`, with their bounds in `maps.json` there. They're 60 to 80 MB each so shrink them to about 2048 pixels before you use them as a list. They're the studio's own files so whether to put them on your map is your call, like any picture here
 
 For your own picture pick two spots far apart that you can find in game. Stand on each and run `bin/moonpool map where <player>`, note each spot's pixel position in the picture, then `bin/moonpool map bounds` works out the edges. The picture can't be rotated
+
+The page carries link preview tags and a still at `/map.png`, so a pasted link shows the map in Discord and the like. `/map?embed=1` hides the heading for an iframe. The still is drawn on your host from the same tiles so it's your call too
 
 The example points at [joric's Subnautica 2 tileset](https://github.com/joric/subnautica2_tileset), which your players' browsers load from joric's site. It's a community capture of the game from May 2026, before the experimental branch opened. It needs no lining up but newer builds may differ and no capture made on experimental is known. Its Unlicense covers joric's work and can't speak for the game's own rights, so that part is your call
 

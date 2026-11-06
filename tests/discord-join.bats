@@ -152,6 +152,10 @@ map_status() {
   [[ $body != *'/map'* ]]
   body=$(WEB_MAP=true SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example bash "$ROOT/scripts/discord-notify.sh" --dry-run status | grep '^{')
   [ "$(jq -r '[.. | objects | select(.label == "Map")][0].url' <<<"$body")" = https://play.example/map ]
+  [ "$(jq '[.. | objects | select(.type == 12)] | length' <<<"$body")" -eq 0 ]  # no still yet, no picture
+  mkdir -p "$DATA_DIR/public"; printf '{"still":"abc123"}' >"$DATA_DIR/public/map.json"
+  body=$(WEB_MAP=true SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example bash "$ROOT/scripts/discord-notify.sh" --dry-run status | grep '^{')
+  [ "$(jq -r '[.. | objects | select(.type == 12)][0].items[0].media.url' <<<"$body")" = 'https://play.example/map.png?v=abc123' ]
 }
 
 @test "Discord card lists known player ping and omits unknown ping" {

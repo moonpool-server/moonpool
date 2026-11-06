@@ -59,8 +59,8 @@ def test_the_map_file_gives_each_game_branch_its_own_background() -> None:
         one = json.loads(run(tmp, 1000, [], STEAM_BRANCH="public").read_text())["background"]
         assert one == {"url": tiles, "tiles": True, "max_zoom": 8, "bounds": [0, 1, 2, 3]}
         two = json.loads(run(tmp, 1000, [], STEAM_BRANCH="experimental").read_text())["background"]
-        assert two["url"] == "map-background.png" and not two["tiles"] and two["max_zoom"] == 4
-        assert (tmp / "public" / "map-background.png").read_bytes() == b"picture"
+        assert two["url"] == "map-background-0.png" and not two["tiles"] and two["max_zoom"] == 4
+        assert (tmp / "public" / "map-background-0.png").read_bytes() == b"picture"
         assert json.loads(run(tmp, 1000, [], STEAM_BRANCH="broken").read_text())["background"] is None
         assert json.loads(run(tmp, 1000, [], STEAM_BRANCH="other").read_text())["background"] is None
 
@@ -84,6 +84,39 @@ def test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits() -> None:
         assert json.loads((tmp / "public" / "map.json").read_text())["lifepods"] == []
 
 
+def test_the_page_carries_link_preview_tags_and_a_still_is_drawn_without_a_background() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        alice = {"name": "Alice", "x": 123456, "y": -7000, "z": -9000, "depth_m": 90}
+        run(tmp, 1000, [alice], WORLD_NAME="Deep Blue", MAP_PUBLIC_URL="https://play.example", MAP_DELAY_MINUTES="0")
+        page = (tmp / "public" / "map.html").read_text(encoding="utf-8")
+        assert '<meta property="og:title" content="Deep Blue map">' in page
+        assert '<meta property="og:image" content="https://play.example/map.png">' in page
+        assert "{{" not in page
+        png = (tmp / "public" / "map.png").read_bytes()
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+        before = (tmp / "public" / "map.png").stat().st_mtime_ns
+        run(tmp, 1001, [], WORLD_NAME="Deep Blue", MAP_DELAY_MINUTES="0")
+        assert (tmp / "public" / "map.png").stat().st_mtime_ns == before  # nothing changed, not redrawn
+
+
+def test_a_branch_can_lay_several_pictures_side_by_side() -> None:
+    from PIL import Image
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        for n, colour in (("west", (200, 50, 50)), ("east", (50, 200, 50))):
+            Image.new("RGB", (64, 64), colour).save(tmp / f"{n}.png")
+        (tmp / "map-background.json").write_text(json.dumps({"public": [
+            {"url": "west.png", "bounds": [0, 0, 100000, 100000]},
+            {"url": "east.png", "bounds": [100000, 0, 200000, 100000]}]}))
+        data = json.loads(run(tmp, 1000, [], STEAM_BRANCH="public").read_text())
+        assert [g["url"] for g in data["backgrounds"]] == ["map-background-0.png", "map-background-1.png"]
+        assert data["background"]["bounds"] == [0, 0, 1000, 1000] and len(data["still"]) == 16
+        still = Image.open(tmp / "public" / "map.png")
+        assert still.size[0] == 1200 and still.getpixel((300, 300))[:3] == (200, 50, 50)
+        assert still.getpixel((900, 300))[:3] == (50, 200, 50)
+
+
 def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -98,6 +131,7 @@ def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothin
         env["WEB_MAP"] = "false"
         subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
         assert not published.exists() and not (tmp / "public" / "map.html").exists()
+        assert not (tmp / "public" / "map.png").exists()
 
 
 if __name__ == "__main__":
@@ -105,5 +139,7 @@ if __name__ == "__main__":
     test_a_deeper_visit_and_a_new_base_wait_out_the_delay_too()
     test_the_map_file_gives_each_game_branch_its_own_background()
     test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits()
+    test_a_branch_can_lay_several_pictures_side_by_side()
+    test_the_page_carries_link_preview_tags_and_a_still_is_drawn_without_a_background()
     test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing()
     print("map chart: ok")
