@@ -18,6 +18,8 @@ setup() {
 # data, error}), echoing its id and command: fake_mod [true [DATA-JSON]],
 # fake_mod false [ERROR-CODE], or fake_mod raw '<the whole answer>'.
 # FAKE_REPLY_ID answers under another id than the request's.
+# Reach inside bin/moonpool: mp '<python statement>' with the CLI loaded as module m.
+mp() { python3 -c "import importlib.util as u, importlib.machinery as k, sys; s = u.spec_from_file_location('m', sys.argv[1], loader=k.SourceFileLoader('m', sys.argv[1])); m = u.module_from_spec(s); s.loader.exec_module(m); exec(sys.argv[2])" "$CTL" "$1"; }
 fake_mod() {
   local ok=${1:-true} body
   case $ok in
@@ -55,7 +57,7 @@ fake_mod() {
 }
 
 @test "build_request emits versioned JSON with id, cmd and args" {
-  run env MOONPOOL_LIB=1 bash -c ". '$CTL'; build_request abc123 players"
+  run mp 'print(m.build_request("abc123", "players", []))'
   [ "$status" -eq 0 ]
   [[ $output == '{"v":1,"id":"abc123","cmd":"players","args":{},"ts":'* ]]
 }
@@ -79,14 +81,14 @@ fake_mod() {
 }
 
 @test "player arguments are JSON-escaped" {
-  run env MOONPOOL_LIB=1 bash -c ". '$CTL'; build_request x player 'a\"b' 'Give DA_X_ItemType 2'"
+  run mp 'print(m.build_request("x", "player", ["a\"b", "Give DA_X_ItemType 2"]))'
   [ "$status" -eq 0 ]
   [[ $output == *'"cmd":"player","args":{"player":"a\"b","command":"Give DA_X_ItemType 2"}'* ]]
 }
 
 @test "nonce is 32 hex characters and differs each time" {
-  a=$(MOONPOOL_LIB=1 bash -c ". '$CTL'; new_nonce")
-  b=$(MOONPOOL_LIB=1 bash -c ". '$CTL'; new_nonce")
+  a=$(mp 'print(m.new_nonce())')
+  b=$(mp 'print(m.new_nonce())')
   [[ $a =~ ^[0-9a-f]{32}$ ]]
   [ "$a" != "$b" ]
 }
@@ -172,7 +174,7 @@ fake_mod() {
   printf old >"$SN2_CONTROL_DIR/tmp/dead.json"
   touch -t 202001010000 "$SN2_CONTROL_DIR/tmp/dead.json"
   printf '{}' >"$SN2_CONTROL_DIR/inbox/0123456789abcdef0123456789abcdef.json"
-  run env MOONPOOL_LIB=1 bash -c ". '$CTL'; check_control_dir; queue_housekeeping"
+  run mp 'm.check_control_dir(); m.queue_housekeeping()'
   [ "$status" -eq 0 ]; [ ! -e "$SN2_CONTROL_DIR/tmp/dead.json" ]
   [ -f "$SN2_CONTROL_DIR/inbox/0123456789abcdef0123456789abcdef.json" ]
   grep -q 'submitted inbox entries' scripts/launch-headless.sh
@@ -201,10 +203,10 @@ fake_mod() {
 }
 
 @test "arm creates HOST_ARMED and disarm removes it, without the mod" {
-  run bash "$CTL" arm
+  run "$CTL" arm
   [ "$status" -eq 0 ]
   [ -f "$SN2_CONTROL_DIR/HOST_ARMED" ]
-  run bash "$CTL" disarm
+  run "$CTL" disarm
   [ "$status" -eq 0 ]
   [ ! -e "$SN2_CONTROL_DIR/HOST_ARMED" ]
 }
@@ -236,7 +238,7 @@ make_backup() {
   echo a >"$SN2_SAVE_DIR/Slot1.sav"; touch -d '2026-10-30 10:00:00' "$SN2_SAVE_DIR/Slot1.sav"
   echo bb >"$SN2_SAVE_DIR/Slot2.sav"; touch -d '2026-10-31 16:00:27' "$SN2_SAVE_DIR/Slot2.sav"
   echo x >"$SN2_SAVE_DIR/GameSettings.sav"
-  TZ=UTC run bash "$CTL" server saves
+  TZ=UTC run "$CTL" server saves
   [ "$status" -eq 0 ]
   [[ ${lines[0]} == SAVE* ]]
   [[ ${lines[1]} == Slot2* ]]
@@ -247,14 +249,14 @@ make_backup() {
 
 @test "saves fails plainly when there is no save folder" {
   save_env
-  SN2_SAVE_DIR="$BATS_TEST_TMPDIR/none" run bash "$CTL" saves
+  SN2_SAVE_DIR="$BATS_TEST_TMPDIR/none" run "$CTL" saves
   [ "$status" -eq 69 ]
   [[ $output == *"no save folder yet"* ]]
 }
 
 @test "host <save> writes SAVE_SELECT and restarts the game" {
   save_env
-  run bash "$CTL" host Slot2
+  run "$CTL" host Slot2
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = "Slot2" ]
   # stop-game set the hold and start-game cleared it again
@@ -264,7 +266,7 @@ make_backup() {
 
 @test "host refuses a save name that could escape the folder" {
   save_env
-  run bash "$CTL" host '../evil'
+  run "$CTL" host '../evil'
   [ "$status" -eq 64 ]
   [ ! -e "$SN2_CONTROL_DIR/SAVE_SELECT" ]
 }
@@ -273,7 +275,7 @@ make_backup() {
   save_env
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/bad.tar.gz" userdata/123/remote/x.vdf
-  run bash "$CTL" restore "$BATS_TEST_TMPDIR/bad.tar.gz"
+  run "$CTL" restore "$BATS_TEST_TMPDIR/bad.tar.gz"
   [ "$status" -eq 77 ]
   [[ $output == *"holds no save (.sav) file"* ]]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "old" ]
@@ -283,7 +285,7 @@ make_backup() {
 @test "restore refuses a named save the backup does not hold" {
   save_env
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
-  run bash "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot9
+  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot9
   [ "$status" -eq 77 ]
   [[ $output == *"has no Slot9.sav"* ]]
 }
@@ -292,7 +294,7 @@ make_backup() {
   save_env
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
-  run bash "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot1
+  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot1
   [ "$status" -eq 0 ]
   [ "$(cat "$STAGED/Slot1.sav")" = "old" ]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "new" ]
@@ -312,7 +314,7 @@ printf '%s\n' "$*" >"$BATS_TEST_TMPDIR/restart-warning.call"
 [ ! -e "$SN2_RUN_DIR/stopped" ]
 SH
   chmod +x "$SN2_BIN/restart-warning.sh"
-  run bash "$CTL" restore "$BATS_TEST_TMPDIR/reef-backup.tar.gz" Slot1
+  run "$CTL" restore "$BATS_TEST_TMPDIR/reef-backup.tar.gz" Slot1
   [ "$status" -eq 0 ]
   [ "$(cat "$BATS_TEST_TMPDIR/restart-warning.call")" = "run restoring reef-backup.tar.gz" ]
 }
@@ -329,7 +331,7 @@ EOF
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" \
     sn2-staging/20261103T120000Z/SaveGames/Slot1.sav \
     sn2-staging/20261103T130000Z/SaveGames/Slot2.sav
-  PATH="$tools:$PATH" run bash "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
+  PATH="$tools:$PATH" run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 0 ]
   [ ! -e "$SN2_SAVE_DIR/Slot1.sav" ]
   [ "$(cat "$SN2_SAVE_DIR/Slot2.sav")" = "new" ]
@@ -340,7 +342,7 @@ EOF
   echo old-one >"$SN2_SAVE_DIR/Slot1.sav"
   echo old-extra >"$SN2_SAVE_DIR/Slot9.sav"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" sn2-staging/20261103T130000Z/SaveGames/Slot1.sav
-  run bash "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
+  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "new" ]
   [ ! -e "$SN2_SAVE_DIR/Slot9.sav" ]
@@ -355,7 +357,7 @@ EOF
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
   printf '#!/bin/sh\nexit 1\n' >"$SN2_BIN/save-stage.sh"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
-  run bash "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
+  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 77 ]
   [[ $output == *"could not snapshot"* ]]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "old" ]
@@ -375,7 +377,7 @@ steam_env() {
 
 @test "friends prints the friend code and each friend from Steam's files" {
   steam_env
-  run bash "$CTL" friends
+  run "$CTL" friends
   [ "$status" -eq 0 ]
   [[ $output == *"host friend code: 1000"* ]]
   [[ $output == *"111  Alice"* ]]
@@ -384,7 +386,7 @@ steam_env() {
 
 @test "friends fails plainly before the sign-in" {
   export SN2_STEAM_DIR="$BATS_TEST_TMPDIR/nosteam"
-  run bash "$CTL" friends
+  run "$CTL" friends
   [ "$status" -eq 69 ]
   [[ $output == *"sign in on the viewer page"* ]]
 }
@@ -421,23 +423,23 @@ steam_env() {
 }
 
 @test "invite adds the ID to the allowlist once" {
-  run bash "$CTL" invite 76561198000000000
+  run "$CTL" invite 76561198000000000
   [ "$status" -eq 0 ]
-  run bash "$CTL" invite 76561198000000000
+  run "$CTL" invite 76561198000000000
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_CONTROL_DIR/allowlist.txt")" = 76561198000000000 ]
   [ -z "$(ls "$SN2_CONTROL_DIR/inbox")" ]
 }
 
 @test "invite takes a profile link" {
-  run bash "$CTL" players invite https://steamcommunity.com/profiles/76561198000000000/
+  run "$CTL" players invite https://steamcommunity.com/profiles/76561198000000000/
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_CONTROL_DIR/allowlist.txt")" = 76561198000000000 ]
 }
 
 @test "invite refuses a custom /id/ link and junk, and lists nobody" {
   for bad in https://steamcommunity.com/id/somebody https://steamcommunity.com/id/76561198000000000 https://evil.example/profiles/76561198000000000 somebody 76561198; do
-    run bash "$CTL" players invite "$bad"
+    run "$CTL" players invite "$bad"
     [ "$status" -eq 64 ]
   done
   [ ! -e "$SN2_CONTROL_DIR/allowlist.txt" ]
@@ -462,12 +464,12 @@ policy_env() {
   [ "$status" -ne 0 ]
   run "$CTL" home Alice
   [ "$status" -ne 0 ]
-  run env MOONPOOL_LIB=1 bash -c ". '$CTL'; player_line Alice Heal"
+  run mp 'print(m.player_line(["Alice", "Heal"]))'
   [ "$output" = "Heal" ]
 }
 
 @test "player refuses a chained line and a missing command" {
-  run env MOONPOOL_LIB=1 bash -c ". '$CTL'; player_line Alice 'Heal; Quit'"
+  run mp 'print(m.player_line(["Alice", "Heal; Quit"]))'
   [ "$status" -ne 0 ]
   [[ $output == *"one console command"* ]]
   run "$CTL" player Alice
@@ -1127,12 +1129,12 @@ stop_game_in_layout() {
   local data="$BATS_TEST_TMPDIR/$1"
   mkdir -p "$data/control"  # the lock lives there; the container makes it at boot
   run env -u SN2_RUN_DIR -u SN2_CONTROL_DIR DATA_DIR="$data" SN2_IN_CONTAINER=1 \
-    bash "$CTL" stop-game
+    "$CTL" stop-game
   [ "$status" -eq 0 ]
   [[ $output == *"game stop requested"* ]]
   [ -f "$data/run/stopped" ]
   run env -u SN2_RUN_DIR -u SN2_CONTROL_DIR DATA_DIR="$data" SN2_IN_CONTAINER=1 \
-    bash "$CTL" start-game
+    "$CTL" start-game
   [ "$status" -eq 0 ]
   [ ! -e "$data/run/stopped" ]
 }
@@ -1148,7 +1150,7 @@ stop_game_in_layout() {
 @test "moonpool and the service read the same RUN_DIR from common.sh" {
   local data="$BATS_TEST_TMPDIR/home/container"
   svc=$(env DATA_DIR="$data" bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; echo \"\$RUN_DIR\"")
-  ctl=$(env -u SN2_RUN_DIR DATA_DIR="$data" MOONPOOL_LIB=1 bash -c ". '$CTL'; echo \"\$SN2_RUN_DIR\"")
+  ctl=$(env -u SN2_RUN_DIR DATA_DIR="$data" bash -c "$(declare -f mp); CTL='$CTL'; mp 'print(m.run_dir())'")
   [ "$svc" = "$data/run" ]
   [ "$ctl" = "$svc" ]
 }
@@ -1781,7 +1783,7 @@ case "\$1 \$2" in
     shift 2; envs=()
     while [ "\$1" != sn2 ]; do case \$1 in -e) envs+=("\$2"); shift ;; esac; shift; done
     shift 2
-    exec env "\${envs[@]}" SN2_IN_CONTAINER=1 bash "$CTL" "\$@" ;;
+    exec env "\${envs[@]}" SN2_IN_CONTAINER=1 "$CTL" "\$@" ;;
 esac
 EOF
   chmod +x "$stub/docker"
