@@ -26,7 +26,7 @@ There's no port to forward. Invite each player with `bin/moonpool players invite
 
 ## Xbox and Game Pass players
 
-Experimental. They can't be invited through Steam. They add the hosting account by its in-game friend code and join from the game's own friends list. The game makes that code only while its Friends screen is open and a headless host has no screen to open, so Moonpool reads a code the game has already made and can't make one itself. When there is one it shows on the Discord card and in `bin/moonpool diag friend-code`. A fresh headless world may have none, and then Xbox players can't join it
+Experimental. They can't be invited through Steam. They add the hosting account by its in-game friend code and join from the game's own friends list. The game makes that code only while its Friends screen is open, so `bin/moonpool diag friend-code` opens that screen the way a click would, reads the code and closes it again. Run it once while nobody is on. Each run makes a new code, and the last one survives restarts. From then on it shows on the Discord card and in that command. It's marked experimental because it's read off the game's own screen
 
 ## Mods
 

@@ -402,7 +402,7 @@ def how_to_join():
               "• Press **Join**, or **Friends** › right-click the host › **Join Game**", "**Xbox / PC Game Pass**"]
     if beta:
         lines.append("• Join the Subnautica 2 preview in **Xbox Insider Hub**")
-    lines.append("• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? This world can't take Xbox players")
+    lines.append("• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? Ask the host to run moonpool diag friend-code")
     lines.append("-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab")
     if E.get("DISCORD_CARD_NOTE"):
         lines.append(E["DISCORD_CARD_NOTE"])

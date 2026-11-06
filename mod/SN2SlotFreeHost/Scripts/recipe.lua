@@ -408,6 +408,7 @@ end
 -- why one is never constructed here).
 local friend_code = require('friend_code')
 local SONAR_FILE = cpath('sonar-code.txt')
+local FRIENDS_SCREEN = '/Game/Blueprints/UI/Friends/WBP_InGameFriends.WBP_InGameFriends_C'
 -- The signed-in hosting account (launch-headless.sh); the code is that account's,
 -- so a volume signed in to another account never shows the old one's code.
 local HOST_SID = os.getenv('SN2_HOST_STEAMID') or ''
@@ -434,8 +435,35 @@ local FC_GAME = {
     end)
     return names
   end,
+  -- No screen to click on a headless host, so the screen a click would open is built the
+  -- game's own way: its widget, made for the host's player controller and added to the
+  -- viewport. The widget makes and owns the view model. Closed again by close_screen.
+  open_screen = function()
+    local pc = FindFirstOf('PlayerController')
+    if not valid(pc) then return false, 'no player controller' end
+    local cls = StaticFindObject(FRIENDS_SCREEN)
+    if not valid(cls) and type(_G.LoadAsset) == 'function' then
+      pcall(function() cls = _G.LoadAsset(FRIENDS_SCREEN) end)
+    end
+    if not valid(cls) then return false, 'no Friends screen class' end
+    local lib = StaticFindObject('/Script/UMG.Default__WidgetBlueprintLibrary')
+    if not valid(lib) then return false, 'no widget library' end
+    local ok, err = pcall(function()
+      local w = lib:Create(pc, cls, pc)
+      if not valid(w) then error('Create returned nothing') end
+      w:AddToViewport(0)
+      state.friend_screen = w
+    end)
+    if not ok then return false, tostring(err) end
+    return true
+  end,
+  close_screen = function()
+    local w = state.friend_screen
+    state.friend_screen = nil
+    if valid(w) then pcall(function() w:RemoveFromParent() end) end
+  end,
 }
-local FC_HINT = 'open the game\'s Friends screen once on the viewer page, then run moonpool friend-code again'
+local FC_HINT = 'the game made no code; the guide says what a headless host can do'
 handlers.friend_code = function(args)
   ExecuteInGameThread(function()
     local job, why = friend_code.start(FC_GAME, args.force == true)
@@ -443,10 +471,15 @@ handlers.friend_code = function(args)
       log('friend-code: refused: ' .. tostring(why) .. (why == 'no_view_model' and ('; ' .. FC_HINT) or ''))
       return
     end
-    log('friend-code: requested from the open Friends screen')
+    log(job.how == 'opened' and 'friend-code: opened the Friends screen the way a click does'
+      or 'friend-code: requested from the open Friends screen')
+    -- done lives outside the loop: the game-thread poll sets it after the loop's own return,
+    -- so the next round ends the loop instead of polling and logging the code again.
+    local done = false
     LoopAsync(2000, function()
-      local done = false
+      if done then return true end
       ExecuteInGameThread(function()
+        if done then return end
         local code, how = friend_code.poll(FC_GAME, job)
         if code then
           state.friend_code = code
@@ -463,6 +496,7 @@ handlers.friend_code = function(args)
           log('friend-code: no answer in ' .. friend_code.MAX_TICKS * 2 .. ' s; ' .. FC_HINT)
           done = true
         end
+        if done then friend_code.finish(FC_GAME, job) end
       end)
       return done
     end)

@@ -65,6 +65,39 @@ eq(job, nil, 'no open Friends screen: nothing is requested')
 eq(why, 'no_view_model', 'and the reason says so')
 eq(#g.calls, 0, 'and nothing was called')
 
+-- A headless host: no screen is open, the glue can open one, and the view model the
+-- widget makes is found and asked on the next tick; finish closes what start opened.
+g = game({ vm = { FriendCode = 'HD11-2233', after = 0 } })
+local screen = { opened = 0, closed = 0 }
+local built = g.vm; g.vm = nil
+g.open_screen = function() screen.opened = screen.opened + 1; return true end
+job, why = fc.start(g)
+eq(why, nil, 'a host with no screen open gets one opened')
+eq(job.how, 'opened', 'and the job says it was opened')
+eq(screen.opened, 1, 'open_screen ran once')
+eq(#g.calls, 0, 'nothing is asked until the view model exists')
+eq(fc.poll(g, job), nil, 'a tick with the screen still building waits')
+g.vm = built
+eq(fc.poll(g, job), nil, 'the first tick with a view model asks')
+eq(g.calls[1], 'RequestFriendCode', 'RequestFriendCode is the call made')
+eq(fc.poll(g, job), 'HD11-2233', 'the next tick reads the code')
+g.close_screen = function() screen.closed = screen.closed + 1 end
+fc.finish(g, job); eq(screen.closed, 1, 'finish closes the screen start opened')
+g = game({ vm = { FriendCode = 'AB12-CD34', after = 0 } })
+g.open_screen = function() screen.opened = screen.opened + 1; return true end
+g.close_screen = function() screen.closed = screen.closed + 1 end
+job = fc.start(g); fc.finish(g, job)
+eq(job.how, 'found', 'an open screen is used as it is')
+eq(screen.opened, 1, 'and nothing was opened')
+eq(screen.closed, 1, 'and finish leaves it open')
+g = game({}); g.open_screen = function() return false, 'no player controller' end
+local _
+_, why = fc.start(g)
+eq(why, 'open_failed: no player controller', 'a screen that will not open says why')
+g = game({}); g.open_screen = function() return true end
+job = fc.start(g); for _ = 1, fc.MAX_TICKS do _, why = fc.poll(g, job) end
+eq(why, 'timeout', 'a screen that never makes a view model times out')
+
 -- The screen closing mid-request ends the poll instead of reading a freed object.
 g = game({ vm = { after = 5 } })
 job = fc.start(g)
