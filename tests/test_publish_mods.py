@@ -57,6 +57,15 @@ class ArchiveRootsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsafe path"):
             PUBLISH.archive_roots(zip_of(self.root / "e.zip", ["../Scripts/main.lua"]), "ue4ss")
 
+    def test_a_lowercase_scripts_folder_is_a_mod_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "ct.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("Subnautica2ComfortTweaks/scripts/main.lua", b"print(1)")
+                bundle.writestr("Subnautica2ComfortTweaks/scripts/config.lua", b"return {}")
+            self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"),
+                             [{"name": "Subnautica2ComfortTweaks", "prefix": "Subnautica2ComfortTweaks"}])
+
     def test_several_roots_need_install_folder(self):
         roots = [{"name": "A", "prefix": "A"}, {"name": "B", "prefix": "B"}]
         with self.assertRaisesRegex(ValueError, "install.folder"):

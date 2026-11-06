@@ -200,7 +200,8 @@ def archive_roots(archive, kind):
         if kind == "ue4ss":
             seen = set()
             for member in names:
-                m = re.match(r"^(?:(.*)/)?(Scripts/main\.lua|dlls/main\.dll)$", member.replace("\\", "/"))
+                # Windows reads the folder names without regard to case, and so do authors.
+                m = re.match(r"^(?:(.*)/)?(?i:scripts/main\.lua|dlls/main\.dll)$", member.replace("\\", "/"))
                 if not m:
                     continue
                 prefix = m.group(1) or ""
