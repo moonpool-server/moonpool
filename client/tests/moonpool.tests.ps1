@@ -329,6 +329,7 @@ try {
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
   Check ($r.Code -eq 3 -and $r.Out -match 'you declined' -and -not (Test-Path -LiteralPath (Join-Path $w6.Mods 'Foo'))) "declining installs nothing and does not start the game (got $($r.Code)): $($r.Out.Trim())"
   Check ($r.Asked -match 'Foo' -and $r.Asked -match 'UE4SS loader' -and $r.Asked -match 'Signed' -and -not $r.Launched) 'it names the server, each mod and the loader'
+  Check ($r.Asked -match 'UE4SS loader .* from this server, NATIVE CODE') "the loader comes from this server and is native code (asked: $($r.Asked))"
   Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '1.0' 'ue4ss' $true 'https://mods.example/foo')) 'signed'; Sign-Manifest
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
   Check ($r.Code -eq 3 -and $r.Asked -match 'Foo .* from mods\.example') "the question names the host a mod comes from: $($r.Asked)"

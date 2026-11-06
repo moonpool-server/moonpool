@@ -745,7 +745,7 @@ function Invoke-Join {
     $from = [string](Get-Prop $_.Source 'url' ''); if (-not $from) { $from = [string](Get-Prop $_.Source 'page' '') }
     $fromHost = 'this server'; if ($from -match '^https?://([^/:]+)') { $fromHost = $Matches[1] }
     "$($_.Name)|$($_.Version)|$(@(Get-Prop $_.Source 'hashes' @()) | ForEach-Object { "$($_.algorithm):$($_.value)" })|$($_.Identity)|$fromHost|$(if ($_.Native) { 'native code' } else { 'scripts' })" })
-  if ($loaderSpec) { $codeSet += "UE4SS loader|$(Get-Prop $loaderSpec 'asset' '')|sha256:$(Get-Prop $loaderSpec 'sha256' '')|$(@(Get-Prop $loaderSpec 'allowed_builds' @()) -join ',')|this server" }
+  if ($loaderSpec) { $codeSet += "UE4SS loader|$(Get-Prop $loaderSpec 'asset' '')|sha256:$(Get-Prop $loaderSpec 'sha256' '')|$(@(Get-Prop $loaderSpec 'allowed_builds' @()) -join ',')|this server|native code" }
   $script:ServerId = $serverId
   Confirm-CodeSet $cfg $serverId $codeSet
   if ($cfg) { Install-ServerShortcuts $cfg $serverId }
