@@ -102,6 +102,7 @@ Looking inside
   diag verify-fresh            read-only proof that a fresh install hosted by itself
   diag receipt                 the last Host-call receipt
   diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
+  diag viewer                  the viewer's address and password
   diag console <player> <line...>
                                one of the game's console commands, run server-side as
                                that player (one line; ; | and newlines are refused).
@@ -680,8 +681,9 @@ TABLE = {
     "diag": {"verify-fresh": ("diag.verify_fresh", "verify_fresh", False, None),
              "receipt": ("diag.receipt", "receipt", False, None), "screenshot": ("diag.screenshot", "screenshot", False, None),
              "friend-code": ("diag.friend_code", "friend_code", False, None),
+             "viewer": ("diag.viewer", "viewer", False, None),
              "console": ("diag.console", "console", True, lambda a: {"player": arg(0)(a), "command": arg(1)(a), "line": " ".join(a[1:])}),
-             "*": "usage: moonpool diag verify-fresh | receipt | friend-code [--force] | screenshot <file.png> | console <player> <line...>"},
+             "*": "usage: moonpool diag verify-fresh | receipt | friend-code [--force] | viewer | screenshot <file.png> | console <player> <line...>"},
     "welcome": {"": ("welcome", "welcome", False, None)},
     "discord": {"setup": ("discord.setup", "discord_setup", True, None), "*": "usage: moonpool discord setup"},
     # Plumbing between the host copy and the container copy, under the lock with no receipt of its own.
@@ -941,6 +943,22 @@ def inner(r):
         if not (n == 0 or (n == 1 and a[0] == "--force")):
             usage_error("usage: moonpool diag friend-code [--force]")
         queue_send("friend_code", a)
+    if op == "viewer":
+        if n:
+            usage_error("usage: moonpool diag viewer")
+        bind = E.get("VIEWER_BIND") or "127.0.0.1"
+        port = E.get("NOVNC_PORT") or "8080"
+        try:
+            got = subprocess.run(["bash", "-c", ". '%s'; viewer_password" % common_sh()], env={**E, "CONTROL_DIR": control_dir()},
+                                 capture_output=True, text=True, timeout=30)
+            pw = got.stdout if got.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            pw = ""
+        if not pw.strip():
+            unavailable("no viewer password yet: the viewer makes one when it starts")
+        address = f"http://{bind}:{port}/vnc.html"
+        finish("ok", f"{address} password {pw.strip()}", "", {"address": address, "password": pw.strip(),
+               "bind": bind, "port": int(port) if port.isdigit() else port})
     if op == "unlocks":
         if n > 1:
             usage_error("usage: moonpool unlocks [player]")

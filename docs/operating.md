@@ -10,7 +10,7 @@ Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. T
 
 ## Signing in
 
-The viewer controls a signed in Steam so keep it off the internet. Use an SSH tunnel or Tailscale to reach it because they're stronger than a VNC password. If you bind it to your LAN with `VIEWER_BIND=0.0.0.0` it won't start without `VNC_PASSWORD`
+The viewer controls a signed in Steam so keep it off the internet. It always asks for a password, made at first start unless you set `VNC_PASSWORD`; `bin/moonpool diag viewer` shows it. Inside Docker the viewer listens on every interface so the password is what keeps other containers out. Use an SSH tunnel or Tailscale to reach it from elsewhere because they're stronger than a VNC password, even if you bind it to your LAN with `VIEWER_BIND=0.0.0.0`
 
 Use the hosting account with Steam Guard on and pick Remember me. To paste open the noVNC side panel and put it in the clipboard there then press Ctrl+V in Steam
 

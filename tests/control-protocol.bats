@@ -651,6 +651,27 @@ policy_env() {
   [[ -f "$SN2_CONTROL_DIR/receipts/request.json" ]]
 }
 
+# --- the viewer's password (scripts/common.sh viewer_password) ----------------
+@test "viewer password: VNC_PASSWORD wins, else one is made once at mode 600 and kept" {
+  f="$BATS_TEST_TMPDIR/viewer-password"
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; VNC_PASSWORD=mine VIEWER_PASSWORD_FILE='$f' viewer_password"
+  [ "$output" = mine ] && [ ! -e "$f" ]
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; VNC_PASSWORD= VIEWER_PASSWORD_FILE='$f' viewer_password"
+  [ "$status" -eq 0 ] && [ "${#output}" -ge 12 ] && [ "$(stat -c %a "$f")" = 600 ]
+  first=$output
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; VNC_PASSWORD= VIEWER_PASSWORD_FILE='$f' viewer_password"
+  [ "$output" = "$first" ]
+}
+
+@test "moonpool diag viewer says the address and the password the viewer holds" {
+  printf 'kept-secret' >"$BATS_TEST_TMPDIR/viewer-password"
+  run env VIEWER_PASSWORD_FILE="$BATS_TEST_TMPDIR/viewer-password" VIEWER_BIND=127.0.0.1 NOVNC_PORT=8080 VNC_PASSWORD= "$CTL" --json diag viewer
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(jq -r '.data.address, .data.password' <<<"$output")" = $'http://127.0.0.1:8080/vnc.html\nkept-secret' ]
+  run env VNC_PASSWORD=mine "$CTL" diag viewer
+  [[ "$output" == *'password mine'* ]]
+}
+
 # --- Steam sign-in check (scripts/common.sh steam_signed_in) ---------------
 # Two account-file shapes: an older client's (MostRecent "1") and the current
 # client's (AutoLogin "1", no MostRecent).

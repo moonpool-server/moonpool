@@ -195,12 +195,12 @@ case $name in
     exec Xvfb "$DISPLAY" -screen 0 1280x800x24 -nolisten tcp >>"$LOG_DIR/xvfb.log" 2>&1 ;;
   x11vnc)
     wait_display x11vnc
-    auth=(-nopw)
-    if [ -n "${VNC_PASSWORD:-}" ]; then
-      x11vnc -storepasswd "$VNC_PASSWORD" "$RUN_DIR/vncpass" >/dev/null 2>&1
-      chmod 0600 "$RUN_DIR/vncpass"
-      auth=(-rfbauth "$RUN_DIR/vncpass")
-    fi
+    # Always a password (common.sh viewer_password): moonpool diag viewer shows it.
+    pw=$(viewer_password) || { say "viewer not started: could not make a password"; exec sleep infinity; }
+    x11vnc -storepasswd "$pw" "$RUN_DIR/vncpass" >/dev/null 2>&1
+    chmod 0600 "$RUN_DIR/vncpass"
+    auth=(-rfbauth "$RUN_DIR/vncpass")
+    [ -n "${VNC_PASSWORD:-}" ] || say_on_change viewer-password "viewer password made at first start; moonpool diag viewer shows it"
     # A failed backup is shown on the page title (the viewer's status line).
     if grep -q FAILED "$BACKUP_STATUS" 2>/dev/null; then
       VIEWER_TITLE="SN2 host - $(cut -c1-90 "$BACKUP_STATUS")"
@@ -209,14 +209,7 @@ case $name in
     exec x11vnc -display "$DISPLAY" -forever -shared -localhost -rfbport "$VNC_PORT" \
       -desktop "$VIEWER_TITLE" "${auth[@]}" >>"$LOG_DIR/x11vnc.log" 2>&1 ;;
   novnc)
-    # This viewer controls a signed-in Steam: off this machine it needs a password.
-    case "${VIEWER_BIND:-127.0.0.1}" in
-      127.* | localhost | ::1 | '[::1]') ;;
-      *) if [ -z "${VNC_PASSWORD:-}" ]; then
-           say_on_change viewer "viewer not started: VIEWER_BIND=$VIEWER_BIND needs VNC_PASSWORD set"
-           exec sleep infinity
-         fi ;;
-    esac
+    # This viewer controls a signed-in Steam: it always asks for the password x11vnc holds.
     exec websockify --web "$NOVNC_WEB" "$NOVNC_PORT" "localhost:$VNC_PORT" >>"$LOG_DIR/novnc.log" 2>&1 ;;
   clipboard | clipboard-primary)
     [ "$CLIPBOARD_BRIDGE" = true ] || exec sleep infinity

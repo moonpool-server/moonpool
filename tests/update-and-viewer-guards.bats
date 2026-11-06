@@ -64,19 +64,9 @@ steam_validated() {
 }
 
 viewer() { run env "$@" bash "$BIN/sn2-service.sh" novnc; }
-viewer_refused() { [ ! -e "$CALLS.websockify" ] && grep -qx infinity "$CALLS.sleep" && [[ $output == *"viewer not started"* ]]; }
-
-@test "a viewer open to the LAN with no password does not start" {
-  viewer VIEWER_BIND=0.0.0.0 VNC_PASSWORD=
-  viewer_refused
-}
-
-@test "a viewer open on all IPv6 addresses with no password does not start" {
-  viewer 'VIEWER_BIND=::' VNC_PASSWORD=
-  viewer_refused
-  rm -f "$CALLS.websockify" "$CALLS.sleep" "$SN2_STATE_DIR/viewer"
-  viewer 'VIEWER_BIND=[::]' VNC_PASSWORD=
-  viewer_refused
+@test "a viewer open to the LAN starts with no password set, because one is always made" {
+  viewer VIEWER_BIND=0.0.0.0 VNC_PASSWORD= VIEWER_PASSWORD_FILE="$BATS_TEST_TMPDIR/viewer-password"
+  [ -s "$CALLS.websockify" ] && [ ! -e "$CALLS.sleep" ]
 }
 
 @test "a viewer open to the LAN with a password starts" {
@@ -84,7 +74,7 @@ viewer_refused() { [ ! -e "$CALLS.websockify" ] && grep -qx infinity "$CALLS.sle
   [ -s "$CALLS.websockify" ]
 }
 
-@test "a viewer on this machine alone needs no password" {
+@test "a viewer on this machine alone starts the same way" {
   viewer VIEWER_BIND=127.0.0.1 VNC_PASSWORD=
   [ -s "$CALLS.websockify" ]
 }

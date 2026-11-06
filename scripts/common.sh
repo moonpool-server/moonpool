@@ -565,6 +565,20 @@ install_progress() {
 #  and its newest connection state is "Logged On".
 # Log timestamps are the container's clock (UTC in these images).
 # Sets STEAM_SIGNIN_SIGNAL to the evidence that decided it.
+# The viewer's password: VNC_PASSWORD when set, else one made at first start and kept
+# at $DATA_DIR/viewer-password (mode 600). The viewer always has one because websockify
+# listens on every interface inside the container, so other containers on the same
+# network could reach it; the host port stays on loopback by default on top of this.
+viewer_password() {
+  local file="${VIEWER_PASSWORD_FILE:-$DATA_DIR/viewer-password}"
+  if [ -n "${VNC_PASSWORD:-}" ]; then printf '%s' "$VNC_PASSWORD"; return 0; fi
+  if [ ! -s "$file" ]; then
+    (umask 077; openssl rand -base64 12 | tr -d '\n' >"$file") || return 1
+  fi
+  chmod 600 "$file" 2>/dev/null
+  cat "$file"
+}
+
 steam_signed_in() {
   local vdf="${1:-$STEAM_DIR/config/loginusers.vdf}" logs="${2:-$STEAM_DIR/logs}"
   local token="${3:-$STEAM_SESSION_DIR/local.vdf}" since="${4:-$(container_start)}"

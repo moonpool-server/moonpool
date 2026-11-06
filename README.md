@@ -18,12 +18,12 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 Run these in a terminal on the machine that will host the server
 
 ```sh
-git clone --branch v0.3.3 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
+git clone --branch v0.3.4 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
 cp .env.example .env
 docker compose up -d --build
 ```
 
-Open `http://127.0.0.1:8080/vnc.html` and sign in to Steam once. From another machine tunnel it first with `ssh -L 8080:127.0.0.1:8080 you@server`
+Open `http://127.0.0.1:8080/vnc.html` with the password `bin/moonpool diag viewer` shows and sign in to Steam once. From another machine tunnel it first with `ssh -L 8080:127.0.0.1:8080 you@server`
 
 The game downloads and the world comes up on its own. That can take a while and the log shows how far along it is
 
