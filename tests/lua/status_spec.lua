@@ -49,5 +49,22 @@ eq(ok and #list or -1, 1, 'only the live player is listed')
 eq(ok and list[1].name or '', 'Pilot', 'the live player is the one left')
 status.players(to_str, 'L_Main')
 eq(searches, 2, 'a missing path makes the next read search again')
+
+-- A built base is one UWESculpturalBaseActor, and a save restores it before the first search.
+local function base(x, cells, placed)
+  return { TotalCells = cells, bNetStartup = placed,
+    K2_GetActorLocation = function() return { X = x, Y = 0, Z = -100 } end }
+end
+local saved_find = _G.FindAllOf
+_G.FindAllOf = function(c)
+  if c == 'UWESculpturalBaseActor' then
+    return { base(50000, 12, false), base(90000, 0, false), base(130000, 9, true) }
+  end
+  return saved_find(c)
+end
+local built = status.build({ map = 'L_Bases' }, to_str).bases
+eq(#built, 1, "only a player's base with cells is listed")
+eq(built[1] and built[1].x or 0, 50000, 'at the position of the base actor')
+_G.FindAllOf = saved_find
 if failures > 0 then os.exit(1) end
 print('status_spec: ok')
