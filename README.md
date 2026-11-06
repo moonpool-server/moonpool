@@ -11,7 +11,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 - A Linux box or Docker Desktop with Docker Engine 26 and Compose 2.25 or newer. On Windows run everything here from the WSL shell Docker Desktop uses, since `bin/moonpool` is a Python script that leans on bash
 - About 4 cores 8 GB of memory and 40 GB of SSD for 4 players. That's the game's own limit and the default. You can raise `PLAYER_SLOTS` but it's less proven
 - A copy of the game on a Steam account you only use for hosting. An account can only be signed in one place so it can't be the one you play on
-- Your friends need their own copy of the game on Steam or Xbox
+- Your friends need their own copy of the game on Steam. Xbox and Game Pass joining is experimental and only works when the host already has an in-game friend code, see the [guide](docs/operating.md#xbox-and-game-pass-players)
 
 ## Start it
 
