@@ -86,9 +86,8 @@ manifests() {
     while IFS= read -r lib; do printf '%s\n' "$lib/steamapps/appmanifest_$GAME_APP_ID.acf"; done
 }
 manifest() { local m; while IFS= read -r m; do [ -f "$m" ] && { printf '%s' "$m"; return; }; done < <(manifests); }
-vdf_val() { sed -nE "s/^[[:space:]]*\"$2\"[[:space:]]+\"([^\"]*)\".*/\1/p" "$1" 2>/dev/null | head -1; }
 branch_name() {
-  local m b=''; m=$(manifest); [ -z "$m" ] || b=$(vdf_val "$m" BetaKey)
+  local m b=''; m=$(manifest); [ -z "$m" ] || b=$(vdf_get "$m" BetaKey)
   printf '%s' "${b:-${STEAM_BRANCH:-}}"
 }
 
@@ -134,7 +133,7 @@ since_for() {
 # states no text limit, so each world's text is clamped and, past the commonly cited
 # 4000 characters, the other worlds' join steps are dropped first (card()).
 V2=32768
-build_id() { local m; m=$(manifest); [ -z "$m" ] || vdf_val "$m" buildid; }
+build_id() { local m; m=$(manifest); [ -z "$m" ] || vdf_get "$m" buildid; }
 world_name() { local w; w=$(sj '.world_name // empty'); printf '%s' "${w:-${WORLD_NAME:-Subnautica 2 server}}"; }
 
 world_container() {
@@ -161,7 +160,7 @@ world_container() {
       "$DATA_DIR/public/mods.json" 2>/dev/null || true)
   fi
   # World history (world-stats.sh, cached 10 min); null when unknown.
-  stats=$(WORLD_STATS_SAVE_DIR="$SAVE_DIR" "$(dirname "$0")/world-stats.sh" 2>/dev/null || true)
+  stats=$(WORLD_STATS_SAVE_DIR="$SAVE_DIR" python3 "$(dirname "$0")/world-stats.py" 2>/dev/null || true)
   printf '%s' "$stats" | jq -e 'type == "object"' >/dev/null 2>&1 || stats=null
   jq -cn --arg st "$st" --argjson since "$since" --arg world "$world" --argjson count "$n" \
     --arg names "$names" --arg host "$host" --arg slots "$slots" --arg sid "$sid" --arg code "$code" \

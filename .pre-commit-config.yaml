@@ -68,7 +68,7 @@ repos:
         files: ^(scripts/map-chart\.py|tests/test_map_chart\.py|web/map\.html)$
       - id: curseforge-publisher-test
         name: CurseForge publisher resolution and distribution policy
-        entry: uv run --no-project --with pyyaml --with cryptography python tests/test_publish_mods.py
+        entry: uv run --no-project --with pyyaml --with cryptography --with vdf==3.4 python tests/test_publish_mods.py
         language: system
         pass_filenames: false
         files: ^(scripts/publish-mods\.py|tests/test_publish_mods\.py)$
@@ -82,8 +82,9 @@ repos:
         entry: >-
           --user 0:0 --entrypoint sh
           bats/bats:1.11.0@sha256:e8f18e0acd4ea933bf019130b85033be75e8ce081db299e93578de83d7874e33 -c
-          'apk add -q --no-cache jq lua5.4 python3 py3-pillow py3-yaml py3-cryptography
+          'apk add -q --no-cache jq lua5.4 python3 py3-pip py3-pillow py3-yaml py3-cryptography
           py3-jsonschema openssl zip unzip >/dev/null &&
+          pip install -q --break-system-packages vdf==3.4 >/dev/null &&
           cp -r . /tmp/w && cd /tmp/w && exec bats tests/*.bats'
         language: docker_image
         pass_filenames: false

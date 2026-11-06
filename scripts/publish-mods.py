@@ -32,8 +32,12 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import sys
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import steamfile  # noqa: E402  (beside this file)
 
 import yaml
 from cryptography.hazmat.primitives import serialization
@@ -64,10 +68,7 @@ def sha256(path):
 
 
 def acf_value(path, name):
-    if not path.is_file():
-        return ""
-    match = re.search(r'"' + re.escape(name) + r'"\s+"([^"]*)"', path.read_text(errors="replace"))
-    return match.group(1) if match else ""
+    return steamfile.get(path, name)
 
 
 def read_plugins(path):

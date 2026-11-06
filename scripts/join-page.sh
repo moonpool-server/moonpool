@@ -26,7 +26,7 @@ modnote=$(python3 "$(dirname "$0")/plugins-section.py" "$CONTROL_DIR/plugins.yam
 # The Steam branch and build the server runs, off its install manifest: a player on
 # another branch cannot join, so the page says which one before they try.
 manifest="${SN2_APPMANIFEST:-${WINEPREFIX:-$DATA_DIR/wine}/drive_c/Program Files (x86)/Steam/steamapps/appmanifest_1962700.acf}"
-vdf() { sed -nE "s/^[[:space:]]*\"$1\"[[:space:]]+\"([^\"]*)\".*/\1/p" "$manifest" 2>/dev/null | head -1 || true; }
+vdf() { python3 "$(dirname "$0")/steamfile.py" "$manifest" "$1" || true; }
 build=$(vdf buildid); branch=$(vdf BetaKey); branch=${branch:-${STEAM_BRANCH:-}}
 buildline=''
 if [ -n "$branch$build" ]; then

@@ -13,7 +13,7 @@ setup() {
   export SN2_NOW=1800000000
 }
 
-stats() { run bash "$ROOT/scripts/world-stats.sh"; }
+stats() { run python3 "$ROOT/scripts/world-stats.py"; }
 
 @test "world history combines saves, metrics, joins, and status" {
   printf save >"$SAVE/Slot1.sav"

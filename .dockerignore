@@ -20,7 +20,8 @@
 !scripts/restart-warning.sh
 !scripts/steam-install-confirm.sh
 !scripts/verify-fresh.sh
-!scripts/world-stats.sh
+!scripts/world-stats.py
+!scripts/steamfile.py
 !scripts/friend-accept.py
 !scripts/map-chart.py
 !bin/moonpool

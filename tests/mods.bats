@@ -16,7 +16,8 @@ setup() {
   mkdir -p "$SN2_CONTROL_DIR" "$DATA_DIR/run" "$WINEPREFIX/drive_c/Program Files (x86)/Steam/steamapps"
   chmod 700 "$SN2_CONTROL_DIR"
   printf '{"lobby_id":"0x10","host_steamid":"76561198000000000"}\n' >"$DATA_DIR/run/mod-session.json"
-  printf '"AppState" { "buildid" "4242" "BetaKey" "experimental" "installdir" "Subnautica2" }\n' \
+  # Shaped like the file Steam writes: one key per line, the branch under UserConfig.
+  printf '"AppState"\n{\n\t"buildid"\t\t"4242"\n\t"installdir"\t\t"Subnautica2"\n\t"UserConfig"\n\t{\n\t\t"BetaKey"\t\t"experimental"\n\t}\n}\n' \
     >"$WINEPREFIX/drive_c/Program Files (x86)/Steam/steamapps/appmanifest_1962700.acf"
   # The host's own executable: the loader players get is allowed on exactly this build.
   exe=$(bash -c '. "$1/scripts/common.sh"; printf "%s/%s" "$WIN64_DIR" "$GAME_EXE_NAME"' _ "$ROOT")

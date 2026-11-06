@@ -461,7 +461,8 @@ say_on_change() {
 # Shared here because the launcher reads the app manifest's buildid; it called this
 # before it was in reach, and every protocol answer said game_build_id "unknown"
 # after merging generated patterns.
-vdf_get() { grep -m1 -E "^\s*\"$2\"" "$1" 2>/dev/null | sed -E 's/.*"([^"]*)"\s*$/\1/'; }
+SN2_STEAMFILE="$(dirname "${BASH_SOURCE[0]}")/steamfile.py"
+vdf_get() { python3 "$SN2_STEAMFILE" "$1" "$2"; }
 host_steamid() {
   grep -oE '"7656[0-9]{13}"' "${1:-$STEAM_DIR}/config/loginusers.vdf" 2>/dev/null | head -1 | tr -d '"' || true
 }
@@ -491,8 +492,8 @@ container_start() {
   fi
 }
 
-# One value from a Steam .acf manifest ("Key"<tabs>"value").
-acf_value() { sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$2" 2>/dev/null | head -n1; }
+# One value from a Steam .acf manifest, key first.
+acf_value() { vdf_get "$2" "$1"; }
 
 # Is the game installed, by Steam's own record rather than the executable?
 # Steam preallocates every file when a download starts, so the executable is on
