@@ -633,137 +633,94 @@ def do_host(args):
 
 # ---- routing ----------------------------------------------------------------------
 
+ALIASES = {**{w: ("server", w) for w in ("start", "stop", "restart", "cancel", "arm", "disarm", "saves", "host", "restore", "slots", "save")},
+           **{w: ("players", w) for w in ("kick", "invite", "friends")},
+           **{w: ("diag", w) for w in ("receipt", "friend-code", "screenshot", "verify-fresh")},
+           "player": ("diag", "console")}
+
+
+def arg(i, default=""):
+    return lambda a: a[i] if len(a) > i else default
+
+
+# word -> {sub: (dotted command, handler, mutates, receipt-argument builder)} or a leaf
+# (sub ""). A sub of "*" is the usage line. The older spellings in ALIASES come first.
+TABLE = {
+    "status": {"": ("status", "status", False, None)},
+    "players": {"": ("players", "players", False, None),
+                "kick": ("players.kick", "kick", True, lambda a: {"player": arg(0)(a)}),
+                "invite": ("players.invite", "invite", True, None),
+                "friends": ("players.friends", "friends", False, None),
+                "*": "usage: moonpool players [kick <name> | invite <steamid64|profile link> | friends]"},
+    "ban": {"add": ("ban.add", "ban_add", True, lambda a: {"identifier": arg(0)(a), "reason": " ".join(a[1:])}),
+            "remove": ("ban.remove", "ban_remove", True, lambda a: {"identifier": arg(0)(a)}),
+            "list": ("ban.list", "ban_list", False, None),
+            "*": "usage: moonpool ban add <name|steamid64> [reason] | remove <name|steamid64> | list"},
+    "world": {"": ("world", "world", False, None),
+              "time": ("world.time", "world_set", True, lambda a: {"setting": "time", "value": arg(0)(a)}, True),
+              "weather": ("world.weather", "world_set", True, lambda a: {"setting": "weather", "value": arg(0)(a)}, True),
+              "*": WORLD_USAGE},
+    "settings": {"": ("settings.apply", "settings", True, None)},
+    "map": {"where": ("map.where", "map_where", False, None), "bounds": ("map.bounds", "map_bounds", False, None), "*": MAP_USAGE},
+    "mods": {"list": ("mods.list", "mods_list", False, None), "publish": ("mods.publish", "mods_publish", True, None),
+             "pin": ("mods.pin", "mods_pin", True, lambda a: {"name": arg(0)(a), "archive": os.path.basename(arg(1)(a))}),
+             "enable": ("mods.enable", "mods_toggle", True, lambda a: {"name": arg(0)(a)}),
+             "disable": ("mods.disable", "mods_toggle", True, lambda a: {"name": arg(0)(a)}),
+             "*": MODS_USAGE},
+    "unlocks": {"": ("unlocks", "unlocks", True, lambda a: {"player": arg(0)(a)})},
+    "server": {**{s: (f"server.{s}", s, True, None) for s in ("start", "arm", "disarm", "backup", "save")},
+               **{s: (f"server.{s}", s, False, None) for s in ("stop", "cancel", "saves")},
+               "restart": ("server.restart", "restart", False, lambda a: {"force": arg(0)(a) == "--force"}),
+               "host": ("server.host", "host", False, lambda a: {"save": arg(0)(a)}),
+               "slots": ("server.slots", "slots", True, lambda a: {"slots": arg(0)(a)}),
+               "restore": ("server.restore", "restore", True, lambda a: {"backup": os.path.basename(arg(0)(a)), "save": arg(1)(a)}),
+               "*": SERVER_USAGE},
+    "logs": {"": ("logs", "logs", False, None)},
+    "notify": {"": ("notify", "notify", True, None)},
+    "diag": {"verify-fresh": ("diag.verify_fresh", "verify_fresh", False, None),
+             "receipt": ("diag.receipt", "receipt", False, None), "screenshot": ("diag.screenshot", "screenshot", False, None),
+             "friend-code": ("diag.friend_code", "friend_code", False, None),
+             "console": ("diag.console", "console", True, lambda a: {"player": arg(0)(a), "command": arg(1)(a), "line": " ".join(a[1:])}),
+             "*": "usage: moonpool diag verify-fresh | receipt | friend-code [--force] | screenshot <file.png> | console <player> <line...>"},
+    "welcome": {"": ("welcome", "welcome", False, None)},
+    "discord": {"setup": ("discord.setup", "discord_setup", True, None), "*": "usage: moonpool discord setup"},
+    # Plumbing between the host copy and the container copy, under the lock with no receipt of its own.
+    "record": {"": ("record", "record", False, None, False, True)},
+    **{w: {"": (w, w, False, None, False, True)} for w in ("settings-install", "stop-game", "start-game", "restart-warning")},
+    "session-up": {"": ("session-up", "session-up", False, None)},
+    **{w: {"": ("help", "help", False, None)} for w in ("help", "-h", "--help")},
+}
+
+
 def route(argv):
     """The words typed -> the canonical dotted command name, the handler, whether it mutates
     (lock and receipt), the receipt's argument summary and the handler's arguments."""
-    r = {"cmd": "", "op": "", "mut": False, "lock": False, "args": {}, "hint": "", "usage": "", "argv": []}
+    r = {"cmd": "unknown", "op": "unknown", "mut": False, "lock": False, "args": {}, "hint": "", "usage": "", "argv": []}
     words = list(argv) or ["help"]
     R["word"] = words[0]
-    w, rest = words[0], words[1:]
-    if w in ("start", "stop", "restart", "cancel", "arm", "disarm", "saves", "host", "restore", "slots", "save"):
-        r["hint"], words = f"moonpool server {w}", ["server", w, *rest]
-    elif w in ("kick", "invite", "friends"):
-        r["hint"], words = f"moonpool players {w}", ["players", w, *rest]
-    elif w in ("receipt", "friend-code", "screenshot", "verify-fresh"):
-        r["hint"], words = f"moonpool diag {w}", ["diag", w, *rest]
-    elif w == "unlocks" and rest[:1] == ["replay"]:
-        r["hint"], words = "moonpool unlocks [player]", ["unlocks", *rest[1:]]
-    elif w == "player":
-        r["hint"], words = "moonpool diag console <player> <line...>", ["diag", "console", *rest]
+    if words[0] in ALIASES:
+        group, sub = ALIASES[words[0]]
+        r["hint"] = {"player": "moonpool diag console <player> <line...>"}.get(words[0], f"moonpool {group} {sub}")
+        words = [group, sub, *words[1:]]
+    elif words[0] == "unlocks" and words[1:2] == ["replay"]:
+        r["hint"], words = "moonpool unlocks [player]", ["unlocks", *words[2:]]
     R["words"] = words
     w, a = words[0], words[1:]
-    sub = a[0] if a else ""
+    group = TABLE.get(w)
+    if group is None:
+        return {**r, "argv": a}
     r["cmd"] = w
-
-    def take(cmd, op, mut=False, args=None):
-        r.update(cmd=cmd, op=op, mut=mut, args=args or {})
-
-    if w == "status":
-        r["op"] = "status"
-    elif w == "players":
-        if sub == "":
-            r["op"] = "players"
-        elif sub == "kick":
-            take("players.kick", "kick", True, {"player": a[1] if len(a) > 1 else ""}); a = a[1:]
-        elif sub == "invite":
-            take("players.invite", "invite", True); a = a[1:]
-        elif sub == "friends":
-            take("players.friends", "friends"); a = a[1:]
-        else:
-            r.update(op="usage", usage="usage: moonpool players [kick <name> | invite <steamid64|profile link> | friends]")
-    elif w == "ban":
-        if sub == "add":
-            take("ban.add", "ban_add", True, {"identifier": a[1] if len(a) > 1 else "", "reason": " ".join(a[2:])}); a = a[1:]
-        elif sub == "remove":
-            take("ban.remove", "ban_remove", True, {"identifier": a[1] if len(a) > 1 else ""}); a = a[1:]
-        elif sub == "list":
-            take("ban.list", "ban_list"); a = a[1:]
-        else:
-            r.update(op="usage", usage="usage: moonpool ban add <name|steamid64> [reason] | remove <name|steamid64> | list")
-    elif w == "world":
-        if sub == "":
-            r["op"] = "world"
-        elif sub in ("time", "weather"):
-            take(f"world.{sub}", "world_set", True, {"setting": sub, "value": a[1] if len(a) > 1 else ""})
-        else:
-            r.update(op="usage", usage=WORLD_USAGE)
-    elif w == "settings":
-        take("settings.apply", "settings", True)
-    elif w == "map":
-        if sub == "where":
-            take("map.where", "map_where")
-        elif sub == "bounds":
-            take("map.bounds", "map_bounds")
-        else:
-            r.update(op="usage", usage=MAP_USAGE)
-        a = a[1:]
-    elif w == "mods":
-        if sub == "list":
-            take("mods.list", "mods_list")
-        elif sub == "publish":
-            take("mods.publish", "mods_publish", True)
-        elif sub == "pin":
-            take("mods.pin", "mods_pin", True, {"name": a[1] if len(a) > 1 else "", "archive": os.path.basename(a[2]) if len(a) > 2 else ""})
-        elif sub in ("enable", "disable"):
-            take(f"mods.{sub}", "mods_toggle", True, {"name": a[1] if len(a) > 1 else ""})
-        else:
-            r.update(op="usage", usage=MODS_USAGE)
-        a = a[1:]
-    elif w == "unlocks":
-        take("unlocks", "unlocks", True, {"player": a[0] if a else ""})
-    elif w == "server":
-        if sub in ("start", "arm", "disarm", "backup", "save"):
-            take(f"server.{sub}", sub, True)
-        elif sub in ("stop", "cancel"):
-            take(f"server.{sub}", sub)
-        elif sub == "restart":
-            take("server.restart", "restart", False, {"force": len(a) > 1 and a[1] == "--force"})
-        elif sub == "saves":
-            take("server.saves", "saves")
-        elif sub == "host":
-            take("server.host", "host", False, {"save": a[1] if len(a) > 1 else ""})
-        elif sub == "slots":
-            take("server.slots", "slots", True, {"slots": a[1] if len(a) > 1 else ""})
-        elif sub == "restore":
-            take("server.restore", "restore", True, {"backup": os.path.basename(a[1]) if len(a) > 1 else "", "save": a[2] if len(a) > 2 else ""})
-        else:
-            r.update(op="usage", usage=SERVER_USAGE)
-        a = a[1:]
-    elif w == "logs":
-        r["op"] = "logs"
-    elif w == "notify":
-        r.update(op="notify", mut=True)
-    elif w == "diag":
-        if sub == "verify-fresh":
-            take("diag.verify_fresh", "verify_fresh")
-        elif sub in ("receipt", "screenshot"):
-            take(f"diag.{sub}", sub)
-        elif sub == "friend-code":
-            take("diag.friend_code", "friend_code")
-        elif sub == "console":
-            take("diag.console", "console", True, {"player": a[1] if len(a) > 1 else "", "command": a[2] if len(a) > 2 else "",
-                                                   "line": " ".join(a[2:])})
-        else:
-            r.update(op="usage", usage="usage: moonpool diag verify-fresh | receipt | friend-code [--force] | screenshot <file.png> | console <player> <line...>")
-        a = a[1:]
-    elif w == "welcome":
-        r["op"] = "welcome"
-    elif w == "discord":
-        if sub == "setup":
-            take("discord.setup", "discord_setup", True); a = a[1:]
-        else:
-            r.update(op="usage", usage="usage: moonpool discord setup")
-    elif w == "record":  # the host copy's own receipts, written inside the container
-        r.update(op="record", lock=True)
-    elif w in ("settings-install", "stop-game", "start-game", "restart-warning"):  # plumbing, under the lock
-        r.update(op=w, lock=True)
-    elif w == "session-up":
-        r["op"] = w
-    elif w in ("help", "-h", "--help"):
-        r.update(cmd="help", op="help")
-    else:
-        r.update(cmd="unknown", op="unknown")
-    r["argv"] = a
+    sub = a[0] if a else ""
+    if sub and sub in group:
+        entry, rest = group[sub], a[1:]
+    elif sub and "*" in group or "" not in group:
+        return {**r, "op": "usage", "usage": group.get("*", ""), "argv": a[1:]}
+    else:  # a leaf: every word after it is the handler's
+        entry, rest = group[""], a
+    cmd, op, mut, builder, *flags = entry
+    keep_sub, lock = (flags + [False, False])[:2]
+    r.update(cmd=cmd, op=op, mut=mut, lock=lock, args=builder(rest) if builder else {},
+             argv=[sub, *rest] if keep_sub else rest)  # world time/weather: the handler sees the setting word too
     return r
 
 
