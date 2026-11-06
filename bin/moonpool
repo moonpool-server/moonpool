@@ -1080,15 +1080,15 @@ inner() {
       [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --dry-run ]; } || usage_error "usage: moonpool welcome [--dry-run]"
       if [ "$SN2_JSON" = 1 ]; then
         local out rc=0
-        out=$("${SN2_BIN:-/opt/sn2/bin}/discord-notify.sh" "$@" welcome 2>&1) || rc=$?
-        [ "$rc" -eq 0 ] || die "discord-notify.sh welcome exited $rc: ${out:0:500}"
-        finish accepted "welcome card ${1:+(dry run) }sent to discord-notify.sh; Discord's answer is in its log" "" \
+        out=$(python3 "${SN2_BIN:-/opt/sn2/bin}/discord-notify.py" "$@" welcome 2>&1) || rc=$?
+        [ "$rc" -eq 0 ] || die "discord-notify.py welcome exited $rc: ${out:0:500}"
+        finish accepted "welcome card ${1:+(dry run) }sent to discord-notify.py; Discord's answer is in its log" "" \
           "$(jq -cn --arg o "$out" --argjson d "$([ $# -eq 1 ] && echo true || echo false)" '{dry_run: $d, output: $o}')"
       fi
-      "${SN2_BIN:-/opt/sn2/bin}/discord-notify.sh" "$@" welcome ;;
+      python3 "${SN2_BIN:-/opt/sn2/bin}/discord-notify.py" "$@" welcome ;;
     discord_setup)
       [ $# -eq 0 ] || usage_error "usage: moonpool discord setup"
-      "${SN2_BIN:-/opt/sn2/bin}/discord-notify.sh" setup ;;
+      python3 "${SN2_BIN:-/opt/sn2/bin}/discord-notify.py" setup ;;
     logs)
       local which=game follow=''
       for a in "$@"; do

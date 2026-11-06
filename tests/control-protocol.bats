@@ -443,8 +443,8 @@ steam_env() {
   [ ! -e "$SN2_CONTROL_DIR/allowlist.txt" ]
 }
 
-card() { bash "$BATS_TEST_DIRNAME/../scripts/discord-notify.sh" --dry-run status | grep '^{' | jq -c '.embeds[0]'; }
-# ---- discord-notify.sh: posting policy ----
+card() { python3 "$BATS_TEST_DIRNAME/../scripts/discord-notify.py" --dry-run status | grep '^{' | jq -c '.embeds[0]'; }
+# ---- discord-notify.py: posting policy ----
 # The queue state lives in the data volume, so the dry-run tests drive it with a
 # fixed clock (SN2_NOW) and post nothing.
 policy_env() {
@@ -452,7 +452,7 @@ policy_env() {
   export STEAM_BRANCH=public HOST_NAME="SN2 Host"
   LOG_DIR="$DATA_DIR/logs" # common.sh derives it from DATA_DIR
   mkdir -p "$LOG_DIR" "$DATA_DIR/discord"
-  DN="$BATS_TEST_DIRNAME/../scripts/discord-notify.sh"
+  DN="$BATS_TEST_DIRNAME/../scripts/discord-notify.py"
 }
 
 # ---- player services ---------------------------------------------------------
@@ -1493,23 +1493,13 @@ welcome_env() {
 # A stub Discord: answers every call 200, a create with a message id, and records
 # each method and path so a test can see a create and then an edit in place.
 stub_discord() {
-  B="$BATS_TEST_TMPDIR/bin"; mkdir -p "$B"
-  cat >"$B/curl" <<'EOF'
-#!/usr/bin/env bash
-out="" method="" url=""
-while [ $# -gt 0 ]; do
-  case $1 in -o) out=$2; shift ;; -X) method=$2; shift ;; -w|-H|--data|-F) shift ;; http*) url=$1 ;; esac
-  shift
-done
-echo "$method $url" >>"$DISCORD_CALLS"
-if [ "${DISCORD_PATCH_404:-0}" = 1 ] && [ "$method" = PATCH ]; then
-  printf '{}' >"$out"; printf '404'; exit
-fi
-printf '{"id":"1300000000000000042"}' >"$out"; printf '200'
-EOF
-  chmod +x "$B/curl"
-  export PATH="$B:$PATH" DISCORD_CALLS="$BATS_TEST_TMPDIR/calls"
-  export DISCORD_WEBHOOK_URL="https://discord.invalid/api/webhooks/1/x"
+  FAKE="$BATS_TEST_TMPDIR/fake-discord"; mkdir -p "$FAKE/peer"
+  FAKE_DISCORD_CARD_ID=1300000000000000042 python3 "$BATS_TEST_DIRNAME/fake_discord.py" "$FAKE" >/dev/null 2>&1 &
+  FAKE_PID=$!
+  for _ in $(seq 1 50); do [ -s "$FAKE/port" ] && break; sleep 0.1; done
+  export DISCORD_CALLS="$FAKE/calls" DISCORD_BODIES="$FAKE/bodies"
+  local port; port=$(cat "$FAKE/port")
+  export DISCORD_WEBHOOK_URL="http://127.0.0.1:$port/api/webhooks/1/token"
 }
 
 @test "one card contains state world players and every available join path" {
@@ -1519,7 +1509,7 @@ EOF
   echo '{"world_name":"Deep Blue","players":[{"name":"Reef Keeper"},{"name":"Alice"}],"sonar_code":"ABCD-1234"}' \
     >"$CONTROL_DIR/status.json"
   printf up >"$DATA_DIR/discord/override"; printf 9999999999 >"$DATA_DIR/discord/override.expires"
-  body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example bash "$DN" --dry-run status | grep '^{')
+  body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$DN" --dry-run status | grep '^{')
   # Components V2 (1<<15) and silent (1<<12), mentions parsed from nothing.
   [ "$(jq -r '.flags' <<<"$body")" = 36864 ]
   [ "$(jq -c '.allowed_mentions' <<<"$body")" = '{"parse":[]}' ]
@@ -1540,7 +1530,7 @@ EOF
   [[ $how == *"not affiliated with Unknown Worlds, KRAFTON or Valve"* ]]
   # Only an account that really accepts anyone says so.
   [[ $how == *"an admin has to invite you first"* ]]
-  body=$(ALLOWLIST_ONLY=false AUTO_ACCEPT_FRIENDS=1 SN2_NOW=1700000000 bash "$DN" --dry-run status | grep '^{')
+  body=$(ALLOWLIST_ONLY=false AUTO_ACCEPT_FRIENDS=1 SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
   [[ $(jq -r '.components[-1].content' <<<"$body") == *"it accepts within a minute"* ]]
 }
 
@@ -1549,7 +1539,7 @@ EOF
   welcome_env
   echo '{"players":[{"name":"Alice","x":12,"y":34,"depth_m":56},{"name":"Bob","x":78,"y":90}]}' \
     >"$CONTROL_DIR/status.json"
-  body=$(SHOW_PLAYER_NAMES=false bash "$DN" --dry-run status | grep '^{')
+  body=$(SHOW_PLAYER_NAMES=false python3 "$DN" --dry-run status | grep '^{')
   aboard=$(jq -r '.components[0].components[] | select(.type == 10) | .content | select(startswith("**Aboard**"))' <<<"$body")
   [[ $aboard == *$'• Player 1\n• Player 2'* ]]
   [[ $body != *Alice* && $body != *Bob* ]]
@@ -1562,7 +1552,7 @@ EOF
   for state in up starting updating down; do
     printf '%s' "$state" >"$DATA_DIR/discord/override"
     printf 9999999999 >"$DATA_DIR/discord/override.expires"
-    body=$(SN2_NOW=1700000000 bash "$DN" --dry-run status | grep '^{')
+    body=$(SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
     head=$(jq -r '.components[0].components[0] | (.content // .components[0].content)' <<<"$body")
     case $state in up) word=Open ;; starting) word=Starting ;; updating) word=Updating ;; *) word=Down ;; esac
     [[ $head == *"**$word** since <t:1700000000:R>"* ]]
@@ -1573,7 +1563,7 @@ EOF
   command -v jq >/dev/null || skip "jq not installed"
   welcome_env
   for event in join leave backup_failed up; do
-    run bash "$DN" --dry-run event "$event" Alice
+    run python3 "$DN" --dry-run event "$event" Alice
     [ "$status" -eq 0 ]
     [ "$(grep -c '^POST ' <<<"$output")" -le 1 ]
     body=$(grep '^{' <<<"$output")
@@ -1586,7 +1576,7 @@ EOF
   command -v jq >/dev/null || skip "jq not installed"
   welcome_env
   for event in restart update outage; do
-    run env DISCORD_ALERT_ROLE_ID=123456789 SN2_NOW=1700000000 bash "$DN" --dry-run event "$event" detail
+    run env DISCORD_ALERT_ROLE_ID=123456789 SN2_NOW=1700000000 python3 "$DN" --dry-run event "$event" detail
     [ "$status" -eq 0 ]
     alert=$(grep '^{' <<<"$output" | head -1)
     # <@&id> is a role mention; <@id> would name a user and ping nobody. (The old check here
@@ -1599,14 +1589,14 @@ EOF
     card=$(grep '^{' <<<"$output" | tail -1)
     [ "$(jq -r .flags <<<"$card")" = 36864 ]
     run env DISCORD_ALERT_ROLE_ID=123456789 DISCORD_ALERTS_NOTIFY=true SN2_NOW=1700000000 \
-      bash "$DN" --dry-run event "$event" detail
+      python3 "$DN" --dry-run event "$event" detail
     [ "$status" -eq 0 ]
     alert=$(grep '^{' <<<"$output" | head -1)
     [ "$(jq -r '.flags' <<<"$alert")" = 0 ]
   done
-  run bash "$DN" --dry-run event chat hello
+  run python3 "$DN" --dry-run event chat hello
   [ "$status" -eq 65 ]
-  run env -u DISCORD_ALERT_ROLE_ID bash "$DN" --dry-run event outage detail
+  run env -u DISCORD_ALERT_ROLE_ID python3 "$DN" --dry-run event outage detail
   alert=$(grep '^{' <<<"$output" | head -1)
   [ "$(jq -c '.allowed_mentions' <<<"$alert")" = '{"parse":[]}' ]
   [[ $(jq -r .content <<<"$alert") != *'<@'* ]]
@@ -1615,17 +1605,19 @@ EOF
 @test "local webhook sees one create then edits it and recreates only after 404" {
   command -v jq >/dev/null || skip "jq not installed"
   welcome_env; stub_discord
-  run bash "$DN" status
+  run python3 "$DN" status
   [ "$status" -eq 0 ]
   [ "$(cat "$DATA_DIR/discord/card.id")" = 1300000000000000042 ]
   grep -q '^POST .*?wait=true&with_components=true$' "$DISCORD_CALLS"
   rm -f "$DATA_DIR/discord/card.sum"
   echo '{"players":[],"sonar_code":"WXYZ-9876"}' >"$CONTROL_DIR/status.json"
-  run bash "$DN" status
+  run python3 "$DN" status
   [ "$(grep -c '^POST' "$DISCORD_CALLS")" -eq 1 ]
   grep -q '^PATCH .*/messages/1300000000000000042?with_components=true$' "$DISCORD_CALLS"
   rm -f "$DATA_DIR/discord/card.sum"
-  DISCORD_PATCH_404=1 run bash "$DN" status
+  : >"$FAKE/patch-404"
+  run python3 "$DN" status
+  kill "$FAKE_PID" 2>/dev/null || true
   [ "$(grep -c '^POST' "$DISCORD_CALLS")" -eq 2 ]
   grep -q 'card was deleted; recreating it' "$LOG_DIR/discord.log"
 }

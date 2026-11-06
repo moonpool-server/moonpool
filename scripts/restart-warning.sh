@@ -24,7 +24,7 @@ if ! session_up; then exit 0; fi
 deadline=$(( $(date +%s) + SECONDS_TOTAL ))
 jq -cn --argjson d "$deadline" --arg detail "${2:-restart requested}" '{deadline:$d,detail:$detail}' >"$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 trap 'rm -f "$STATE" "$CANCEL"' EXIT
-"$(dirname "$0")/discord-notify.sh" event restart "${2:-restart requested}; <t:${deadline}:R>" >/dev/null 2>&1 || true
+python3 "$(dirname "$0")/discord-notify.py" event restart "${2:-restart requested}; <t:${deadline}:R>" >/dev/null 2>&1 || true
 save_requested=false save_line=1 save_seen=''
 # The mod only queues the game's async save, so completion is the game's own evidence: its
 # autosave_completed log line, or a .sav whose timestamp changed since the request, compared as

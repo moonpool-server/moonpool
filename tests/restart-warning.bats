@@ -8,8 +8,7 @@ setup() {
   printf '{"hosted":true}' >"$SN2_CONTROL_DIR/readiness.json"
   printf '{"players":[{"name":"SN2 Host"},{"name":"Diver"}]}' >"$SN2_CONTROL_DIR/status.json"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
-  printf '#!/bin/sh\nexit 0\n' >"$BATS_TEST_TMPDIR/bin/discord-notify.sh"
-  chmod +x "$BATS_TEST_TMPDIR/bin/discord-notify.sh"
+  printf 'import sys\nsys.exit(0)\n' >"$BATS_TEST_TMPDIR/bin/discord-notify.py"
   cp scripts/restart-warning.sh scripts/common.sh "$BATS_TEST_TMPDIR/bin/"
 }
 @test "online player gets countdown and empty server does not wait" {

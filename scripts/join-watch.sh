@@ -18,7 +18,7 @@ mkdir -p "$LOG_DIR"
 stamp() { date -u +%FT%TZ; }
 echo "[$(stamp)] join watch started; following $GAME_LOG" >>"$OUT"
 
-NOTIFY="$(dirname "$0")/discord-notify.sh"
+NOTIFY="$(dirname "$0")/discord-notify.py"
 METRICS="$DATA_DIR/metrics.csv"
 [ -f "$METRICS" ] || echo "utc,cpu_cores,mem_mib,players" >"$METRICS"
 # The whole container, as docker stats counts it: the game is many Wine processes, and
@@ -65,19 +65,19 @@ fi
 heartbeat() {
   local s n=0 was='' now cur pid cpu mem cnt build oldbuild title lobby known restart_warning_pid='' restart_rc
   oldbuild=$(cat "$RUN_DIR/last-buildid" 2>/dev/null)
-  "$NOTIFY" status >/dev/null 2>&1 || true
+  python3 "$NOTIFY" status >/dev/null 2>&1 || true
   while sleep 30; do
     "$(dirname "$0")/save-stage.sh" || true # stages a save once it is quiet
     n=$((n + 1)); pid=$(game_pid)
     if [ -n "$pid" ]; then now=up; else now=down; fi
     if [ "$now" != "$was" ] && [ -n "$was" ]; then
       # down after a new crash report folder (the engine's Saved/Crashes) is a crash.
-      if [ "$now" = up ]; then "$NOTIFY" event up; : >"$RUN_DIR/up-since"
+      if [ "$now" = up ]; then python3 "$NOTIFY" event up; : >"$RUN_DIR/up-since"
       elif [ "$(cat "$DATA_DIR/discord/override" 2>/dev/null)" = updating ] || [ -f "$STOP_FLAG" ]; then
-        "$NOTIFY" status
+        python3 "$NOTIFY" status
       elif [ -n "$(find "$GAME_DIR/Subnautica2/Saved/Crashes" -mindepth 1 -maxdepth 1 -newer "$RUN_DIR/up-since" 2>/dev/null | head -1)" ]; then
-        "$NOTIFY" event outage "the game stopped unexpectedly"
-      else "$NOTIFY" event outage "the server stopped unexpectedly"; fi
+        python3 "$NOTIFY" event outage "the game stopped unexpectedly"
+      else python3 "$NOTIFY" event outage "the server stopped unexpectedly"; fi
     fi
     if [ "$now" = down ] && [ -f "$RUN_DIR/mod-session.json" ]; then
       rm -f "$RUN_DIR/mod-session.json"
@@ -127,8 +127,8 @@ heartbeat() {
     cur=$(names)
     # Never on the watcher's first read: a restart would greet everyone already in.
     if [ -n "${prev_names+x}" ]; then
-      while IFS= read -r who; do [ -z "$who" ] || "$NOTIFY" event join "$who"; done < <(grep -Fxv -f <(printf '%s\n' "$prev_names") <<<"$cur")
-      while IFS= read -r who; do [ -z "$who" ] || "$NOTIFY" event leave "$who"; done < <(grep -Fxv -f <(printf '%s\n' "$cur") <<<"$prev_names")
+      while IFS= read -r who; do [ -z "$who" ] || python3 "$NOTIFY" event join "$who"; done < <(grep -Fxv -f <(printf '%s\n' "$prev_names") <<<"$cur")
+      while IFS= read -r who; do [ -z "$who" ] || python3 "$NOTIFY" event leave "$who"; done < <(grep -Fxv -f <(printf '%s\n' "$cur") <<<"$prev_names")
       prev_names=$(greet_joiners "$prev_names" "$cur" 2>>"$OUT")
     else
       prev_names=$cur
@@ -138,7 +138,7 @@ heartbeat() {
     elif ! grep -q FAILED "$BACKUP_STATUS" 2>/dev/null; then rm -f "$RUN_DIR/backup-failed-sent"; fi
     build=$("$(dirname "$0")/steam-config.sh" --report 2>/dev/null | sed -nE 's/.*buildid=([0-9]+).*/\1/p')
     if [ -n "$build" ] && [ "$build" != "$oldbuild" ]; then
-      [ -n "$oldbuild" ] && "$NOTIFY" event update "build $oldbuild -> $build"
+      [ -n "$oldbuild" ] && python3 "$NOTIFY" event update "build $oldbuild -> $build"
       echo "$build" >"$RUN_DIR/last-buildid"; oldbuild=$build
     fi
     [ $((n % 2)) -eq 0 ] || continue
@@ -166,7 +166,7 @@ heartbeat() {
     container_usage
     echo "$(stamp),$cpu,$mem,$cnt" >>"$METRICS"
     CONTROL_DIR="$CONTROL_DIR" MAP_PUBLIC_URL="$(public_url)" python3 "$(dirname "$0")/map-chart.py" >>"$OUT" 2>&1 || true
-    "$NOTIFY" status >/dev/null 2>&1 || true
+    python3 "$NOTIFY" status >/dev/null 2>&1 || true
     title="SN2 host - $now - $cnt/$PLAYER_SLOTS online: $(printf '%s' "$cur" | paste -sd, -)"
     grep -q FAILED "$BACKUP_STATUS" 2>/dev/null && title="$title - BACKUP FAILED"
     x11vnc -display "$DISPLAY" -R "desktop:${title:0:100}" >/dev/null 2>&1 || true

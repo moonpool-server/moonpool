@@ -1,0 +1,609 @@
+#!/usr/bin/env python3
+"""The Discord card and alerts.
+
+One silent card in one channel the operator owns, edited in place, plus restart, update
+and outage alerts that come down again once the world is back. State lives in
+$DATA_DIR/discord. --dry-run prints what would be sent and sends nothing.
+"""
+import base64
+import getpass
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import steamfile  # noqa: E402  (beside this file)
+
+E = os.environ
+HERE = Path(__file__).resolve().parent
+DATA = Path(E.get("DATA_DIR") or "/data")
+LOG, RUN, STATE = DATA / "logs", DATA / "run", DATA / "discord"
+CONTROL = Path(E.get("SN2_CONTROL_DIR") or E.get("CONTROL_DIR") or DATA / "control")
+PUBLIC = Path(E.get("PUBLIC_DIR") or DATA / "public")
+WINEPREFIX = Path(E.get("WINEPREFIX") or DATA / "wine")
+STEAM = WINEPREFIX / "drive_c" / "Program Files (x86)" / "Steam"
+APP = E.get("GAME_APP_ID") or E.get("STEAM_APPID") or "1962700"
+BRANCH = E.get("STEAM_BRANCH") or ""
+EXE = E.get("GAME_EXE_NAME") or ("Subnautica2-Win64-Test.exe" if BRANCH == "experimental" else "Subnautica2-Win64-Shipping.exe")
+GAME_DIR = Path(E.get("GAME_DIR") or STEAM / "steamapps" / "common" / "Subnautica2")
+HOST = E.get("HOST_NAME") or "SN2 Host"
+URL = E.get("DISCORD_WEBHOOK_URL") or ""
+SILENT, V2 = 4096, 32768
+DRY = False
+
+LABEL = {"up": "Open", "starting": "Starting", "updating": "Updating", "down": "Down"}
+ICON = {"up": "🟢", "starting": "🟡", "updating": "🟡", "down": "🔴"}
+SKY = {"DA_Clear": "Clear", "DA_ClearGameStart": "Clear", "DA_CloudyA": "Cloudy", "DA_CloudyB": "Cloudy",
+       "DA_DistantStormy": "Storm nearby", "DA_Misty": "Misty", "DA_SparseClouds": "Light clouds",
+       "DA_StormA": "Storm", "DA_StormB": "Storm", "DA_Storm_Quick": "Storm"}
+
+
+def save_dir():
+    if E.get("SAVE_DIR"):
+        return E["SAVE_DIR"]
+    if EXE.endswith("-Shipping.exe"):
+        return str(WINEPREFIX / "drive_c" / "users" / (E.get("USER") or getpass.getuser()) / "AppData/Local/Subnautica2/Saved/SaveGames")
+    return str(GAME_DIR / "Subnautica2" / "Saved" / "SaveGames")
+
+
+def now():
+    return int(float(E.get("SN2_NOW") or time.time()))
+
+
+def dumps(value):
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+def read_json(path, default):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def read_text(path):
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def write(path, text):
+    Path(path).write_text(text, encoding="utf-8")
+
+
+def note(message):
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = re.sub(r"https://(discord|discordapp)\.com/api/webhooks/[^ \"?]+", "<webhook>", message)
+    try:
+        LOG.mkdir(parents=True, exist_ok=True)
+        with (LOG / "discord.log").open("a", encoding="utf-8") as f:
+            f.write(f"[{stamp}] discord: {line}\n")
+    except OSError:
+        pass
+
+
+def send(method, suffix, body):
+    """One webhook call: (code, response text). A dry run prints it instead."""
+    if DRY:
+        print(f"{method} {suffix or '/'}\n{body}")
+        return "", ""
+    if not URL:
+        note("no DISCORD_WEBHOOK_URL; skipped")
+        return "000", ""
+    code, text = 0, ""
+    for _ in range(2):
+        try:
+            r = requests.request(method, URL + suffix, data=body.encode("utf-8"),
+                                 headers={"Content-Type": "application/json"}, timeout=15)
+            code, text = r.status_code, r.text
+        except requests.RequestException:
+            code, text = 0, ""
+        if code != 429:
+            break
+        wait = int(float((read_json_text(text) or {}).get("retry_after") or 1))
+        note(f"429; waiting {wait}s once")
+        time.sleep(wait)
+    write(STATE / "resp.json", text)
+    note(f"{method} {suffix.split('?')[0]} -> HTTP {code:03d}")
+    return f"{code:03d}", text
+
+
+def read_json_text(text):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
+
+
+def bot_api(method, path, body=None):
+    r = requests.request(method, (E.get("DISCORD_API_URL") or "https://discord.com/api/v10") + path, data=body,
+                         headers={"Authorization": "Bot " + E.get("DISCORD_BOT_TOKEN", ""), "Content-Type": "application/json"},
+                         timeout=15)
+    r.raise_for_status()
+    return read_json_text(r.text) if r.text else {}
+
+
+def setup_channel():
+    channel_id = E.get("DISCORD_CHANNEL_ID") or ""
+    if not E.get("DISCORD_BOT_TOKEN"):
+        print("DISCORD_BOT_TOKEN is required for automated setup", file=sys.stderr)
+        return 64
+    if not channel_id:
+        print("DISCORD_CHANNEL_ID is required for automated setup", file=sys.stderr)
+        return 64
+    try:
+        channel = bot_api("GET", f"/channels/{channel_id}") or {}
+        guild = str(channel.get("guild_id") or "")
+        if not guild:
+            print("Discord did not return a guild for that channel", file=sys.stderr)
+            return 69
+        current = next((o for o in channel.get("permission_overwrites") or [] if str(o.get("id")) == guild and o.get("type") == 0), {})
+        allow, deny = int(current.get("allow") or 0) | 66624, int(current.get("deny") or 0) | 377957124096
+        if int(current.get("allow") or 0) != allow or int(current.get("deny") or 0) != deny:
+            bot_api("PUT", f"/channels/{channel_id}/permissions/{guild}", dumps({"type": 0, "allow": str(allow), "deny": str(deny)}))
+            print("changed channel permissions: members can read and react, but cannot send messages or create threads")
+        else:
+            print("channel permissions already set")
+        topic = f"{E.get('WORLD_NAME') or 'Subnautica 2 server'} status and join information · unofficial host"
+        if (channel.get("topic") or "") != topic:
+            bot_api("PATCH", f"/channels/{channel_id}", dumps({"topic": topic}))
+            print("changed channel topic")
+        else:
+            print("channel topic already set")
+        role_id = E.get("DISCORD_ALERT_ROLE_ID") or ""
+        if role_id:
+            print(f"using configured alert role: {role_id}")
+            return 0
+        role = next((r for r in bot_api("GET", f"/guilds/{guild}/roles") or [] if r.get("name") == "Server alerts"), None)
+        if role:
+            role_id = str(role["id"])
+            print(f"alert role already exists: {role_id}")
+        else:
+            made = bot_api("POST", f"/guilds/{guild}/roles", '{"name":"Server alerts","mentionable":true}') or {}
+            role_id = str(made.get("id") or "")
+            if not role_id:
+                print("Discord created no alert role", file=sys.stderr)
+                return 69
+            print(f"created opt-in alert role: {role_id}")
+        print(f"set DISCORD_ALERT_ROLE_ID={role_id} in .env to mention it on important alerts")
+        return 0
+    except requests.RequestException as err:
+        print(f"Discord did not answer: {err}", file=sys.stderr)
+        return 69
+
+
+def manifest():
+    paths = [STEAM / "steamapps" / f"appmanifest_{APP}.acf"]
+    try:
+        import vdf
+        folders = vdf.loads(read_text(STEAM / "steamapps" / "libraryfolders.vdf") or "{}")
+        for entry in next(iter(folders.values()), {}).values():
+            if isinstance(entry, dict) and entry.get("path"):
+                paths.append(Path(entry["path"].replace("\\\\", "/")) / "steamapps" / f"appmanifest_{APP}.acf")
+    except (SyntaxError, ValueError, AttributeError):
+        pass
+    return next((p for p in paths if p.is_file()), None)
+
+
+def branch_name():
+    m = manifest()
+    return (steamfile.get(m, "BetaKey") if m else "") or BRANCH
+
+
+def build_id():
+    m = manifest()
+    return steamfile.get(m, "buildid") if m else ""
+
+
+def status():
+    s = read_json(CONTROL / "status.json", {})
+    return s if isinstance(s, dict) else {}
+
+
+def others(st):
+    return [p for p in st.get("players") or [] if isinstance(p, dict) and p.get("name") != HOST]
+
+
+def player_lines(st):
+    rows = []
+    for i, p in enumerate(others(st)):
+        name = p.get("name") if E.get("SHOW_PLAYER_NAMES", "true") == "true" and p.get("name") else f"Player {i + 1}"
+        ping = p.get("ping_ms")
+        rows.append(name + (f" · {round(ping)} ms" if isinstance(ping, (int, float)) and not isinstance(ping, bool) else ""))
+    return rows
+
+
+def game_pid():
+    try:
+        return subprocess.run(["pgrep", "-f", EXE], capture_output=True, text=True, timeout=10).stdout.split("\n")[0].strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def detected_state():
+    ts = status().get("ts")
+    ts = int(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else 0
+    if not game_pid():
+        return "down"
+    if ts == 0 or now() - ts > int(E.get("STATUS_MAX_AGE") or 90):
+        return "starting"
+    readiness = read_json(CONTROL / "readiness.json", None)
+    if isinstance(readiness, dict) and readiness.get("hosted") is not True:
+        return "starting"  # open means joinable: the Host call was made, not only that the game runs
+    return "up"
+
+
+def state():
+    override = read_text(STATE / "override").strip()
+    expires = read_text(STATE / "override.expires").strip()
+    if override and expires.isdigit() and now() < int(expires):
+        return override
+    return detected_state()
+
+
+def since_for(st):
+    since = read_text(STATE / "card.since").strip()
+    if st != read_text(STATE / "card.state").strip() or not since:
+        since = str(now())
+    if not DRY:
+        write(STATE / "card.state", st)
+        write(STATE / "card.since", since)
+    return since
+
+
+def esc(s):
+    return re.sub(r"([\\*_`~|>#])", r"\\\1", s)
+
+
+def clamp(s, n):
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def epoch(iso):
+    return int(datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+
+
+def host_steamid():
+    m = re.search(r'"(7656\d{13})"', read_text(STEAM / "config" / "loginusers.vdf"))
+    return m.group(1) if m else ""
+
+
+def public_url():
+    url = E.get("SN2_PUBLIC_URL") or ""
+    if not url and E.get("TUNNEL", "off") == "quick":
+        try:
+            host = requests.get(E.get("TUNNEL_METRICS_URL") or "http://tunnel:20241/quicktunnel", timeout=2).json().get("hostname") or ""
+        except (requests.RequestException, ValueError, AttributeError):
+            host = ""
+        if host.endswith(".trycloudflare.com"):
+            url = "https://" + host
+    return url.rstrip("/")
+
+
+def world_name(st):
+    return st.get("world_name") or E.get("WORLD_NAME") or "Subnautica 2 server"
+
+
+def world_stats():
+    try:
+        out = subprocess.run([sys.executable, str(HERE / "world-stats.py")], capture_output=True, text=True, timeout=60,
+                             env={**E, "WORLD_STATS_SAVE_DIR": save_dir()}).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    stats = read_json_text(out)
+    return stats if isinstance(stats, dict) else None
+
+
+def world_container():
+    st = status()
+    kind = state()
+    since = since_for(kind)
+    names = player_lines(st)
+    sid = host_steamid()
+    code = str(int(sid) - 76561197960265728) if sid else ""
+    sonar = st.get("sonar_code") or (read_text(CONTROL / "sonar-code.txt").split() or [""])[0]
+    branch, build = branch_name(), build_id()
+    slots = st.get("player_slots")
+    slots = str(slots) if isinstance(slots, int) and not isinstance(slots, bool) else ""
+    url = public_url()
+    join = f"{url}/join" if url else ""
+    map_url = f"{url}/map" if url and E.get("WEB_MAP", "false") == "true" else ""
+    still = re.sub(r"[^0-9a-f]", "", str(read_json(PUBLIC / "map.json", {}).get("still") or "")) if map_url else ""
+    tod, weather = str(st.get("time_of_day") or ""), str(st.get("weather") or "")
+    scans = st.get("unlocks", {}).get("scans") if isinstance(st.get("unlocks"), dict) else None
+    scans = ", ".join(str(s) for s in scans[-3:]) if isinstance(scans, list) else ""
+    mods = ""
+    if url:
+        n = len((read_json(PUBLIC / "mods.json", {}) or {}).get("mods") or [])
+        if n:
+            mods = f"• **Mods** ({n}): run [moonpool.cmd]({url}/moonpool.cmd) once instead of Join Game; it installs them at the server's versions and joins"
+    stats = world_stats()
+
+    h = esc(HOST)
+    fine = " · ".join(x for x in [branch[:1].upper() + branch[1:] if branch else "", f"build {build}" if build else ""] if x)
+    head = (f"## 🌊 {esc(world_name(st))}\n{ICON.get(kind, '🔴')} **{LABEL.get(kind, 'Down')}** since <t:{since}:R> · **{len(names)}"
+            + (f"/{slots}" if slots else "") + "** aboard" + (f"\n-# {fine}" if fine else ""))
+    hour = int(tod[:2]) if tod[:2].isdigit() else None
+    daypart = None if hour is None else "Morning" if 5 <= hour < 12 else "Afternoon" if 12 <= hour < 17 else "Evening" if 17 <= hour < 21 else "Night"
+    now_line = " · ".join(x for x in [daypart, SKY.get(weather)] if x)
+    if names:
+        aboard = "**Aboard**\n" + "\n".join("• " + esc(n) for n in names)
+    else:
+        aboard = "Nobody aboard right now."
+        if stats and stats.get("last_played"):
+            try:
+                aboard += f" Last aboard <t:{epoch(stats['last_played'])}:R>."
+            except ValueError:
+                pass
+    statline = ""
+    if stats:
+        parts = []
+        if stats.get("created"):
+            try:
+                parts.append(f"Created <t:{epoch(stats['created'])}:D>")
+            except ValueError:
+                pass
+        if stats.get("hours_played") is not None:
+            parts.append("Played %s h" % ("%g" % (round(stats["hours_played"] * 10) / 10)))
+        seen = stats.get("players_seen")
+        crew = seen if isinstance(seen, int) else len(seen) if isinstance(seen, list) else 0
+        if crew > 0:
+            parts.append(f"Crew {crew}")
+        if stats.get("peak_players") is not None:
+            parts.append(f"Peak {stats['peak_players']} at once")
+        statline = " · ".join(parts)
+    codes = [f"**Steam** add **{h}**" + (f" ([profile](https://steamcommunity.com/profiles/{sid}))" if sid else "") + (f" · code **{code}**" if code else "")]
+    if sonar:
+        codes.append(f"**Xbox** add code **{sonar}**")
+    if mods:
+        codes.append(mods)
+
+    head_component = {"type": 10, "content": clamp(head, 260)}
+    if join:
+        head_component = {"type": 9, "components": [head_component],
+                          "accessory": {"type": 2, "style": 5, "url": join, "disabled": kind != "up",
+                                        "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Starting…"}}
+    components = [head_component, {"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
+    if now_line:
+        components.append({"type": 10, "content": now_line})
+    if scans:
+        components.append({"type": 10, "content": clamp(f"Scanned lately: {esc(scans)}", 160)})
+    if statline:
+        components.append({"type": 10, "content": clamp("-# " + statline, 160)})
+    components += [{"type": 14, "divider": False, "spacing": 2}, {"type": 10, "content": clamp("\n".join(codes), 420)}]
+    if map_url and still:
+        components.append({"type": 12, "items": [{"media": {"url": f"{map_url}.png?v={still}"}, "description": "Where players have been"}]})
+    if map_url:
+        components.append({"type": 1, "components": [{"type": 2, "style": 5, "label": "Map", "url": map_url}]})
+    colour = 3066993 if kind == "up" else 15105570 if kind in ("starting", "updating") else 15158332
+    return {"type": 17, "accent_color": colour, "components": components}
+
+
+def how_to_join():
+    """The steps to join, once under every world on the board."""
+    branch = branch_name()
+    beta = branch not in ("", "public")
+    accepts = "it accepts within a minute" if E.get("AUTO_ACCEPT_FRIENDS", "1") == "1" and E.get("ALLOWLIST_ONLY", "true") == "false" \
+        else "an admin has to invite you first"
+    lines = ["### How to join", "**Steam**"]
+    if beta:
+        lines.append(f"• Right-click **Subnautica 2** › **Properties** › **Betas** › pick **{branch}**")
+    lines += [f"• Add the world's host as a friend with its code above; {accepts}",
+              "• Press **Join**, or **Friends** › right-click the host › **Join Game**", "**Xbox / PC Game Pass**"]
+    if beta:
+        lines.append("• Join the Subnautica 2 preview in **Xbox Insider Hub**")
+    lines.append("• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? Ask an admin")
+    lines.append("-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab")
+    if E.get("DISCORD_CARD_NOTE"):
+        lines.append(E["DISCORD_CARD_NOTE"])
+    lines.append("-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve")
+    return {"type": 10, "content": "\n".join(lines)}
+
+
+def publish_card(container, world):
+    """This world's panel for a board that shows several worlds, webhook or not."""
+    if DRY:
+        return
+    try:
+        PUBLIC.mkdir(parents=True, exist_ok=True)
+        write(PUBLIC / "card.json.tmp", dumps({"ts": now(), "world": world, "container": container}))
+        os.replace(PUBLIC / "card.json.tmp", PUBLIC / "card.json")
+    except OSError:
+        pass
+
+
+def peer_containers():
+    """The other worlds' panels (DISCORD_BOARD_PEERS); a silent one shows as No signal, never a stale Open."""
+    out = []
+    for url in (E.get("DISCORD_BOARD_PEERS") or "").split():
+        key = hashlib.sha256(url.encode()).hexdigest()[:12]
+        try:
+            body = read_json_text(requests.get(url, timeout=5).text)
+        except requests.RequestException:
+            body = None
+        fresh = isinstance(body, dict) and isinstance(body.get("container"), dict) and body["container"].get("type") == 17 \
+            and isinstance(body.get("ts"), int)
+        if fresh and now() - body["ts"] <= int(E.get("DISCORD_PEER_MAX_AGE") or 600):
+            if not DRY:
+                write(STATE / f"peer-{key}.json", dumps(body))
+            out.append(body["container"])
+            continue
+        if not fresh:
+            body = read_json(STATE / f"peer-{key}.json", {})
+        world = (body or {}).get("world") or "another world"
+        ts = (body or {}).get("ts")
+        seen = f" · last seen <t:{ts}:R>" if ts else ""
+        out.append({"type": 17, "accent_color": 15158332, "components": [{"type": 10, "content": f"## 🌊 {world}\n🔴 **No signal**{seen}"}]})
+    return out
+
+
+def count(c):
+    return 1 + sum(count(x) for x in c.get("components") or []) + (1 if c.get("accessory") else 0)
+
+
+def text_of(c):
+    total = len(c["content"]) if c.get("type") == 10 else 0
+    return total + sum(text_of(x) for x in c.get("components") or [])
+
+
+def card():
+    own = world_container()
+    publish_card(own, world_name(status()))
+    peers = peer_containers()
+    comps = [own]
+    for p in peers:  # Discord allows 40 components: a world that would pass it is left out whole
+        if sum(count(c) for c in comps) + count(p) <= 40:
+            comps.append(p)
+    if len(comps) != 1 + len(peers):
+        note("board full at 40 components; a world was left out")
+    how = how_to_join()
+    if sum(text_of(c) for c in comps) + text_of(how) <= 4000:  # the steps give way before a world does
+        comps.append(how)
+    payload = {"flags": SILENT + V2, "allowed_mentions": {"parse": []}, "components": comps}
+    body = dumps(payload)
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:32]
+    if not URL and not DRY:
+        note("no DISCORD_WEBHOOK_URL: panel published for a board only")
+        return
+    if not DRY and read_text(STATE / "card.sum") == digest:
+        note("card unchanged")
+        return
+    message_id = read_text(STATE / "card.id").strip() or read_text(STATE / "status.id").strip()
+    code = ""
+    if message_id:
+        # The edit also turns an older embed card into this one, so a pinned message stays pinned.
+        code, text = send("PATCH", f"/messages/{message_id}?with_components=true", dumps({**payload, "embeds": None, "attachments": []}))
+        if code == "404":
+            note("card was deleted; recreating it")
+            message_id = ""
+        elif code == "400":
+            note(f"card edit refused: {text[:300]}; posting a new card (pin it)")
+            message_id = ""
+        elif code.startswith("2"):
+            write(STATE / "card.id", message_id)
+            note(f"card message id {message_id} edited in place")
+    if not message_id:
+        code, text = send("POST", "?wait=true&with_components=true", body)
+        if not DRY:
+            new_id = str((read_json_text(text) or {}).get("id") or "")
+            if new_id:
+                write(STATE / "card.id", new_id)
+                note(f"card message id {new_id} kept in {STATE / 'card.id'}")
+    if code.startswith("2"):
+        write(STATE / "card.sum", digest)
+
+
+def alert(kind, detail):
+    said = {"restart": "restarting", "update": "update", "outage": "outage", "down": "outage", "crash": "outage"}.get(kind)
+    if not said:
+        note(f"refused: '{kind}' is not an alert")
+        print(f"not an alert: {kind}", file=sys.stderr)
+        return 65
+    write(STATE / "override", "updating" if kind in ("restart", "update") else "down")
+    write(STATE / "override.expires", str(now() + 600))
+    role = E.get("DISCORD_ALERT_ROLE_ID") or ""
+    text = f"{HOST}: {said}" + (f" — {detail}" if detail else "")
+    if role:
+        text = f"<@&{role}> {text}"
+    # Silent (shown, no push or sound) unless the operator asks for pushes.
+    flags = 0 if E.get("DISCORD_ALERTS_NOTIFY", "false") == "true" else SILENT
+    mentions = {"parse": [], "roles": [role]} if role else {"parse": []}
+    code, response = send("POST", "?wait=true", dumps({"content": text, "flags": flags, "allowed_mentions": mentions}))
+    if not DRY:
+        print(f"{code} {response}")
+        new_id = str((read_json_text(response) or {}).get("id") or "")
+        if new_id:
+            with (STATE / "alerts.ids").open("a", encoding="utf-8") as f:
+                f.write(new_id + "\n")
+    return 0
+
+
+def clear_alerts():
+    """Every alert posted here comes down once the world is back, so the channel holds only the card."""
+    ids = [i for i in read_text(STATE / "alerts.ids").split("\n") if i]
+    if not ids:
+        return
+    keep = []
+    for message_id in ids:
+        code, _ = send("DELETE", f"/messages/{message_id}", "")
+        if code.startswith("2") or code == "404":
+            note(f"alert {message_id} removed after recovery")
+        else:
+            keep.append(message_id)
+    if keep:
+        write(STATE / "alerts.ids", "".join(i + "\n" for i in keep))
+    else:
+        (STATE / "alerts.ids").unlink(missing_ok=True)
+
+
+def run_hook(args):
+    """The admin's own script, given the event and its detail. It never holds up the host."""
+    hook = DATA / "hooks" / "on-event"
+    if not (hook.is_file() and os.access(hook, os.X_OK)):
+        return
+    cmd = ([shutil.which("timeout"), "60"] if shutil.which("timeout") else []) + [str(hook)] + list(args)
+    try:
+        LOG.mkdir(parents=True, exist_ok=True)
+        with (LOG / "hooks.log").open("a") as out:
+            subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+    except OSError as err:
+        note(f"hook did not start: {err}")
+
+
+def main(argv):
+    global DRY
+    sys.stdout.reconfigure(encoding="utf-8")
+    if argv and argv[0] == "--dry-run":
+        DRY, argv = True, argv[1:]
+    STATE.mkdir(parents=True, exist_ok=True)
+    LOG.mkdir(parents=True, exist_ok=True)
+    cmd = argv[0] if argv else ""
+    if cmd == "setup":
+        return setup_channel()
+    if cmd in ("status", "welcome", "heartbeat", "flush-due", "sweep"):
+        if cmd not in ("status", "welcome"):
+            note(f"{cmd}: card refresh only")
+        card()
+        return 0
+    if cmd == "event":
+        kind, detail = (argv[1] if len(argv) > 1 else ""), " ".join(argv[2:])
+        if not DRY:
+            run_hook(argv[1:])
+        if kind in ("restart", "update", "outage", "down", "crash"):
+            alert(kind, detail)
+        elif kind == "up":
+            for name in ("override", "override.expires"):
+                (STATE / name).unlink(missing_ok=True)
+            clear_alerts()
+        elif kind in ("join", "leave", "backup_failed", ""):
+            note(f"routine event {kind or 'empty'}: card refresh only")
+        else:
+            note(f"refused: '{kind}' is not an event")
+            return 65
+        card()
+        return 0
+    if cmd == "avatar":
+        path = Path(argv[1]) if len(argv) > 1 else None
+        if not (path and path.is_file()):
+            return 66
+        if DRY:
+            print("PATCH / avatar")
+            return 0
+        send("PATCH", "", dumps({"avatar": "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()}))
+        return 0
+    print("usage: discord-notify.py setup | [--dry-run] status | welcome | event <restart|update|outage|up|down|crash|join|leave|backup_failed> [detail] | heartbeat", file=sys.stderr)
+    return 64
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

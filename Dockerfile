@@ -39,7 +39,7 @@ RUN dpkg --add-architecture i386 \
       "winehq-staging=${WINE_STAGING_DEB}" "wine-staging=${WINE_STAGING_DEB}" \
       "wine-staging-amd64=${WINE_STAGING_DEB}" "wine-staging-i386=${WINE_STAGING_DEB}" \
  && apt-get install -y --no-install-recommends \
-      xvfb x11-utils xdotool x11vnc novnc websockify autocutsel jq unzip zip 7zip procps xz-utils python3-minimal python3-pil python3-vdf python3-jinja2 python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
+      xvfb x11-utils xdotool x11vnc novnc websockify autocutsel jq unzip zip 7zip procps xz-utils python3-minimal python3-pil python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
  && apt-get purge -y ipp-usb avahi-daemon \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /tmp
@@ -63,7 +63,7 @@ VOLUME ["/run"]
 COPY --chmod=0755 docker/sn2-service.sh docker/healthcheck.sh /opt/sn2/bin/
 COPY --chmod=0755 docker/s6-overlay/ /etc/s6-overlay/
 COPY --chmod=0755 scripts/common.sh scripts/launch-headless.sh scripts/restart-warning.sh scripts/install-game.sh \
-     scripts/install-ue4ss.sh scripts/install-msvc-runtime.sh scripts/join-watch.sh scripts/join-page.py scripts/friend-accept.py scripts/discord-notify.sh scripts/save-stage.sh scripts/steam-config.sh scripts/restart-after-autosave.sh scripts/steam-install-confirm.sh scripts/verify-fresh.sh scripts/world-stats.py scripts/steamfile.py \
+     scripts/install-ue4ss.sh scripts/install-msvc-runtime.sh scripts/join-watch.sh scripts/join-page.py scripts/friend-accept.py scripts/discord-notify.py scripts/save-stage.sh scripts/steam-config.sh scripts/restart-after-autosave.sh scripts/steam-install-confirm.sh scripts/verify-fresh.sh scripts/world-stats.py scripts/steamfile.py \
      scripts/map-chart.py scripts/plugins-section.py scripts/mod-service.sh scripts/publish-mods.py /opt/sn2/bin/
 COPY --chmod=0755 bin/moonpool /usr/local/bin/moonpool
 COPY mod/ /opt/sn2/mod/

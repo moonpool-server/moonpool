@@ -15,7 +15,7 @@
 !scripts/save-stage.sh
 !scripts/backup-run.sh
 !scripts/steam-config.sh
-!scripts/discord-notify.sh
+!scripts/discord-notify.py
 !scripts/restart-after-autosave.sh
 !scripts/restart-warning.sh
 !scripts/steam-install-confirm.sh
