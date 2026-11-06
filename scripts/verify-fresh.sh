@@ -138,8 +138,11 @@ if [ -n "$l" ] && [ "$epoch" -gt 0 ] && [ $((now - epoch)) -ge 0 ] && [ $((now -
   record watcher 1 "$ts" "$l"
 else record watcher 0 "${ts:-unknown}" "no RUNNING heartbeat within 5 minutes in $JOIN_LOG"; fi
 
-# 8. The world hosted is the configured save, by its own slot name.
-SAVE_SLOT="${SAVE_NAME:-${WORLD_NAME:-Slot1}}"
+# 8. The world hosted is the configured save, by its own slot name. With SAVE_NAME empty the
+# launcher takes the newest save, so the slot is whatever the mod's Host call named.
+# The mod's prints share one physical line, so take the last slot token on the last such line.
+hosted=$(last_line 'SN2SlotFreeHost\] Host call: ServerName=.* SaveSlot=' "$UE4SS_LOG" | grep -oE 'Host call: ServerName=.* SaveSlot=[A-Za-z0-9_]+' | sed -E 's/.*SaveSlot=//' | tail -n1)
+SAVE_SLOT="${SAVE_NAME:-${hosted:-Slot1}}"
 l=$(last_line "LoadMap: /Game/Maps/Main/L_Main.*SaveSlotName=$SAVE_SLOT([^A-Za-z0-9_]|$)" "$ENGINE_LOG")
 if [ -n "$l" ]; then record save 1 "$(line_time "$l")" "$l"
 else record save 0 unknown "no LoadMap with SaveSlotName=$SAVE_SLOT in $ENGINE_LOG"; fi
