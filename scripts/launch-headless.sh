@@ -163,7 +163,7 @@ log "background frame-rate limit: $SERVER_MAX_FPS"
 # before a crash; the previous run's copy is kept beside it.
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
 # The last run's lobby is gone: a player sent to it gets "session is no longer available".
-rm -f "$RUN_DIR/mod-session.json"; "$(dirname "$0")/join-page.sh" || true
+rm -f "$RUN_DIR/mod-session.json"; python3 "$(dirname "$0")/join-page.py" || true
 log "launching: $GAME_EXE_NAME ${args[*]}" | tee -a "$GAME_LOG"
 cd "$WIN64_DIR" || exit 1
 wine "$GAME_EXE_NAME" "${args[@]}" >>"$GAME_LOG" 2>&1 &

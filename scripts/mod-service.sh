@@ -27,7 +27,7 @@ case ${1:-serve} in
   pin | enable | disable) publisher "$@" ;;
   serve)
     mkdir -p "$DATA_DIR/public" "$RUN_DIR"
-    "$(dirname "$0")/join-page.sh" || true
+    python3 "$(dirname "$0")/join-page.py" || true
     cat >"$RUN_DIR/lighttpd-web.conf" <<EOF
 server.document-root = "$DATA_DIR/public"
 server.bind = "0.0.0.0"
@@ -44,7 +44,7 @@ EOF
     while kill -0 "$http_pid" 2>/dev/null; do
       if publisher --cached publish >"$RUN_DIR/mod-publish.json.tmp" 2>>"$LOG_DIR/web.log"; then :; fi
       mv -f "$RUN_DIR/mod-publish.json.tmp" "$RUN_DIR/mod-publish.json" 2>/dev/null || true
-      "$(dirname "$0")/join-page.sh" 2>>"$LOG_DIR/web.log" || true
+      python3 "$(dirname "$0")/join-page.py" 2>>"$LOG_DIR/web.log" || true
       sleep 30
     done
     ;;

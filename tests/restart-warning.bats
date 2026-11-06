@@ -143,7 +143,7 @@ SH
 
 @test "join watcher stays alive, cancels an active countdown, and drops an unsafe idle stop" {
   cp scripts/join-watch.sh "$BATS_TEST_TMPDIR/bin/"
-  for helper in join-page.sh save-stage.sh steam-config.sh friend-accept.py; do
+  for helper in join-page.py save-stage.sh steam-config.sh friend-accept.py; do
     printf '#!/bin/sh\nexit 0\n' >"$BATS_TEST_TMPDIR/bin/$helper"; chmod +x "$BATS_TEST_TMPDIR/bin/$helper"
   done
   mkdir -p "$DATA_DIR/logs" "$BATS_TEST_TMPDIR/tools"

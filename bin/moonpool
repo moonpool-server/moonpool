@@ -803,7 +803,7 @@ inner() {
       out=$("${SN2_BIN:-/opt/sn2/bin}/mod-service.sh" publish) || rc=$?
       [ "$rc" -eq 0 ] || finish refused "mod publish failed: $(jq -r '.error // "unknown error"' <<<"$out" 2>/dev/null)" "Fix that entry in control/plugins.yaml and publish again." "$out"
       printf '%s' "$out" >"$SN2_RUN_DIR/mod-publish.json"
-      "${SN2_BIN:-/opt/sn2/bin}/join-page.sh" >/dev/null 2>&1 || true
+      python3 "${SN2_BIN:-/opt/sn2/bin}/join-page.py" >/dev/null 2>&1 || true
       finish ok "$(jq -r 'if .enabled then "signed mod manifest published: \(.mods) mod(s)" + (if (.skipped | length) > 0 then "; \(.skipped | length) not published (moonpool mods list says why)" else "" end) else "no installable mods: nothing published" + (if (.skipped | length) > 0 then "; \(.skipped | length) entries could not be resolved (moonpool mods list says why)" else "" end) end' <<<"$out")" "" "$out" ;;
     mods_pin)
       # From the host the archive arrives under this run's id as --from.

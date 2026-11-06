@@ -45,7 +45,7 @@ record_lobby() { # hex lobby id from the UE log
   jq -cn --arg lobby "$lobby" --arg sid "$sid" '{lobby_id:$lobby,host_steamid:$sid}' \
     >"$RUN_DIR/mod-session.json.tmp"
   mv "$RUN_DIR/mod-session.json.tmp" "$RUN_DIR/mod-session.json"
-  "$(dirname "$0")/join-page.sh"
+  python3 "$(dirname "$0")/join-page.py" || true
 }
 
 # A watcher restart must recover the currently hosted lobby from the existing log.
@@ -81,7 +81,7 @@ heartbeat() {
     fi
     if [ "$now" = down ] && [ -f "$RUN_DIR/mod-session.json" ]; then
       rm -f "$RUN_DIR/mod-session.json"
-      "$(dirname "$0")/join-page.sh"
+      python3 "$(dirname "$0")/join-page.py" || true
     fi
     was=$now
     # Reap the one in-game countdown without stalling joins, leaves, the card,
@@ -175,7 +175,7 @@ heartbeat() {
     echo "[$(stamp)] heartbeat: game $s" >>"$OUT" # the heartbeat posts nothing to Discord
   done
 }
-"$(dirname "$0")/join-page.sh"
+python3 "$(dirname "$0")/join-page.py" || true
 heartbeat &
 trap 'kill $! 2>/dev/null' EXIT
 

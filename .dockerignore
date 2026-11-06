@@ -7,7 +7,7 @@
 !scripts/install-ue4ss.sh
 !scripts/install-msvc-runtime.sh
 !scripts/join-watch.sh
-!scripts/join-page.sh
+!scripts/join-page.py
 !scripts/plugins-section.py
 !scripts/mod-service.sh
 !scripts/publish-mods.py

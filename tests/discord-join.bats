@@ -53,7 +53,7 @@ map_status() {
 
 @test "join page hands a current lobby to Steam and links the host profile" {
   printf '{"lobby_id":"0x10","host_steamid":"76561198000000000"}' >"$RUN_DIR/mod-session.json"
-  bash "$ROOT/scripts/join-page.sh"
+  python3 "$ROOT/scripts/join-page.py"
   grep -Fq 'steam://joinlobby/1962700/16/76561198000000000' "$PUBLIC_DIR/join.html"
   grep -Fq 'Join now' "$PUBLIC_DIR/join.html"
   grep -Fq 'https://steamcommunity.com/profiles/76561198000000000' "$PUBLIC_DIR/join.html"
@@ -70,13 +70,13 @@ map_status() {
 }
 
 @test "join page is a retrying starting page without a lobby or after host down" {
-  bash "$ROOT/scripts/join-page.sh"
+  python3 "$ROOT/scripts/join-page.py"
   grep -Fq 'The server is starting.' "$PUBLIC_DIR/join.html"
   run ! grep -q 'steam://joinlobby' "$PUBLIC_DIR/join.html"
   printf '{"lobby_id":"12","host_steamid":"76561198000000000"}' >"$RUN_DIR/mod-session.json"
-  bash "$ROOT/scripts/join-page.sh"
+  python3 "$ROOT/scripts/join-page.py"
   rm "$RUN_DIR/mod-session.json"
-  bash "$ROOT/scripts/join-page.sh"
+  python3 "$ROOT/scripts/join-page.py"
   grep -Fq 'The server is starting.' "$PUBLIC_DIR/join.html"
   run ! grep -q 'steam://joinlobby' "$PUBLIC_DIR/join.html"
 }
@@ -84,11 +84,11 @@ map_status() {
 @test "join page names the server's Steam branch and build, and how to match it" {
   m="$BATS_TEST_TMPDIR/appmanifest_1962700.acf"
   printf '"AppState"\n{\n\t"buildid"\t\t"26283380"\n\t"MountedConfig"\n\t{\n\t\t"BetaKey"\t\t"experimental"\n\t}\n}\n' >"$m"
-  SN2_APPMANIFEST="$m" bash "$ROOT/scripts/join-page.sh"
+  SN2_APPMANIFEST="$m" python3 "$ROOT/scripts/join-page.py"
   grep -Fq 'Experimental branch &middot; build 26283380' "$PUBLIC_DIR/join.html"
   grep -Fq 'Betas to <strong>experimental</strong>' "$PUBLIC_DIR/join.html"
   printf '"AppState"\n{\n\t"buildid"\t\t"1"\n}\n' >"$m"
-  STEAM_BRANCH='' SN2_APPMANIFEST="$m" bash "$ROOT/scripts/join-page.sh"
+  STEAM_BRANCH='' SN2_APPMANIFEST="$m" python3 "$ROOT/scripts/join-page.py"
   grep -Fq 'Public branch &middot; build 1' "$PUBLIC_DIR/join.html"
   run ! grep -q 'Betas to' "$PUBLIC_DIR/join.html"
 }

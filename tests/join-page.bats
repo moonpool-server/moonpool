@@ -10,7 +10,7 @@ setup() {
   mkdir -p "$DATA_DIR/run" "$DATA_DIR/public" "$SN2_CONTROL_DIR"
   printf '{"lobby_id":"109775000000000001","host_steamid":"76561198000000001"}\n' >"$DATA_DIR/run/mod-session.json"
 }
-render() { env "$@" WORLD_NAME=Slot1 bash "$ROOT/scripts/join-page.sh"; cat "$DATA_DIR/public/join.html"; }
+render() { env "$@" WORLD_NAME=Slot1 python3 "$ROOT/scripts/join-page.py"; cat "$DATA_DIR/public/join.html"; }
 
 @test "join is the hero; declared mods sit below it as links, no download" {
   command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"

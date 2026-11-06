@@ -82,7 +82,7 @@ repos:
         entry: >-
           --user 0:0 --entrypoint sh
           bats/bats:1.11.0@sha256:e8f18e0acd4ea933bf019130b85033be75e8ce081db299e93578de83d7874e33 -c
-          'apk add -q --no-cache jq lua5.4 python3 py3-pip py3-pillow py3-yaml py3-cryptography
+          'apk add -q --no-cache jq lua5.4 python3 py3-pip py3-pillow py3-jinja2 py3-yaml py3-cryptography
           py3-jsonschema openssl zip unzip >/dev/null &&
           pip install -q --break-system-packages vdf==3.4 >/dev/null &&
           cp -r . /tmp/w && cd /tmp/w && exec bats tests/*.bats'
