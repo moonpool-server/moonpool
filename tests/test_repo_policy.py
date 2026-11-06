@@ -35,7 +35,8 @@ def run(files: dict[str, bytes], readme: str = FILLED, tagged: bool = False) -> 
 def test_refuses_game_origin_files() -> None:
     for name in ("Binaries/Win64/Subnautica2-Win64-Test.exe", "ue4ss/UE4SS.dll",
                  "Content/Paks/pakchunk0-Windows.pak", "SaveGames/slot1.sav",
-                 "docs/img/screenshot.png", "docs/logo.jpg", "art/icon.webp"):
+                 "docs/img/screenshot.png", "docs/logo.jpg", "art/icon.webp", "docs/images/Shot.PNG",
+                 "docs/images/a.jpg", "docs/images/sub/a.png"):
         problems = run({name: b"\x00binary"})
         assert problems, f"{name} was accepted"
 
@@ -58,6 +59,10 @@ def test_no_layout_set_can_be_committed() -> None:
                  "ue4ss/layouts/abcd1234/UE4SS-settings.ini",
                  "ue4ss/layouts/abcd1234/UE4SS_Signatures/GNatives.lua"):
         assert run({name: ini}), f"{name} was accepted"
+
+
+def test_a_screenshot_of_moonpool_itself_may_live_in_docs_images() -> None:
+    assert run({"docs/images/discord-card.png": b"PNG picture"}) == []
 
 
 def test_contact_line() -> None:

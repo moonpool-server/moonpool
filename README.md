@@ -36,6 +36,12 @@ It's ready when `ps` says healthy. Invite each friend with `bin/moonpool players
 
 Anyone already friends with the hosting account can join too, so use a fresh account or remove them. Want anyone who finds the account to get in? Set `ALLOWLIST_ONLY=false`
 
+The Discord card and the join page, as players see them
+
+![The Discord card: two worlds, who is on, the codes to add and a Join button](docs/images/discord-card.png)
+
+![The join page: one button that opens the game through Steam](docs/images/join-page.png)
+
 ## What's exposed
 
 - Port 8081 serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel

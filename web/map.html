@@ -90,7 +90,7 @@ function draw(d) {
   var seen = [], heat = [];
   d.cells.forEach(function (c) {
     var at = [c[1] + d.cell_m / 2, c[0] + d.cell_m / 2];
-    L.circleMarker(at, {radius: 4, color: '#eaf7fb', weight: 1, fillColor: colour(c[2]), fillOpacity: 1}).bindTooltip(c[2] + ' m deep').addTo(layers.trails);
+    L.circleMarker(at, {radius: 6, color: '#ffffff', weight: 2, fillColor: colour(c[2]), fillOpacity: 1}).bindTooltip(c[2] + ' m deep').addTo(layers.trails);
     seen.push(at); heat.push([at[0], at[1], 1]);
   });
   layers.heat.setLatLngs(heat);

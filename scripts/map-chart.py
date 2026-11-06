@@ -208,7 +208,7 @@ def still(page, bg, public, cache):
     draw = ImageDraw.Draw(img)
     for x, y, d in page["cells"]:
         px, py = at(x + page["cell_m"] / 2, y + page["cell_m"] / 2)
-        draw.ellipse([px - 3, py - 3, px + 3, py + 3], fill=depth_colour(d), outline=(234, 247, 251))
+        draw.ellipse([px - 5, py - 5, px + 5, py + 5], fill=depth_colour(d), outline=(255, 255, 255), width=2)
     for kind, fill in (("lifepods", (255, 90, 79)), ("bases", (126, 231, 135))):
         for x, y in page[kind]:
             px, py = at(x, y)

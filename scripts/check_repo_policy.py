@@ -33,13 +33,15 @@ FORBIDDEN_NAMES = [
     re.compile(r"\.(pdb|pak|utoc|ucas|dll|exe)$", re.I),
     re.compile(r"(^|/)(config/loginusers\.vdf|ssfn\d*|local\.vdf)$", re.I),
     re.compile(r"(^|/)\.env$"),
-    # Game data and saves, and any picture: the repository ships no images at all,
-    # so no game art, logo or screenshot can slip in.
+    # Game data and saves, and any picture: no game art, logo or capture can slip in.
+    # The one place a picture may live is docs/images, screenshots of Moonpool's own screens.
     re.compile(r"\.(sav|uasset|umap|bnk|png|jpe?g|gif|webp|bmp|ico|svg|tga|dds)$", re.I),
     re.compile(r"(^|/)\.github/FUNDING\.ya?ml$", re.I),
     # Layout sets and scan patterns are per game build and stay with the operator.
     re.compile(r"(^|/)ue4ss/layouts/", re.I),
 ]
+
+ALLOWED_IMAGE = re.compile(r"^docs/images/[a-z0-9-]+\.png$")
 
 # Non-commercial: no donation or payment links anywhere.
 DONATION = re.compile(r"(patreon\.com|ko-fi\.com|buymeacoffee\.com|paypal\.me|"
@@ -66,7 +68,7 @@ def check(root: Path, files: list[Path]) -> list[str]:
     for f in files:
         rel = f.relative_to(root).as_posix() if f.is_absolute() else f.as_posix()
         for pat in FORBIDDEN_NAMES:
-            if pat.search(rel):
+            if pat.search(rel) and not ALLOWED_IMAGE.match(rel):
                 problems.append(f"{rel}: forbidden file (game-derived, binary or credential)")
                 break
         if not f.is_file() or f.suffix.lower() not in TEXT_SUFFIXES:

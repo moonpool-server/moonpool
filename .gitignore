@@ -53,3 +53,6 @@ backups/
 mod-signing/
 settings.yaml
 __pycache__/
+
+# Screenshots of Moonpool itself, the only pictures the repo keeps (check_repo_policy.py).
+!docs/images/*.png
