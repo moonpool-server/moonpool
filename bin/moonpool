@@ -304,6 +304,7 @@ def take_lock():
             mine, theirs = os.fstat(9), os.stat(lock)
             if (mine.st_dev, mine.st_ino) == (theirs.st_dev, theirs.st_ino):
                 fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _lock_fd = 9  # so this run's own helpers inherit it too
                 return
         except OSError:
             pass
@@ -1229,7 +1230,12 @@ def restore(a):
     x = Path(tempfile.mkdtemp())
     try:
         with tarfile.open(a[0], "r:gz") as tar:
-            tar.extractall(x, filter="data") if hasattr(tarfile, "data_filter") else tar.extractall(x)
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(x, filter="data")
+            else:  # an older Python: only plain files and folders inside the folder
+                members = [m for m in tar.getmembers() if (m.isfile() or m.isdir())
+                           and not m.name.startswith("/") and ".." not in Path(m.name).parts]
+                tar.extractall(x, members=members)
     except (OSError, tarfile.TarError, ValueError):
         usage_error(f"cannot read {a[0]}")
     stamped = sorted(d for d in x.rglob("*") if d.is_dir() and re.fullmatch(r"20\d{6}T\d{6}Z", d.name))
@@ -1254,9 +1260,12 @@ def restore(a):
     safety = Path(f"{save_dir}.pre-restore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
     if safety.exists():
         safety = Path(f"{safety}-{os.getpid()}")
-    shutil.move(str(save_dir), str(safety))
-    save_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src, save_dir, dirs_exist_ok=True)
+    try:
+        shutil.move(str(save_dir), str(safety))
+        save_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, save_dir, dirs_exist_ok=True)
+    except (OSError, shutil.Error) as err:
+        die(f"restore could not put the saves in place: {err}; the current saves are at {safety}")
     if not R["json"]:
         print(f"restored from {a[0]} (the current saves were staged first and kept at {safety})")
     do_host(["--now", a[1] if len(a) == 2 else ""])
@@ -1334,8 +1343,11 @@ def compose_base():
     args = []
     if R["instance"]:
         args = ["-p", f"sn2-{R['instance']}", "--env-file", f"{root}/instances/{R['instance']}/.env", "-f", f"{root}/compose.yaml"]
-    if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0:
-        return ["docker", "compose", *args], cwd
+    try:
+        if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0:
+            return ["docker", "compose", *args], cwd
+    except OSError:
+        pass
     if shutil.which("docker-compose"):
         return ["docker-compose", *args], cwd
     die("docker compose not found")
@@ -1355,7 +1367,10 @@ def container_running():
     cid = out.strip().split("\n")[0] if out.strip() else ""
     if not cid:
         return False
-    r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", cid], capture_output=True, text=True)
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", cid], capture_output=True, text=True)
+    except OSError:
+        return False
     return r.stdout.strip() == "true"
 
 
