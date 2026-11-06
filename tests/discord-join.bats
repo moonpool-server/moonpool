@@ -141,6 +141,34 @@ map_status() {
   [[ "$body" != *moonpool.cmd* ]]
 }
 
+@test "card.yaml rewords the card line by line; a bad line is logged and the shipped one kept" {
+  printf '{"ts":1700000000,"players":[]}' >"$CONTROL_DIR/status.json"
+  cat >"$DATA_DIR/card.yaml" <<'YAML'
+nobody_aboard: "Empty sea for now."
+tip: "-# House rule: no base griefing"
+mods: "bad {evil.__class__} placeholder"
+footer: 12
+not_a_line: "x"
+YAML
+  body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ "$body" == *'Empty sea for now.'* ]] && [[ "$body" == *'House rule: no base griefing'* ]]
+  [[ "$body" != *'bad '* ]] && [[ "$body" == *'Unofficial and not affiliated'* ]]
+  grep -q 'card.yaml mods: placeholders here are {n}, {url}' "$LOG_DIR/discord.log"
+  grep -q 'card.yaml footer: must be text' "$LOG_DIR/discord.log"
+  grep -q 'card.yaml not_a_line: not a card line' "$LOG_DIR/discord.log"
+}
+
+@test "card.example.yaml lists every line the card has, and nothing else" {
+  python3 - "$ROOT" <<'PY'
+import importlib.util, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("dn", root / "scripts" / "discord-notify.py"); dn = importlib.util.module_from_spec(spec)
+sys.argv = [sys.argv[0]]; spec.loader.exec_module(dn)
+keys = [l.split(":", 1)[0] for l in (root / "card.example.yaml").read_text().splitlines() if l and not l.startswith(("#", " "))]
+assert keys == list(dn.TEXT), (keys, list(dn.TEXT))
+PY
+}
+
 @test "Discord card lists known player ping and omits unknown ping" {
   printf '{"ts":1700000000,"players":[{"name":"Host","ping_ms":1},{"name":"Alice","ping_ms":23},{"name":"Bob"}]}' \
     >"$CONTROL_DIR/status.json"

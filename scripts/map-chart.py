@@ -286,7 +286,10 @@ def main():
     data = Path(os.environ.get("DATA_DIR", "/data"))
     control = Path(os.environ.get("CONTROL_DIR", data / "control"))
     public = Path(os.environ.get("PUBLIC_DIR", data / "public"))
-    page = Path(os.environ.get("MAP_PAGE", "/opt/sn2/web/map.html"))
+    # The admin's own page, templates/map.html in the data volume, wins over the shipped one;
+    # MAP_PAGE names another file outright. It is a whole page the admin owns, scripts and all.
+    own = data / "templates" / "map.html"
+    page = Path(os.environ.get("MAP_PAGE") or (own if own.is_file() else "/opt/sn2/web/map.html"))
     if os.environ.get("WEB_MAP", "false") != "true":
         for name in ("map.html", "map.json", "map.png"):
             (public / name).unlink(missing_ok=True)

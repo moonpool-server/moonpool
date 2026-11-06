@@ -11,12 +11,25 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import FileSystemLoader, StrictUndefined, TemplateError, select_autoescape
+from jinja2.sandbox import SandboxedEnvironment
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
 
 HERE = Path(__file__).resolve().parent
+
+
+def render_join(search, values):
+    """The page from the first join.html.j2 on `search`, in a sandbox with every variable
+    required; None when that template cannot render."""
+    env = SandboxedEnvironment(loader=FileSystemLoader(search), autoescape=select_autoescape(["j2", "html"]),
+                               undefined=StrictUndefined)
+    try:
+        return env.get_template("join.html.j2").render(**values)
+    except TemplateError as err:
+        print(f"join page: the template in {search[0]} did not render ({err}); using the shipped page", file=sys.stderr)
+        return None
 
 
 def main():
@@ -61,10 +74,14 @@ def main():
     refresh = "" if not join else ("" if published else f"1;url={join}")
     if not join:
         refresh = "15"
-    env = Environment(loader=FileSystemLoader(str(HERE.parent / "web")), autoescape=select_autoescape(["j2", "html"]))
-    html = env.get_template("join.html.j2").render(
-        world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh,
-        modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:])
+    # The admin's own copy of the page, templates/join.html.j2 in the data volume, wins over the
+    # shipped one. A copy that fails to render is said in the log and the shipped page is used.
+    values = dict(world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh,
+                  modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:])
+    shipped = str(HERE.parent / "web")
+    html = render_join([str(data / "templates"), shipped], values)
+    if html is None:
+        html = render_join([shipped], values)
     tmp = public / "join.html.tmp"
     tmp.write_text(html, encoding="utf-8")
     os.replace(tmp, public / "join.html")

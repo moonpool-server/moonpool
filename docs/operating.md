@@ -140,6 +140,20 @@ The page carries link preview tags and a still at `/map.png`, so a pasted link s
 
 The example points at [joric's Subnautica 2 tileset](https://github.com/joric/subnautica2_tileset), which your players' browsers load from joric's site. It's a community capture of the game from May 2026, before the experimental branch opened. It needs no lining up but newer builds may differ and no capture made on experimental is known. Its Unlicense covers joric's work and can't speak for the game's own rights, so that part is your call
 
+## Make it yours
+
+What players see is yours to change, from the data volume, nothing to fork
+
+- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `modnote`, `mods_published`, `build`, `branch` and `branch_label`. A copy that fails to render is said in the log and the shipped page is used
+
+```sh
+docker compose cp sn2:/opt/sn2/web/join.html.j2 join.html.j2
+docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
+```
+
+- The map page the same way, `web/map.html` to `templates/map.html`. It is a whole page you own, scripts and all, so treat it like anything else you publish
+- The Discord card's wording: copy [card.example.yaml](../card.example.yaml) to `card.yaml` in the data volume and change any line. The layout and the buttons stay. A line that is not text, too long or uses a placeholder it doesn't have is logged and the shipped line kept
+
 ## When something's wrong
 
 - Not sure the host is right: `bin/moonpool diag verify-fresh` checks each stage from Steam to the hosted save

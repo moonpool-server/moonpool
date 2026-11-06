@@ -12,6 +12,20 @@ setup() {
 }
 render() { env "$@" WORLD_NAME=Slot1 python3 "$ROOT/scripts/join-page.py"; cat "$DATA_DIR/public/join.html"; }
 
+@test "an admin's templates/join.html.j2 replaces the page; one that cannot render gives the shipped page" {
+  command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
+  mkdir -p "$DATA_DIR/templates"
+  printf '<html><body>mine: {{ world }}</body></html>\n' >"$DATA_DIR/templates/join.html.j2"
+  run render
+  [ "$status" -eq 0 ]; [[ "$output" == *'mine: Slot1'* ]]; [[ "$output" != *'Join now'* ]]
+  printf '<html>{{ nope }}</html>\n' >"$DATA_DIR/templates/join.html.j2"
+  run render
+  [ "$status" -eq 0 ]; [[ "$output" == *'>Join now</a>'* ]]; [[ "$output" == *'using the shipped page'* ]]
+  printf '<html>{{ world.__class__ }}</html>\n' >"$DATA_DIR/templates/join.html.j2"
+  run render
+  [ "$status" -eq 0 ]; [[ "$output" == *'>Join now</a>'* ]]
+}
+
 @test "join is the hero; declared mods sit below it as links, no download" {
   command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
   cat >"$SN2_CONTROL_DIR/plugins.yaml" <<'YAML'

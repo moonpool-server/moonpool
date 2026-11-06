@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+import string
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
@@ -41,6 +43,72 @@ SILENT, V2 = 4096, 32768
 DRY = False
 
 LABEL = {"up": "Open", "starting": "Starting", "updating": "Updating", "down": "Down"}
+# Every line a player reads on the card. card.yaml in the data volume overrides any key; the
+# layout and the buttons stay the project's. Only the named placeholders are filled.
+TEXT = {
+    "aboard_title": "**Aboard**",
+    "nobody_aboard": "Nobody aboard right now.",
+    "last_aboard": " Last aboard {when}.",
+    "scanned": "Scanned lately: {scans}",
+    "mods": "• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins",
+    "how_to_join": "### How to join",
+    "steam_title": "**Steam**",
+    "steam_beta": "• Right-click **Subnautica 2** › **Properties** › **Betas** › pick **{branch}**",
+    "steam_add": "• Add the world's host as a friend with its code above; {accepts}",
+    "accepts_auto": "it accepts within a minute",
+    "accepts_invite": "an admin has to invite you first",
+    "steam_join": "• Press **Join**, or **Friends** › right-click the host › **Join Game**",
+    "xbox_title": "**Xbox / PC Game Pass**",
+    "xbox_beta": "• Join the Subnautica 2 preview in **Xbox Insider Hub**",
+    "xbox_add": "• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? Ask the host to run moonpool diag friend-code",
+    "tip": "-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab",
+    "footer": "-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve",
+}
+PLACEHOLDERS = {"last_aboard": {"when"}, "scanned": {"scans"}, "mods": {"n", "url"}, "steam_beta": {"branch"}, "steam_add": {"accepts"}}
+TEXT_MAX = 400
+
+
+def text_problem(key, value):
+    """Why a card.yaml line is refused, or '' when it is fine."""
+    if key not in TEXT:
+        return "not a card line"
+    if not isinstance(value, str):
+        return "must be text"
+    if len(value) > TEXT_MAX:
+        return f"longer than {TEXT_MAX} characters"
+    allowed = PLACEHOLDERS.get(key, set())
+    try:
+        for _, field, spec, conv in string.Formatter().parse(value):
+            if field is None:
+                continue
+            if field not in allowed or spec or conv:
+                return "placeholders here are " + (", ".join("{%s}" % f for f in sorted(allowed)) or "none")
+    except ValueError as err:
+        return f"bad placeholder: {err}"
+    return ""
+
+
+def card_text():
+    """TEXT with card.yaml's overrides; a bad line is logged and the shipped one kept."""
+    text = dict(TEXT)
+    path = DATA / "card.yaml"
+    if not path.is_file():
+        return text
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as err:
+        note(f"card.yaml unreadable, shipped wording kept: {err}")
+        return text
+    if not isinstance(raw, dict):
+        note("card.yaml is not a mapping of lines, shipped wording kept")
+        return text
+    for key, value in raw.items():
+        why = text_problem(key, value)
+        if why:
+            note(f"card.yaml {key}: {why}; shipped line kept")
+            continue
+        text[key] = value
+    return text
 ICON = {"up": "🟢", "starting": "🟡", "updating": "🟡", "down": "🔴"}
 SKY = {"DA_Clear": "Clear", "DA_ClearGameStart": "Clear", "DA_CloudyA": "Cloudy", "DA_CloudyB": "Cloudy",
        "DA_DistantStormy": "Storm nearby", "DA_Misty": "Misty", "DA_SparseClouds": "Light clouds",
@@ -322,11 +390,12 @@ def world_container():
     tod, weather = str(st.get("time_of_day") or ""), str(st.get("weather") or "")
     scans = st.get("unlocks", {}).get("scans") if isinstance(st.get("unlocks"), dict) else None
     scans = ", ".join(str(s) for s in scans[-3:]) if isinstance(scans, list) else ""
+    T = card_text()
     mods = ""
     if url:
         n = len((read_json(PUBLIC / "mods.json", {}) or {}).get("mods") or [])
         if n:
-            mods = f"• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins"
+            mods = T["mods"].format(n=n, url=url)
     stats = world_stats()
 
     h = esc(HOST)
@@ -337,12 +406,12 @@ def world_container():
     daypart = None if hour is None else "Morning" if 5 <= hour < 12 else "Afternoon" if 12 <= hour < 17 else "Evening" if 17 <= hour < 21 else "Night"
     now_line = " · ".join(x for x in [daypart, SKY.get(weather)] if x)
     if names:
-        aboard = "**Aboard**\n" + "\n".join("• " + esc(n) for n in names)
+        aboard = T["aboard_title"] + "\n" + "\n".join("• " + esc(n) for n in names)
     else:
-        aboard = "Nobody aboard right now."
+        aboard = T["nobody_aboard"]
         if stats and stats.get("last_played"):
             try:
-                aboard += f" Last aboard <t:{epoch(stats['last_played'])}:R>."
+                aboard += T["last_aboard"].format(when=f"<t:{epoch(stats['last_played'])}:R>")
             except ValueError:
                 pass
     statline = ""
@@ -377,7 +446,7 @@ def world_container():
     if now_line:
         components.append({"type": 10, "content": now_line})
     if scans:
-        components.append({"type": 10, "content": clamp(f"Scanned lately: {esc(scans)}", 160)})
+        components.append({"type": 10, "content": clamp(T["scanned"].format(scans=esc(scans)), 160)})
     if statline:
         components.append({"type": 10, "content": clamp("-# " + statline, 160)})
     components += [{"type": 14, "divider": False, "spacing": 2}, {"type": 10, "content": clamp("\n".join(codes), 420)}]
@@ -393,20 +462,20 @@ def how_to_join():
     """The steps to join, once under every world on the board."""
     branch = branch_name()
     beta = branch not in ("", "public")
-    accepts = "it accepts within a minute" if E.get("AUTO_ACCEPT_FRIENDS", "1") == "1" and E.get("ALLOWLIST_ONLY", "true") == "false" \
-        else "an admin has to invite you first"
-    lines = ["### How to join", "**Steam**"]
+    T = card_text()
+    accepts = T["accepts_auto"] if E.get("AUTO_ACCEPT_FRIENDS", "1") == "1" and E.get("ALLOWLIST_ONLY", "true") == "false" \
+        else T["accepts_invite"]
+    lines = [T["how_to_join"], T["steam_title"]]
     if beta:
-        lines.append(f"• Right-click **Subnautica 2** › **Properties** › **Betas** › pick **{branch}**")
-    lines += [f"• Add the world's host as a friend with its code above; {accepts}",
-              "• Press **Join**, or **Friends** › right-click the host › **Join Game**", "**Xbox / PC Game Pass**"]
+        lines.append(T["steam_beta"].format(branch=branch))
+    lines += [T["steam_add"].format(accepts=accepts), T["steam_join"], T["xbox_title"]]
     if beta:
-        lines.append("• Join the Subnautica 2 preview in **Xbox Insider Hub**")
-    lines.append("• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? Ask the host to run moonpool diag friend-code")
-    lines.append("-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab")
+        lines.append(T["xbox_beta"])
+    lines.append(T["xbox_add"])
+    lines.append(T["tip"])
     if E.get("DISCORD_CARD_NOTE"):
         lines.append(E["DISCORD_CARD_NOTE"])
-    lines.append("-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve")
+    lines.append(T["footer"])
     return {"type": 10, "content": "\n".join(lines)}
 
 

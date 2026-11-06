@@ -18,7 +18,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 Run these in a terminal on the machine that will host the server
 
 ```sh
-git clone --branch v0.3.5 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
+git clone --branch v0.3.6 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -59,6 +59,7 @@ The Discord card and the join page, as players see them
 - A Discord card showing who is on with a join button
 - An optional map that charts where players have been
 - A clock that holds while the world is empty
+- The join page, the map page and the card's wording are yours to change from the data volume
 
 ## Mods
 

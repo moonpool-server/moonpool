@@ -22,6 +22,22 @@ def run(tmp, now, players, **env):
     return tmp / "public" / "map.json"
 
 
+def test_an_admins_map_page_in_the_data_volume_is_used_and_map_page_overrides_it() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        (tmp / "templates").mkdir()
+        (tmp / "templates" / "map.html").write_text("<html><title>{{WORLD}} mine</title></html>")
+        env = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(tmp / "control"), PUBLIC_DIR=str(tmp / "public"),
+                   SN2_NOW="1000", HOST_NAME="Host", WEB_MAP="true", WORLD_NAME="Deep")
+        env.pop("MAP_PAGE", None)
+        (tmp / "control").mkdir()
+        (tmp / "control" / "status.json").write_text(json.dumps({"ts": 1000, "players": [], "bases": {}, "lifepods": []}))
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
+        assert "Deep mine" in (tmp / "public" / "map.html").read_text()
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=dict(env, MAP_PAGE=str(ROOT / "web" / "map.html")))
+        assert "Deep mine" not in (tmp / "public" / "map.html").read_text()
+
+
 def test_a_picture_over_the_size_cap_is_left_out_like_a_missing_tile() -> None:
     import importlib.util
     from unittest import mock
