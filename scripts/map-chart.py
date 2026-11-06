@@ -10,6 +10,7 @@ A still of the map (map.png) goes beside the page for link previews and the card
 Off (WEB_MAP not true) withdraws the published files and keeps the chart.
 """
 import hashlib
+import math
 import html
 import io
 import json
@@ -25,6 +26,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 STILL_W = 1200  # the still's width in pixels; link previews want about this
+FOCUS_MIN_M = 800  # the still never shows less than this across
+FOCUS_PAD_M = 150  # room around the outermost dot
 STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
 CELL_M = 50  # one square on the chart
@@ -159,26 +162,62 @@ def union(items):
     return [min(xs), min(ys), max(xs), max(ys)]
 
 
-def backdrop(bgs, public, cache):
-    """The backgrounds as one picture plus the metres its edges stand for, or a dark canvas."""
+def focus(page, world):
+    """Where the action is: the charted cells, bases and lifepods with room around them, at
+    least FOCUS_MIN_M across and twice as wide as tall, kept inside the world. None when
+    nothing is charted yet, so the still shows the whole world."""
+    pts = [(x + page["cell_m"] / 2, y + page["cell_m"] / 2) for x, y, _ in page["cells"]]
+    pts += [(x, y) for kind in ("bases", "lifepods") for x, y in page[kind]]
+    if not pts:
+        return None
+    wl, wr = min(world[0], world[2]), max(world[0], world[2])
+    wt, wb = min(world[1], world[3]), max(world[1], world[3])
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    w = max(FOCUS_MIN_M, max(xs) - min(xs) + 2 * FOCUS_PAD_M, 2 * (max(ys) - min(ys) + 2 * FOCUS_PAD_M))
+    w = min(w, wr - wl, 2 * (wb - wt))
+    h = w / 2
+    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    l = min(max(cx - w / 2, wl), wr - w)
+    t = min(max(cy - h / 2, wt), wb - h)
+    region = [l, t, l + w, t + h]
+    return region if world[1] <= world[3] else [l, t + h, l + w, t]
+
+
+def backdrop(bgs, public, cache, region=None):
+    """The backgrounds as one picture plus the metres its edges stand for, or a dark canvas.
+    With a region, only that part, from tiles sharp enough for the still's width."""
     bg = bgs[0] if bgs else None
     if bg and bg["tiles"]:
+        left, top, right, bottom = bg["bounds"]
         zoom = 2  # 4 x 4 tiles of 512 px: 2048 px across the whole world
+        if region:
+            share = abs(region[2] - region[0]) / abs(right - left)
+            while zoom < min(bg["max_zoom"], 6) and share * 512 * (1 << zoom) < STILL_W:
+                zoom += 1
         n = 1 << zoom
-        canvas = Image.new("RGBA", (512 * n, 512 * n), (7, 25, 35, 255))
+        w, h = (right - left) / n, (bottom - top) / n
+        if region:
+            x0, x1 = max(0, math.floor((region[0] - left) / w)), min(n, math.ceil((region[2] - left) / w))
+            y0, y1 = max(0, math.floor((region[1] - top) / h)), min(n, math.ceil((region[3] - top) / h))
+        else:
+            x0, x1, y0, y1 = 0, n, 0, n
+        canvas = Image.new("RGBA", (512 * (x1 - x0), 512 * (y1 - y0)), (7, 25, 35, 255))
         rows, cols = set(), set()
-        for y in range(n):
-            for x in range(n):
+        for y in range(y0, y1):
+            for x in range(x0, x1):
                 tile = fetch(bg["url"].format(z=zoom, x=x, y=y), cache)
                 if tile is not None:
-                    canvas.paste(tile, (x * 512, y * 512)); rows.add(y); cols.add(x)
+                    canvas.paste(tile, ((x - x0) * 512, (y - y0) * 512)); rows.add(y); cols.add(x)
+        if region:
+            px = 512 / w
+            box = tuple(round(v) for v in ((region[0] - left) * px - x0 * 512, (region[1] - top) * (512 / h) - y0 * 512,
+                                            (region[2] - left) * px - x0 * 512, (region[3] - top) * (512 / h) - y0 * 512))
+            return canvas.crop(box), region
         if not rows:
             return canvas, bg["bounds"]
         # Only the rows and columns the set has tiles for: no empty sea around the still.
-        left, top, right, bottom = bg["bounds"]
         x0, x1, y0, y1 = min(cols), max(cols) + 1, min(rows), max(rows) + 1
         canvas = canvas.crop((x0 * 512, y0 * 512, x1 * 512, y1 * 512))
-        w, h = (right - left) / n, (bottom - top) / n
         return canvas, [left + x0 * w, top + y0 * h, left + x1 * w, top + y1 * h]
     if bg:
         left, top, right, bottom = union(bgs)
@@ -191,13 +230,21 @@ def backdrop(bgs, public, cache):
             l, t, r, b = it["bounds"]
             box = (round((l - left) * px), round((t - top) * px), round((r - left) * px), round((b - top) * px))
             canvas.paste(src.resize((max(1, box[2] - box[0]), max(1, box[3] - box[1]))), box[:2])
+        if region:
+            box = tuple(round(v) for v in ((region[0] - left) * px, (region[1] - top) * px,
+                                            (region[2] - left) * px, (region[3] - top) * px))
+            return canvas.crop(box), region
         return canvas, [left, top, right, bottom]
+    if region:
+        canvas = Image.new("RGBA", (1024, 512), (7, 25, 35, 255))
+        return canvas, region
     return Image.new("RGBA", (1024, 1024), (7, 25, 35, 255)), [-2560, 2560, 2560, -2560]
 
 
 def still(page, bg, public, cache):
-    """map.png: the backdrop with the delayed trails, bases and lifepods drawn on it."""
-    img, (left, top, right, bottom) = backdrop(bg, public, cache)
+    """map.png: the backdrop around the action, with the delayed trails, bases and lifepods on it."""
+    world = union(bg) if bg else [-2560, 2560, 2560, -2560]
+    img, (left, top, right, bottom) = backdrop(bg, public, cache, focus(page, world))
     scale = STILL_W / img.width
     img = img.resize((STILL_W, round(img.height * scale)), Image.LANCZOS)
     sx, sy = img.width / (right - left), img.height / (bottom - top)

@@ -104,8 +104,8 @@ function draw(d) {
     ? 'Where players have been, about ' + d.delay_minutes + ' minutes behind. No live positions.'
     : 'Nobody has charted this world yet. Trails appear here as people explore, about ' + d.delay_minutes + ' minutes behind.';
   var bare = !(d.backgrounds && d.backgrounds.length);
-  if (bare && !map.fitted && seen.length) {
-    map.fitBounds(seen, {padding: [48, 48], maxZoom: 3});
+  if (!map.fitted && seen.length) {  // open where the action is; the whole world is one zoom out
+    map.fitBounds(seen, {padding: [60, 60], maxZoom: bare ? 3 : 4});
     map.fitted = true;
   }
   if (bare && !map.fitted) map.setView([0, 0], 0);
