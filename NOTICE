@@ -76,14 +76,6 @@ BeaconServer (HumanGenome/BeaconServer, v0.3.137)
 Subnautica 2 is a trademark of its owners. This project is not affiliated with,
 endorsed by or authorized by Unknown Worlds, KRAFTON or Valve.
 
-Older releases
-  Releases up to v0.2.1 included ue4ss/layouts: engine struct offsets and virtual
-  function lists for two game builds, measured from a running copy of the game,
-  plus UE4SS settings and two scripts that generated scan patterns from the
-  operator's own copy. They held no game code or assets. They're in no release, tag
-  or branch now. The commits that held them stay reachable by their hashes until
-  GitHub purges them on request. Rights holders can ask through GitHub issues.
-
 Leaflet, Leaflet.heat and Leaflet.fullscreen (map page only)
   Leaflet: https://leafletjs.com, BSD 2-Clause, version 1.9.4
   Leaflet.heat: https://github.com/Leaflet/Leaflet.heat, BSD 2-Clause, version 0.2.0
