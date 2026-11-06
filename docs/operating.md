@@ -44,6 +44,19 @@ A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players the
 
 Put each admin's Epic ID in `ADMINS`. The UE4SS log prints `player NAME eos=...` when someone joins. Names and Steam IDs don't count because a client can claim those
 
+Admins give orders from inside the game with nothing installed: rename any PDA signal to a command and the host does it, then writes the answer back into the signal's name, green for done and red for refused
+
+```
+!help                 the list
+!kick NAME            remove a player
+!time 12:00           set the clock
+!weather DA_Storm     set the weather
+!slots 8              change the player cap
+!ping                 where everyone is, for admins; your own spot for anyone
+```
+
+One order every few seconds. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
+
 ## More than one world
 
 Each world needs its own Steam account that owns the game
