@@ -279,7 +279,8 @@ function Install-Launcher {
     Copy-Item -LiteralPath $PSCommandPath -Destination $InstalledScript -Force
   }
   if ($NoShortcuts) { return }
-  $key = 'HKCU:\Software\Classes\moonpool'
+  # A test run points this at a scratch key, so it never rewrites the user's own handler.
+  $key = if ($env:MOONPOOL_CLASSES_ROOT) { Join-Path $env:MOONPOOL_CLASSES_ROOT 'moonpool' } else { 'HKCU:\Software\Classes\moonpool' }
   New-Item -Path "$key\shell\open\command" -Force | Out-Null
   Set-ItemProperty -LiteralPath $key -Name '(default)' -Value 'URL:Subnautica 2 server'
   Set-ItemProperty -LiteralPath $key -Name 'URL Protocol' -Value ''
@@ -694,7 +695,7 @@ function Invoke-Join {
   }
   if ($Install -or (-not $Server -and -not $ManifestUrl)) {
     Install-Launcher
-    Say "installed. Click Play with mods on a server's join page."
+    Say "installed. Go back to the server's join page and press Play with mods."
     return
   }
   if (Update-Launcher) { return }

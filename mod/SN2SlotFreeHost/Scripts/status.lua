@@ -7,9 +7,11 @@
 -- all are searched again after a map load, a new or vanished PlayerState, or CACHE_MAX_S.
 --
 -- Class names this reads, observed in the live game:
---   bases    "BP_BaseModule_*" a player built: not a level actor (RF_WasLoaded /
---            bNetStartup) or else absent at the first search after the map loaded,
---            and never within POD_SKIP_UU of a lifepod (the start area holds a ruin).
+--   bases    "UWESculpturalBaseActor", one per built base, holding its cells; a level
+--            actor (RF_WasLoaded / bNetStartup) or an empty one is not a player's.
+--            "BP_BaseModule_*" pieces too: not a level actor or else absent at the first
+--            search after the map loaded, and never within POD_SKIP_UU of a lifepod
+--            (the start area holds a ruin).
 --   lifepods "BP_StaticLifepod_Underwater_C" (the pod players start in, about
 --            584 m down) and "BP_StaticLifepod_Surface_C"
 --   players  "PlayerState", position from the pawn's RootComponent
@@ -152,6 +154,12 @@ local function search(map_name)
     local built = {}
     for _, p in ipairs(pieces) do
       if not near_pod(p, pods) then built[#built + 1] = p end
+    end
+    for _, a in ipairs(FindAllOf('UWESculpturalBaseActor') or {}) do
+      local cells = 0
+      pcall(function() cells = a.TotalCells or 0 end)
+      local p = cells > 0 and not level_actor(a) and loc(a)
+      if p then built[#built + 1] = p end
     end
     cache.bases, cache.pods, cache.found_at, cache.map = cluster(built), pods, os.time(), map_name
   end

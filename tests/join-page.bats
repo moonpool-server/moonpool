@@ -69,7 +69,9 @@ JSON
   # The plain join is a small link under the launcher, never a button.
   [[ "$output" != *'Join now'* && "$output" != *'class="button ghost"'* ]]
   [[ "${output%%Join without mods*}" == *'Play with mods</a>'* && "$output" == *'href="steam://joinlobby/'*'>Join without mods</a>'* ]]
-  [[ "$output" != *'http-equiv="refresh"'* && "$output" != *'<script>'* ]]
+  [[ "$output" != *'http-equiv="refresh"'* && "$output" != *'location.href'* && "$output" != *'location.assign'* ]]
+  # The one script only shows the help line when the button opened nothing.
+  [[ "$output" == *'id="nothing" hidden'*'Nothing opened?'* ]]
   [[ "$output" == *'Voice</a> 1.2</li>'* ]]
   [[ "$output" == *'nexusmods.com'* && "$output" == *'(optional, needs one download from its page)'* ]]
 }

@@ -68,18 +68,23 @@ def render(plugins: list, manifest: dict, address: str = "") -> str:
             notes.append("optional")
         if pub.get("native"):
             notes.append("native code")
-        if pub.get("native"):
-            notes.append("native code")
         if not pub:
             notes.append("install it yourself")
         elif not source.get("url"):
             notes.append("needs one download from its page")
         return f'<li>{text}{" (" + ", ".join(notes) + ")" if notes else ""}</li>'
 
-    head = (f'<a class="button" href="moonpool:{esc(address)}">Play with mods</a>'
+    head = (f'<a class="button" id="playmods" href="moonpool:{esc(address)}">Play with mods</a>'
             f'<p class="fine">Asks you first, installs these, and joins. First time? '
             f'<a href="{SETUP_URL}">Get the launcher</a> once, from the project on GitHub. '
-            f'Mods run with your Windows account\'s rights, so only say yes to a host you trust.</p>') \
+            f'Mods run with your Windows account\'s rights, so only say yes to a host you trust.</p>'
+            f'<p class="fine" id="nothing" hidden><strong>Nothing opened?</strong> This PC needs the launcher once: '
+            f'<a href="{SETUP_URL}">get the launcher</a>, run the file (Windows may warn about an unsigned file: '
+            f'More info, then Run anyway), and press Play with mods again. If your browser asks to open '
+            f'Windows PowerShell, allow it.</p>'
+            '<script>(function(){var b=document.getElementById("playmods"),n=document.getElementById("nothing");'
+            'if(!b||!n)return;b.addEventListener("click",function(){setTimeout(function(){'
+            'if(document.visibilityState==="visible"&&document.hasFocus()){n.hidden=false;}},2500);});})();</script>') \
         if published and address else \
         '<div class="opt"><p class="fine">Mods this server asks for:</p>'
     tail = "" if published else "</div>"

@@ -7,6 +7,7 @@ Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 
 $Script = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\moonpool\moonpool.ps1')).Path
+$env:MOONPOOL_CLASSES_ROOT = 'HKCU:\Software\moonpool-tests'  # the link handler these runs write, never the user's
 $failures = 0
 $passes = 0
 
@@ -473,6 +474,8 @@ try {
   $Script = $oldScript
 } finally {
   foreach ($x in $worlds) { Remove-Item -LiteralPath $x.Root -Recurse -Force -ErrorAction SilentlyContinue }
+  Remove-Item -Path 'HKCU:\Software\moonpool-tests' -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item Env:MOONPOOL_CLASSES_ROOT -ErrorAction SilentlyContinue
 }
 
 Write-Host "$passes passed, $failures failed"
