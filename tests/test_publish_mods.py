@@ -39,13 +39,13 @@ class ArchiveRootsTests(unittest.TestCase):
 
     def test_a_zip_that_is_one_ue4ss_mod_has_one_root(self):
         roots = PUBLISH.archive_roots(zip_of(self.root / "a.zip", ["Scripts/main.lua", "readme.md"]), "ue4ss")
-        self.assertEqual(roots, [{"name": "", "prefix": ""}])
+        self.assertEqual(roots, [{"name": "", "prefix": "", "native": False}])
 
     def test_nested_mods_are_found_by_their_main_file(self):
         roots = PUBLISH.archive_roots(zip_of(self.root / "b.zip",
                                              ["Mods/Voice/Scripts/main.lua", "Mods/Voice/Scripts/lib.lua",
                                               "Mods/Cap/dlls/main.dll", "Mods/Cap/enabled.txt"]), "ue4ss")
-        self.assertEqual(roots, [{"name": "Voice", "prefix": "Mods/Voice"}, {"name": "Cap", "prefix": "Mods/Cap"}])
+        self.assertEqual(roots, [{"name": "Voice", "prefix": "Mods/Voice", "native": False}, {"name": "Cap", "prefix": "Mods/Cap", "native": True}])
 
     def test_a_pak_trio_is_one_root_and_an_incomplete_one_is_refused(self):
         roots = PUBLISH.archive_roots(zip_of(self.root / "c.zip", ["Fov.pak", "Fov.ucas", "Fov.utoc"]), "pak")
@@ -64,7 +64,15 @@ class ArchiveRootsTests(unittest.TestCase):
                 bundle.writestr("Subnautica2ComfortTweaks/scripts/main.lua", b"print(1)")
                 bundle.writestr("Subnautica2ComfortTweaks/scripts/config.lua", b"return {}")
             self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"),
-                             [{"name": "Subnautica2ComfortTweaks", "prefix": "Subnautica2ComfortTweaks"}])
+                             [{"name": "Subnautica2ComfortTweaks", "prefix": "Subnautica2ComfortTweaks", "native": False}])
+
+    def test_a_mod_with_a_dll_is_marked_native(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "n.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("ProxChat/Scripts/main.lua", b"print(1)")
+                bundle.writestr("ProxChat/dlls/main.dll", b"MZ")
+            self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"), [{"name": "ProxChat", "prefix": "ProxChat", "native": True}])
 
     def test_several_roots_need_install_folder(self):
         roots = [{"name": "A", "prefix": "A"}, {"name": "B", "prefix": "B"}]
@@ -165,7 +173,7 @@ class CurseForgeTests(unittest.TestCase):
         source, archive = self.resolve()
         self.assertTrue(source["allow_mod_distribution"])
         self.assertEqual(source["url"], "https://edge.forgecdn.net/example.zip")
-        self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"), [{"name": "Example", "prefix": "Example"}])
+        self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"), [{"name": "Example", "prefix": "Example", "native": False}])
         self.assertEqual(source["hashes"][0], {"algorithm": "sha256", "value": hashlib.sha256(self.body).hexdigest()})
         self.assertEqual([h["algorithm"] for h in source["hashes"]], ["sha256", "sha1"])
 

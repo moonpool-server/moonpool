@@ -579,6 +579,17 @@ viewer_password() {
   cat "$file"
 }
 
+# The Steam installer is run only with Valve's Authenticode signature on it, checked
+# against the system's roots. STEAM_SETUP_UNVERIFIED=true skips the check, said in the log.
+steam_setup_signed() {
+  local file=$1 out
+  if [ "${STEAM_SETUP_UNVERIFIED:-}" = true ]; then log "SteamSetup.exe signature check skipped (STEAM_SETUP_UNVERIFIED=true)"; return 0; fi
+  command -v osslsigncode >/dev/null || { log "osslsigncode missing: cannot check SteamSetup.exe"; return 1; }
+  out=$(osslsigncode verify -in "$file" -CAfile "${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt}" 2>&1) || { log "SteamSetup.exe signature did not verify"; return 1; }
+  printf '%s' "$out" | grep -q 'Subject: .*O=Valve Corp\.' || { log "SteamSetup.exe is signed, but not by Valve Corp."; return 1; }
+  return 0
+}
+
 steam_signed_in() {
   local vdf="${1:-$STEAM_DIR/config/loginusers.vdf}" logs="${2:-$STEAM_DIR/logs}"
   local token="${3:-$STEAM_SESSION_DIR/local.vdf}" since="${4:-$(container_start)}"

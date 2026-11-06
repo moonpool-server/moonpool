@@ -78,6 +78,7 @@ $LauncherBuild = 0
 # release is not enough to change what runs on a player's PC.
 $ReleaseKey = @{ modulus = 'tSJdxcTDEY2AmF7xE0F5YN4V5XWk3nwuMlH5QXoVf4IgLuHVCl12SajOCwcWxS5wluItvHzJnprs01Gq5FY3/wLNPhQa5YIVsV9b1RzoybzR8s8fkzGaadANmcRQm39RMafxQppjeg5UP8jh1BHqNZvxTVQBAvBjWRI3tfJe8uqcoL6HAPdUM1xb8xc+pkb2E2UFcxGlcbrYMmRBrzjGLgTcye17gTo7bja0gjIa3/8kPG7ECwoH7MYhVKzJm8SdRSfz09lqbLtFfEG86/UBxoDPIhaLz+iYLx/gdsy9lpD78P3gN250cu2IcZE0/xmeyQSggfHOVuvNSWTQkyEsQwhYnF5HnZXnDNEg4mCqh2o/v06EljAe2JOrVZPiEoqT52uXtRh6prF6OmAoVidxS2FUVnIs2DGQDMf/RGM6GVXPd4bgqeXZGvjp8noklRk1qIE32i4RzHYsS3iD/UiHrfiXZacJ7DKWaN8FyVGXJFduyVYxZbmvE9XAl7LPFmwf'; exponent = 'AQAB' }
 $KitHome = Join-Path $env:LOCALAPPDATA 'moonpool'
+$script:ServerId = ''  # the server this run installs for, once known
 $InstalledScript = Join-Path $KitHome 'moonpool.ps1'
 # Forks change this one line and the same one in moonpool-setup.cmd.
 $ReleaseBase = 'https://github.com/moonpool-server/moonpool/releases/latest/download'
@@ -142,7 +143,7 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
     $name = [string](Get-Prop $Config 'server_name' 'this server')
     $where = [string](Get-Prop $Config 'address' '')
     $text = "$name`n$where`nserver key $ServerId`n`nwants to run on this PC:`n`n" +
-      (($new | ForEach-Object { $p = $_ -split '\|'; "  $($p[0]) $($p[1]) ($(([string]$p[2]).Split(':')[-1].Substring(0, 12))) from $($p[-1])" }) -join "`n") +
+      (($new | ForEach-Object { $p = $_ -split '\|'; $kind = if ($p[-1] -eq 'native code') { ', NATIVE CODE (a DLL)' } else { '' }; "  $($p[0]) $($p[1]) ($(([string]$p[2]).Split(':')[-1].Substring(0, 12))) from $($p[-2])$kind" }) -join "`n") +
       "`n`nMods and the loader run with your Windows account's rights. Accept only from a host you trust.`n`nInstall?"
     $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
       $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
@@ -457,7 +458,9 @@ function Get-WantedMods($Manifest, $Skipped) {
       Identity = "$kind|$folder|$(([string](Get-Prop $mod 'prefix' '')).Trim('/'))"
       Name = $name; Version = [string](Get-Prop $mod 'version' ''); Required = $required; Kind = $kind
       Folder = $folder; Prefix = ([string](Get-Prop $mod 'prefix' '')).Trim('/'); Source = $source
-      ArchiveSha = (([string](Get-Prop (@(Get-Prop $source 'hashes' @()) | Select-Object -First 1) 'value' '')).ToLowerInvariant())
+      Native = [bool](Get-Prop $mod 'native' $false)
+      # The archive's name in the ledger: its sha256 when the server listed one, else the first hash.
+      ArchiveSha = (([string](Get-Prop (@(@(Get-Prop $source 'hashes' @()) | Where-Object { ([string](Get-Prop $_ 'algorithm' '')).ToLowerInvariant() -eq 'sha256' }) + @(Get-Prop $source 'hashes' @()) | Select-Object -First 1) 'value' '')).ToLowerInvariant())
     })
   }
   return ,$wanted
@@ -497,22 +500,46 @@ function Get-ModArchive($Mod, [string]$Stage) {
   return $dest
 }
 
-# Windows Defender's verdict on a file, where it's available. MpCmdRun exits 2 for a threat and
-# for a failed scan, so the result it prints decides; a failed scan is said, not called a threat.
-function Test-DefenderClean([string]$Path) {
-  if ($ScanFile) { return (& $ScanFile $Path) }
+# Windows Defender's verdict on a file: clean, threat, or unscanned when Defender is missing or
+# its scan failed. MpCmdRun exits 2 for a threat and for a failed scan, so the result it prints
+# decides. The test hook may answer $true/$false (clean/threat) or one of the three words.
+function Get-DefenderVerdict([string]$Path) {
+  if ($ScanFile) {
+    $v = & $ScanFile $Path
+    if ($v -is [bool]) { if ($v) { return 'clean' } else { return 'threat' } }
+    return [string]$v
+  }
   $tool = Join-Path $env:ProgramFiles 'Windows Defender\MpCmdRun.exe'
-  if (-not (Test-Path -LiteralPath $tool)) { Say 'Windows Defender not found, so this file was not scanned'; return $true }
+  if (-not (Test-Path -LiteralPath $tool)) { Say 'Windows Defender not found, so this file was not scanned'; return 'unscanned' }
   $result = & $tool -Scan -ScanType 3 -File $Path -DisableRemediation 2>&1 | Out-String
-  if ($result -match 'found [1-9][0-9]* threats') { return $false }
-  if ($LASTEXITCODE -ne 0) { Say "Windows Defender could not scan this file (exit $LASTEXITCODE), so it was not scanned" }
-  return $true
+  if ($result -match 'found [1-9][0-9]* threats') { return 'threat' }
+  if ($LASTEXITCODE -ne 0) { Say "Windows Defender could not scan this file (exit $LASTEXITCODE), so it was not scanned"; return 'unscanned' }
+  return 'clean'
+}
+
+# An unscanned archive installs only on a yes, remembered per archive so it is asked once.
+function Confirm-Unscanned([string]$Archive, [string]$Label, [string]$ServerId) {
+  $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
+  $path = Join-Path $KitHome "$ServerId\unscanned.json"
+  $okayed = @(Read-Json $path @())
+  if ($okayed -contains $sha) { return }
+  $text = "${Label} could not be scanned by Windows Defender (not installed, or the scan failed).`n`nNothing says it is safe. Install it anyway?"
+  if ($Approve) { $yes = & $Approve $text }
+  else {
+    Add-Type -AssemblyName System.Windows.Forms
+    $yes = [Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes'
+  }
+  if (-not $yes) { Fail "${Label}: not scanned and you declined; nothing changed, game not started" 3 }
+  Write-Json $path @($okayed + $sha)
 }
 
 # A signed hash proves the player got the archive the server inspected, not that the
 # archive is safe: every entry is checked before anything is unpacked.
 function Assert-ArchiveSafe([string]$Archive, [string]$Label) {
-  if (-not (Test-DefenderClean $Archive)) { Fail "${Label}: Windows Defender flagged this file; nothing changed, game not started" }
+  $verdict = Get-DefenderVerdict $Archive
+  Say "${Label}: Defender verdict $verdict"
+  if ($verdict -eq 'threat') { Fail "${Label}: Windows Defender flagged this file; nothing changed, game not started" }
+  if ($verdict -ne 'clean') { Confirm-Unscanned $Archive $Label $script:ServerId }
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
   try {
@@ -683,6 +710,7 @@ function Invoke-Join {
   if ($cfg) {
     if ($cfg.address -like 'file:*') { $script:AllowLocal = $true }
     $serverId = Get-ServerId $cfg
+    $script:ServerId = $serverId
     $script:ManifestUrl = "$($cfg.address)/mods.json"
   }
 
@@ -715,8 +743,9 @@ function Invoke-Join {
     # Where the file really downloads from; the page only for a file the player fetches by hand.
     $from = [string](Get-Prop $_.Source 'url' ''); if (-not $from) { $from = [string](Get-Prop $_.Source 'page' '') }
     $fromHost = 'this server'; if ($from -match '^https?://([^/:]+)') { $fromHost = $Matches[1] }
-    "$($_.Name)|$($_.Version)|$(@(Get-Prop $_.Source 'hashes' @()) | ForEach-Object { "$($_.algorithm):$($_.value)" })|$($_.Identity)|$fromHost" })
+    "$($_.Name)|$($_.Version)|$(@(Get-Prop $_.Source 'hashes' @()) | ForEach-Object { "$($_.algorithm):$($_.value)" })|$($_.Identity)|$fromHost|$(if ($_.Native) { 'native code' } else { 'scripts' })" })
   if ($loaderSpec) { $codeSet += "UE4SS loader|$(Get-Prop $loaderSpec 'asset' '')|sha256:$(Get-Prop $loaderSpec 'sha256' '')|$(@(Get-Prop $loaderSpec 'allowed_builds' @()) -join ',')|this server" }
+  $script:ServerId = $serverId
   Confirm-CodeSet $cfg $serverId $codeSet
   if ($cfg) { Install-ServerShortcuts $cfg $serverId }
 

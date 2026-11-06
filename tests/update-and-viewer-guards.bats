@@ -64,6 +64,18 @@ steam_validated() {
 }
 
 viewer() { run env "$@" bash "$BIN/sn2-service.sh" novnc; }
+
+signed() { run bash -c ". '$BIN/common.sh'; steam_setup_signed /tmp/SteamSetup.exe && echo signed || echo refused"; }
+
+@test "the Steam installer runs only with Valve's signature verified" {
+  stub osslsigncode 'printf "Signer #0:\n\t\tSubject: /C=US/O=Valve Corp./CN=Valve Corp.\nSucceeded\n"; exit 0'
+  signed; [[ "$output" == *signed ]]
+  stub osslsigncode 'printf "Signer #0:\n\t\tSubject: /C=US/O=Someone Else/CN=Someone Else\nSucceeded\n"; exit 0'
+  signed; [[ "$output" == *refused ]]
+  stub osslsigncode 'printf "Failed\n"; exit 1'
+  signed; [[ "$output" == *refused ]]
+  STEAM_SETUP_UNVERIFIED=true signed; [[ "$output" == *signed ]]
+}
 @test "a viewer open to the LAN starts with no password set, because one is always made" {
   viewer VIEWER_BIND=0.0.0.0 VNC_PASSWORD= VIEWER_PASSWORD_FILE="$BATS_TEST_TMPDIR/viewer-password"
   [ -s "$CALLS.websockify" ] && [ ! -e "$CALLS.sleep" ]

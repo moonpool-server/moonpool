@@ -78,14 +78,16 @@ function New-World {
 }
 
 function Mod($w, [string]$Name, [string]$Zip, [string]$Folder, [string]$Prefix, [bool]$Required = $true,
-             [string]$Version = '1.0', [string]$Kind = 'ue4ss', [bool]$Manual = $false, [string]$Page = '') {
+             [string]$Version = '1.0', [string]$Kind = 'ue4ss', [bool]$Manual = $false, [string]$Page = '',
+             [bool]$Native = $false, [string[]]$Algorithms = @('sha256')) {
   $path = Join-Path $w.Server $Zip
   $url = ''
   if (-not $Manual) { $url = ([Uri]$path).AbsoluteUri }
+  $hashes = @($Algorithms | ForEach-Object { [ordered]@{ algorithm = $_; value = (Get-FileHash -Algorithm $_ -LiteralPath $path).Hash.ToLowerInvariant() } })
   return [ordered]@{
     name = $Name; version = $Version; required = $Required; kind = $Kind; folder = $Folder; prefix = $Prefix
-    source = [ordered]@{ type = 'local'; page = $Page; url = $url; file_name = $Zip
-                         hashes = @([ordered]@{ algorithm = 'sha256'; value = (Sha $path) }) }
+    native = $Native
+    source = [ordered]@{ type = 'local'; page = $Page; url = $url; file_name = $Zip; hashes = $hashes }
   }
 }
 
@@ -108,7 +110,7 @@ function Write-Manifest($w, $Mods, [string]$ServerId = 'server-a', [bool]$Loader
 
 # Runs the launcher in a child PowerShell 5.1 so its exit code is real; the
 # running-game check, the launch and the pages opened are stubbed through files.
-function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Answer = '$true') {
+function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Answer = '$true', [string]$Scan = "`$p -notmatch 'Flagged'") {
   $launchLog = Join-Path $w.Root 'launched.txt'
   $pageLog = Join-Path $w.Root 'page.txt'
   $askLog = Join-Path $w.Root 'asked.txt'
@@ -116,7 +118,7 @@ function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Ans
   $running = '$false'; if ($GameRunning) { $running = '$true' }
   $cmd = "`$env:LOCALAPPDATA='$($w.Root)'; & '$Script' -ManifestUrl '$(([Uri]$w.Manifest).AbsoluteUri)' -SteamRoot '$($w.Steam)' " +
          "-Downloads '$($w.Downloads)' -IsGameRunning { $running } -Launch { param(`$u) Set-Content -LiteralPath '$launchLog' -Value `$u } " +
-         "-OpenPage { param(`$u) Set-Content -LiteralPath '$pageLog' -Value `$u } -Approve { param(`$q) Set-Content -LiteralPath '$askLog' -Value `$q; $Answer } -OpenFriend { param(`$u) } -ScanFile { param(`$p) `$p -notmatch 'Flagged' } -NoShortcuts $Extra; exit `$LASTEXITCODE"
+         "-OpenPage { param(`$u) Set-Content -LiteralPath '$pageLog' -Value `$u } -Approve { param(`$q) Set-Content -LiteralPath '$askLog' -Value `$q; $Answer } -OpenFriend { param(`$u) } -ScanFile { param(`$p) $Scan } -NoShortcuts $Extra; exit `$LASTEXITCODE"
   $out = & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String
   $launched = $null; $page = $null; $asked = ''
   if (Test-Path -LiteralPath $askLog) { $asked = (Get-Content -LiteralPath $askLog -Raw) }
@@ -373,6 +375,33 @@ try {
   Sign-Manifest
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
   Check ($r.Code -eq 3 -and $r.Asked -match 'different server key') "a new key at the same address is a new server, with a warning (got: $($r.Out.Trim()))"
+
+  Write-Host 'a mod with a DLL is named as native code when consent is asked'
+  $wn = New-World; $worlds += $wn
+  New-Zip (Join-Path $wn.Server 'Prox.zip') @('Prox\Scripts\main.lua', 'Prox\dlls\main.dll')
+  Write-Manifest $wn @((Mod $wn 'Prox' 'Prox.zip' 'Prox' 'Prox' -Native $true))
+  $r = Invoke-Join $wn
+  Check ($r.Code -eq 0 -and $r.Asked -match 'Prox 1\.0 .* NATIVE CODE \(a DLL\)' -and $r.Asked -match "Windows account's rights") "the consent text says native code and the rights it runs with (asked: $($r.Asked.Trim()))"
+
+  Write-Host 'an archive Defender could not scan is asked about, once, and a no stops it'
+  $wu = New-World; $worlds += $wu
+  New-Zip (Join-Path $wu.Server 'Quiet.zip') @('Quiet\Scripts\main.lua')
+  Write-Manifest $wu @((Mod $wu 'Quiet' 'Quiet.zip' 'Quiet' 'Quiet'))
+  $r = Invoke-Join $wu -Scan "'unscanned'" -Answer "(`$q -notmatch 'could not be scanned')"
+  Check ($r.Code -eq 3 -and $r.Out -match 'not scanned and you declined' -and -not (Test-Path -LiteralPath (Join-Path $wu.Mods 'Quiet')) -and -not $r.Launched) "a no on an unscanned archive places nothing (got: $($r.Out.Trim()))"
+  $r = Invoke-Join $wu -Scan "'unscanned'"
+  Check ($r.Code -eq 0 -and $r.Asked -match 'could not be scanned' -and (Test-Path -LiteralPath (Join-Path $wu.Mods 'Quiet'))) "a yes installs it and the question named the scan (asked: $($r.Asked.Trim()))"
+  $r = Invoke-Join $wu -Scan "'unscanned'" -Answer "(`$q -notmatch 'could not be scanned')"
+  Check ($r.Code -eq 0 -and $r.Asked -notmatch 'could not be scanned') "the same archive is not asked about twice (asked: $($r.Asked.Trim()))"
+
+  Write-Host 'an archive listed with sha1 first and sha256 second is named by its sha256'
+  $wh = New-World; $worlds += $wh
+  New-Zip (Join-Path $wh.Server 'Hashed.zip') @('Hashed\Scripts\main.lua')
+  Write-Manifest $wh @((Mod $wh 'Hashed' 'Hashed.zip' 'Hashed' 'Hashed' -Algorithms @('sha1', 'sha256')))
+  $r = Invoke-Join $wh
+  $ledger = Get-Content -LiteralPath (Join-Path $wh.Root 'moonpool\owned.json') -Raw | ConvertFrom-Json
+  $record = @($ledger.mods.PSObject.Properties | Where-Object { $_.Name -like '*/Hashed' })[0].Value
+  Check ($r.Code -eq 0 -and $record.archive -eq (Sha (Join-Path $wh.Server 'Hashed.zip'))) "the ledger records the sha256 (got: $($record.archive))"
 
   Write-Host 'an archive Windows Defender flags is not unpacked'
   $w11 = New-World; $worlds += $w11

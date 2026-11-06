@@ -206,10 +206,13 @@ def archive_roots(archive, kind):
                     continue
                 prefix = m.group(1) or ""
                 name = prefix.rsplit("/", 1)[-1] if prefix else ""
+                native = member.replace("\\", "/").lower().endswith("dlls/main.dll")
                 if prefix in seen:
+                    if native:
+                        next(r for r in roots if r["prefix"] == prefix)["native"] = True
                     continue
                 seen.add(prefix)
-                roots.append({"name": name, "prefix": prefix})
+                roots.append({"name": name, "prefix": prefix, "native": native})
             if not roots:
                 raise ValueError(f"archive {Path(archive).name} holds no UE4SS mod (no Scripts/main.lua or dlls/main.dll)")
         else:
@@ -415,7 +418,7 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
     tier = str(entry.get("tier", "optional")).lower()
     return {"name": name, "version": str(entry.get("version", "")), "summary": str(entry.get("summary", "")),
             "required": tier == "mandatory", "kind": kind, "folder": folder, "prefix": root["prefix"],
-            "source": source}
+            "native": bool(root.get("native")), "source": source}
 
 
 def checked_public_url(url):

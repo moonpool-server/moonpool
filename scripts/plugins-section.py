@@ -66,6 +66,10 @@ def render(plugins: list, manifest: dict, address: str = "") -> str:
         notes = []
         if str(p.get("tier", "optional")).lower() != "mandatory":
             notes.append("optional")
+        if pub.get("native"):
+            notes.append("native code")
+        if pub.get("native"):
+            notes.append("native code")
         if not pub:
             notes.append("install it yourself")
         elif not source.get("url"):
@@ -74,7 +78,8 @@ def render(plugins: list, manifest: dict, address: str = "") -> str:
 
     head = (f'<a class="button" href="moonpool:{esc(address)}">Play with mods</a>'
             f'<p class="fine">Asks you first, installs these, and joins. First time? '
-            f'<a href="{SETUP_URL}">Get the launcher</a> once, from the project on GitHub.</p>') \
+            f'<a href="{SETUP_URL}">Get the launcher</a> once, from the project on GitHub. '
+            f'Mods run with your Windows account\'s rights, so only say yes to a host you trust.</p>') \
         if published and address else \
         '<div class="opt"><p class="fine">Mods this server asks for:</p>'
     tail = "" if published else "</div>"

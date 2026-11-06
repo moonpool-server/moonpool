@@ -80,6 +80,9 @@ svc_steam() {
     mkdir -p "$DATA_DIR/cache"
     curl -fsSL -o "$DATA_DIR/cache/SteamSetup.exe" \
       https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe || { sleep 30; exit 1; }
+    steam_setup_signed "$DATA_DIR/cache/SteamSetup.exe" || {
+      say "SteamSetup.exe failed its signature check and was not run; see $LOG_DIR (STEAM_SETUP_UNVERIFIED=true overrides)"
+      rm -f "$DATA_DIR/cache/SteamSetup.exe"; sleep 30; exit 1; }
     wine "$DATA_DIR/cache/SteamSetup.exe" /S >"$LOG_DIR/steam-setup.log" 2>&1 || true
     wineserver -w
     if [ ! -f "$STEAM_EXE" ] && [ -f "$STEAM_DIR/Steam.exe" ]; then ln -sfn Steam.exe "$STEAM_EXE"; fi
