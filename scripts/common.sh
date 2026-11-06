@@ -248,12 +248,6 @@ STEAM_SESSION_DIR="$DATA_DIR/steam-session/local-appdata"
 
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# The admin's own script, given the event and its detail. It never holds up the host.
-run_hook() {
-  [ -x "$DATA_DIR/hooks/on-event" ] || return 0
-  timeout 60 "$DATA_DIR/hooks/on-event" "$@" >>"$LOG_DIR/hooks.log" 2>&1 &
-}
-
 # Why the last UE4SS install failed (its own last output line); absent = it did not.
 UE4SS_FAILED_FILE="$RUN_DIR/ue4ss-install-failed"
 # What only the loader provides. Without it the game still starts, signs in and
@@ -458,9 +452,8 @@ say_on_change() {
 # The signed-in account's steamid64, from Steam's config/loginusers.vdf; else empty.
 # $1 overrides the Steam folder (moonpool's SN2_STEAM_DIR).
 # One value from a Steam VDF/ACF text file: vdf_get <file> <key>, else nothing.
-# Shared here because the launcher reads the app manifest's buildid; it called this
-# before it was in reach, and every protocol answer said game_build_id "unknown"
-# after merging generated patterns.
+# Shared here because the launcher reads the app manifest's buildid before the protocol
+# module is in reach.
 SN2_STEAMFILE="$(dirname "${BASH_SOURCE[0]}")/steamfile.py"
 vdf_get() { python3 "$SN2_STEAMFILE" "$1" "$2"; }
 host_steamid() {

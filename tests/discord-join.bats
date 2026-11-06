@@ -233,6 +233,9 @@ echo 4242
   printf '{"ts":1700000000,"world_name":"All Blue","players":[]}' >"$CONTROL_DIR/status.json"
   run env SN2_NOW=1700000000 python3 "$ROOT/scripts/discord-notify.py" status
   [ "$status" -eq 0 ]
+  [ ! -e "$PUBLIC_DIR/card.json" ]
+  run env SN2_NOW=1700000000 PUBLISH_CARD=true python3 "$ROOT/scripts/discord-notify.py" status
+  [ "$status" -eq 0 ]
   [ "$(jq -r '"\(.ts) \(.world) \(.container.type)"' "$PUBLIC_DIR/card.json")" = '1700000000 All Blue 17' ]
   fake_discord; cp "$PUBLIC_DIR/card.json" "$FAKE/peer/card.json"; peer="http://127.0.0.1:$(cat "$FAKE/port")/peer"
   printf '{"ts":1700000000,"world_name":"Midnight Zone","players":[]}' >"$CONTROL_DIR/status.json"

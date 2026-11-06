@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Pins UE4SS by SHA-256 and lays out the loader and our mod for a
-# headless host.
 # Fetch UE4SS, verify it, lay it out next to the game, and add our mod.
 #
 # The loader is UE4SS's experimental build (release tag experimental-latest,

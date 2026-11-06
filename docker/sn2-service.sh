@@ -90,10 +90,8 @@ svc_steam() {
   fi
   persist_steam_session
   /opt/sn2/bin/steam-config.sh || { say "steam-config refused the settings; see $LOG_DIR"; sleep 30; exit 1; }
-  # steam.exe hands off to a client that is already running and exits at once,
-  # so the supervisor reran this every second and logged the start line each
-  # time (373 lines in 7 minutes). Start one client,
-  # wait on the one that runs, and log only when that state changes.
+  # steam.exe hands off to a client that is already running and exits at once:
+  # start one client, wait on the one that runs, and log only when that state changes.
   if steam_running; then
     say_on_change steam-client "Windows Steam client running; sign in on the viewer page if it asks"
     while steam_running; do sleep 5; done
@@ -169,8 +167,7 @@ svc_game() {
     rm -f "$HOST_ARMED_FILE"
     say "not arming: the loader is held back (${mode#held })"
   elif [ "$AUTO_HOST" = true ] && [ ! -f "$HOST_DISARMED_FILE" ]; then
-    # Written on EVERY launch, not only when absent: the working host's script
-    # never wrote it and a relaunch sat idle for 9 minutes.
+    # Written on every launch, not only when absent, so a relaunch is armed too.
     : >"$HOST_ARMED_FILE"
     say "AUTO_HOST: armed; the mod hosts once the lobby is reached ($PLAYER_SLOTS player slots, session limit $SESSION_LIMIT)"
   fi
