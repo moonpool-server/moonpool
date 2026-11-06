@@ -141,13 +141,20 @@ def depth_colour(depth):
     return STOPS[-1][1]
 
 
+MAX_PICTURE_BYTES = 20 * 1024 * 1024  # a tile or picture past this is treated as missing
+
+
 def fetch(url, cache):
     """One tile or picture, kept in the data volume so a still costs the network once."""
     path = cache / hashlib.sha256(url.encode()).hexdigest()
     if not path.exists():
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "moonpool"}), timeout=10) as r:
-                path.write_bytes(r.read())
+                body = r.read(MAX_PICTURE_BYTES + 1)
+            if len(body) > MAX_PICTURE_BYTES:
+                print(f"map: {url} is over {MAX_PICTURE_BYTES // (1024 * 1024)} MB, left out", file=sys.stderr)
+                body = b""
+            path.write_bytes(body)
         except urllib.error.HTTPError as err:
             if err.code != 404:
                 raise

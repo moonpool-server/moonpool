@@ -5,8 +5,10 @@
 #
 # During initial installation, the
 # request opened Steam's "Install" window and the recipe waited for a click
-# that never came. This finds Steam's install, disk-space/location and licence
-# (EULA) windows by title on $DISPLAY, activates each and presses its default
+# that never came. This finds Steam's install and disk-space/location windows by
+# title on $DISPLAY, activates each and presses its default button. A licence
+# (EULA) window is found and named in the log but never pressed: agreeing to terms
+# is a person's act, on the viewer page. It then presses its default
 # button (Enter), every CONFIRM_INTERVAL s until the game's manifest appears or
 # CONFIRM_TIMEOUT s pass. steam://install stays the only request path: no
 # second sign-in and no steamcmd.
@@ -67,6 +69,13 @@ confirm_once() {
     [ -n "$id" ] || continue
     title=$(xdotool getwindowname "$id" 2>/dev/null) || continue
     step=$(match_title "$title") || continue
+    if [ "$step" = eula ]; then
+      if [[ " $CONFIRM_SEEN " != *" $id "* ]]; then
+        clog "attempt $ATTEMPT: licence window '$title' (id $id) left for a person on the viewer; nothing here agrees to terms"
+        CONFIRM_SEEN="$CONFIRM_SEEN $id"
+      fi
+      continue
+    fi
     # windowactivate needs a window manager and the panel image runs none, so bound both
     # calls and focus the window directly when activation does not take.
     # Steam's dialogs are web views that ignore Enter, so a window still open on a later

@@ -22,6 +22,23 @@ def run(tmp, now, players, **env):
     return tmp / "public" / "map.json"
 
 
+def test_a_picture_over_the_size_cap_is_left_out_like_a_missing_tile() -> None:
+    import importlib.util
+    from unittest import mock
+    spec = importlib.util.spec_from_file_location("map_chart", SCRIPT)
+    chart = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(chart)
+
+    class Big:
+        def read(self, n=-1): return b"x" * (n if n > 0 else chart.MAX_PICTURE_BYTES + 1)
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    with tempfile.TemporaryDirectory() as d, mock.patch.object(chart.urllib.request, "urlopen", return_value=Big()):
+        assert chart.fetch("https://tiles.example/0/0/0.png", Path(d)) is None
+        cached = list(Path(d).iterdir())
+        assert len(cached) == 1 and cached[0].stat().st_size == 0
+
+
 def test_a_position_shows_only_after_the_delay_and_a_revisit_stays_hidden_history() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)

@@ -14,7 +14,7 @@ The viewer controls a signed in Steam so keep it off the internet. Use an SSH tu
 
 Use the hosting account with Steam Guard on and pick Remember me. To paste open the noVNC side panel and put it in the clipboard there then press Ctrl+V in Steam
 
-Moonpool never sees your password and it's not in `.env`. The sign in stays in the data volume and anything running in the container can use it, including the Steam web session the friend list uses. So use a dedicated account, keep Steam Guard on and keep the volume private
+Moonpool never sees your password and it's not in `.env`. The sign in stays in the data volume and anything running in the container can use it. To accept friend requests by itself Moonpool reads the Steam client's own web session out of its cookie store in the volume and talks to Steam as that account; `AUTO_ACCEPT_FRIENDS=0` turns that off and you accept requests in the viewer. So use a dedicated account, keep Steam Guard on and keep the volume private
 
 Lost the machine? Deauthorize devices in Steam and change the password. `docker compose down -v` deletes the world and its saves for good
 

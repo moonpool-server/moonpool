@@ -166,6 +166,8 @@ class CurseForgeTests(unittest.TestCase):
         self.assertTrue(source["allow_mod_distribution"])
         self.assertEqual(source["url"], "https://edge.forgecdn.net/example.zip")
         self.assertEqual(PUBLISH.archive_roots(archive, "ue4ss"), [{"name": "Example", "prefix": "Example"}])
+        self.assertEqual(source["hashes"][0], {"algorithm": "sha256", "value": hashlib.sha256(self.body).hexdigest()})
+        self.assertEqual([h["algorithm"] for h in source["hashes"]], ["sha256", "sha1"])
 
     def test_a_non_distributable_file_is_a_page_the_player_downloads_from(self):
         source, archive = self.resolve(False)

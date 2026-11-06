@@ -345,6 +345,9 @@ def resolve_curseforge(entry, install, key, temp_dir, name, kind):
     archive = temp_dir / file_data["fileName"]
     fetch_with_cf_key(url, archive, key)
     verify_hashes(archive, hashes)
+    # CurseForge's own hashes are sha1 and md5; the launcher checks every hash listed and
+    # names the archive by the first, so the server's sha256 of the bytes it verified leads.
+    source["hashes"] = [{"algorithm": "sha256", "value": sha256(archive)}] + hashes
     source["url"] = url
     return source, archive
 
