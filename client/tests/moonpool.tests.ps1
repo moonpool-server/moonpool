@@ -7,6 +7,7 @@ Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 
 $Script = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\moonpool\moonpool.ps1')).Path
+$env:SN2_JOIN_NO_DIALOG = '1'  # no window or message box on the desktop of whoever runs these
 $env:MOONPOOL_CLASSES_ROOT = 'HKCU:\Software\moonpool-tests'  # the link handler these runs write, never the user's
 $failures = 0
 $passes = 0
@@ -415,10 +416,13 @@ try {
   Write-Host 'a join link: only a safe address, and nothing else alongside it'
   $w9 = New-World; $worlds += $w9
   function Link-Run([string]$Args1) {
-    $env:SN2_JOIN_NO_DIALOG = '1'; $keep = $env:LOCALAPPDATA; $env:LOCALAPPDATA = $w9.Root
+    $keep = $env:LOCALAPPDATA; $env:LOCALAPPDATA = $w9.Root
     try { $o = & powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$Script' $Args1; exit `$LASTEXITCODE" 2>&1 | Out-String; return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o } }
-    finally { $env:LOCALAPPDATA = $keep; Remove-Item Env:SN2_JOIN_NO_DIALOG }
+    finally { $env:LOCALAPPDATA = $keep }
   }
+  $r = Link-Run '-Install'
+  $handler = (Get-ItemProperty -LiteralPath 'HKCU:\Software\moonpool-tests\moonpool\shell\open\command').'(default)'
+  Check ($handler -match 'conhost\.exe" --headless "[^"]+powershell\.exe" -NoProfile' -and $handler -match '-Link "%1"$') "the link runs the launcher with no console window (got: $handler)"
   $r = Link-Run "-Link 'moonpool:http://8.8.8.8:8081'"
   Check ($r.Code -ne 0 -and $r.Out -match 'not a server address') "plain http to the internet is refused (got: $($r.Out.Trim()))"
   $r = Link-Run "-Link 'moonpool:https://x.example/'' -Evil'"

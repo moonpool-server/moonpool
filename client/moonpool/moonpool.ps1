@@ -85,7 +85,85 @@ $ReleaseBase = 'https://github.com/moonpool-server/moonpool/releases/latest/down
 $MaxUnpackedBytes = 4GB
 $MaxArchiveEntries = 20000
 
-function Say([string]$Message) { Write-Host "moonpool: $Message" }
+function Say([string]$Message) {
+  Write-Host "moonpool: $Message"
+  if ($script:Ui) { Set-Status ($Message.Substring(0, 1).ToUpperInvariant() + $Message.Substring(1)) }
+}
+
+# The one window a player sees: what is happening, a bar, and every question on top of it.
+# Windows' own forms, because this launcher is one signed file. A test or console run has none.
+$script:Ui = $null
+$script:UiCancelled = $false
+$script:UiInstalling = $false
+$script:UiStep = 0
+$script:UiSteps = 0
+function Open-Window {
+  if ($script:Ui -or -not ($Link -or $Server) -or $env:SN2_JOIN_NO_DIALOG -or -not [Environment]::UserInteractive) { return }
+  try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    [Windows.Forms.Application]::EnableVisualStyles()
+    $form = New-Object Windows.Forms.Form
+    $form.Text = 'Subnautica 2 mods'
+    $form.ClientSize = New-Object Drawing.Size 460, 104
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $form.StartPosition = 'CenterScreen'
+    $form.TopMost = $true
+    $label = New-Object Windows.Forms.Label
+    $label.Location = New-Object Drawing.Point 16, 14
+    $label.Size = New-Object Drawing.Size 428, 44
+    $label.Font = New-Object Drawing.Font 'Segoe UI', 10
+    $label.Text = 'Getting ready'
+    $bar = New-Object Windows.Forms.ProgressBar
+    $bar.Location = New-Object Drawing.Point 16, 66
+    $bar.Size = New-Object Drawing.Size 428, 22
+    $bar.Style = 'Marquee'
+    $form.Controls.Add($label)
+    $form.Controls.Add($bar)
+    # Closing cancels while nothing is placed. Once files are moving it waits: they finish or are put back.
+    $form.add_FormClosing({ param($s, $e) if ($script:UiInstalling) { $e.Cancel = $true } else { $script:UiCancelled = $true } })
+    $form.Show()
+    $form.Activate()
+    [Windows.Forms.Application]::DoEvents()
+    $script:Ui = @{ Form = $form; Label = $label; Bar = $bar }
+  } catch { $script:Ui = $null }
+}
+
+# Percent is 0-100; below 0 the bar just moves, for a step with no known length.
+function Set-Status([string]$Text, [int]$Percent = -1) {
+  if (-not $script:Ui) { return }
+  if ($script:UiCancelled) {
+    $script:UiCancelled = $false
+    Close-Window
+    Fail 'you closed the window; nothing changed, game not started' 3
+  }
+  if ($Text) { $script:Ui.Label.Text = $Text }
+  if ($Percent -ge 0) {
+    # Stepping back past the value makes Windows draw it at once instead of animating towards it.
+    $bar = $script:Ui.Bar
+    $bar.Style = 'Continuous'
+    $bar.Maximum = 101
+    $bar.Value = [Math]::Min(100, $Percent) + 1
+    $bar.Value = [Math]::Min(100, $Percent)
+  }
+  [Windows.Forms.Application]::DoEvents()
+}
+
+function Close-Window {
+  if (-not $script:Ui) { return }
+  $form = $script:Ui.Form
+  $script:Ui = $null
+  $script:UiInstalling = $false
+  try { $form.Close(); $form.Dispose() } catch { }
+}
+
+# A yes or no in front of the window, so it can't open behind anything.
+function Show-Question([string]$Text) {
+  Add-Type -AssemblyName System.Windows.Forms
+  if ($script:Ui) { return [Windows.Forms.MessageBox]::Show($script:Ui.Form, $Text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes' }
+  return [Windows.Forms.MessageBox]::Show($Text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes'
+}
 
 # A failure the player should read as one plain line.
 function Fail([string]$Message, [int]$Code = 1) {
@@ -148,11 +226,7 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
     $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
       $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
     if ($where -and $known) { $text = "WARNING: this address had a different server key before. It may not be the same server.`n`n" + $text }
-    if ($Approve) { $yes = & $Approve $text }
-    else {
-      Add-Type -AssemblyName System.Windows.Forms
-      $yes = [Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes'
-    }
+    if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text }
     if (-not $yes) { Fail 'you declined; nothing changed, game not started. The join page can join without mods.' 3 }
   }
   Write-Json $path @($Lines)
@@ -228,7 +302,30 @@ function Resolve-Url([string]$Base, [string]$Value) {
 function Save-Url([string]$Url, [string]$Dest) {
   if ($Url -match '^https?://') {
     Use-Tls12
-    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Dest
+    $request = [Net.WebRequest]::Create($Url)
+    $request.UserAgent = 'moonpool launcher'
+    $request.Timeout = 60000
+    $request.ReadWriteTimeout = 60000
+    $response = $request.GetResponse()
+    try {
+      $in = $response.GetResponseStream()
+      $out = [IO.File]::Create($Dest)
+      try {
+        $buffer = New-Object byte[] 65536
+        $got = [long]0
+        $shown = [DateTime]::UtcNow
+        while (($n = $in.Read($buffer, 0, $buffer.Length)) -gt 0) {
+          $out.Write($buffer, 0, $n)
+          $got += $n
+          if ($script:Ui -and $script:UiSteps -gt 0 -and ([DateTime]::UtcNow - $shown).TotalMilliseconds -gt 100) {
+            $part = 0.0
+            if ($response.ContentLength -gt 0) { $part = [double]$got / $response.ContentLength }
+            Set-Status '' ([int](100 * (($script:UiStep - 1 + $part) / $script:UiSteps)))
+            $shown = [DateTime]::UtcNow
+          }
+        }
+      } finally { $out.Dispose(); $in.Dispose() }
+    } finally { $response.Close() }
   } else {
     # Local paths are for tests only: a server's file: address could reach a network share.
     if (-not ($script:AllowLocal -or $env:SN2_JOIN_UPDATE_URL)) { throw "not a web address: $Url" }
@@ -273,6 +370,14 @@ function Get-DownloadsFolder {
   return (Join-Path $env:USERPROFILE 'Downloads')
 }
 
+# conhost --headless runs PowerShell with no window, whichever terminal Windows defaults to.
+function Get-HiddenRun {
+  $conhost = "$env:SystemRoot\System32\conhost.exe"
+  $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+  if (Test-Path -LiteralPath $conhost) { return @{ Exe = $conhost; Prefix = "--headless `"$ps`" " } }
+  return @{ Exe = $ps; Prefix = '' }
+}
+
 function Install-Launcher {
   New-Item -ItemType Directory -Path $KitHome -Force | Out-Null
   if ([IO.Path]::GetFullPath($PSCommandPath) -ine [IO.Path]::GetFullPath($InstalledScript)) {
@@ -284,8 +389,8 @@ function Install-Launcher {
   New-Item -Path "$key\shell\open\command" -Force | Out-Null
   Set-ItemProperty -LiteralPath $key -Name '(default)' -Value 'URL:Subnautica 2 server'
   Set-ItemProperty -LiteralPath $key -Name 'URL Protocol' -Value ''
-  $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-  Set-ItemProperty -LiteralPath "$key\shell\open\command" -Name '(default)' -Value "`"$ps`" -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Link `"%1`""
+  $run = Get-HiddenRun
+  Set-ItemProperty -LiteralPath "$key\shell\open\command" -Name '(default)' -Value "`"$($run.Exe)`" $($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Link `"%1`""
 }
 
 function Install-ServerShortcuts($Config, [string]$ServerId) {
@@ -299,8 +404,10 @@ function Install-ServerShortcuts($Config, [string]$ServerId) {
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder "Subnautica 2 ($server).lnk"))
-    $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Server $ServerId"
+    $run = Get-HiddenRun
+    $shortcut.TargetPath = $run.Exe
+    $shortcut.Arguments = "$($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Server $ServerId"
+    $shortcut.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
     $shortcut.WorkingDirectory = $KitHome
     $shortcut.Save()
   }
@@ -400,9 +507,11 @@ function Update-Launcher {
   Say 'updated the launcher; restarting'
   if ($Launch) { & $Launch 'self-update' }
   else {
-    $again = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $InstalledScript)
-    if ($Link) { $again += @('-Link', $Link) } elseif ($Server) { $again += @('-Server', $Server) }
-    Start-Process powershell.exe -ArgumentList $again
+    $run = Get-HiddenRun
+    $again = "$($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`""
+    if ($Link) { $again += " -Link `"$Link`"" } elseif ($Server) { $again += " -Server `"$Server`"" }
+    Close-Window
+    Start-Process $run.Exe -ArgumentList $again
   }
   return $true
 }
@@ -525,11 +634,7 @@ function Confirm-Unscanned([string]$Archive, [string]$Label, [string]$ServerId) 
   $okayed = @(Read-Json $path @())
   if ($okayed -contains $sha) { return }
   $text = "${Label} could not be scanned by Windows Defender (not installed, or the scan failed).`n`nNothing says it is safe. Install it anyway?"
-  if ($Approve) { $yes = & $Approve $text }
-  else {
-    Add-Type -AssemblyName System.Windows.Forms
-    $yes = [Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes'
-  }
+  if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text }
   if (-not $yes) { Fail "${Label}: not scanned and you declined; nothing changed, game not started" 3 }
   Write-Json $path @($okayed + $sha)
 }
@@ -537,8 +642,8 @@ function Confirm-Unscanned([string]$Archive, [string]$Label, [string]$ServerId) 
 # A signed hash proves the player got the archive the server inspected, not that the
 # archive is safe: every entry is checked before anything is unpacked.
 function Assert-ArchiveSafe([string]$Archive, [string]$Label) {
+  Say "Checking $Label with Windows Defender"
   $verdict = Get-DefenderVerdict $Archive
-  Say "${Label}: Defender verdict $verdict"
   if ($verdict -eq 'threat') { Fail "${Label}: Windows Defender flagged this file; nothing changed, game not started" }
   if ($verdict -ne 'clean') { Confirm-Unscanned $Archive $Label $script:ServerId }
   Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -698,6 +803,7 @@ function Invoke-Join {
     Say "installed. Go back to the server's join page and press Play with mods."
     return
   }
+  Open-Window
   if (Update-Launcher) { return }
   $cfg = $null; $serverId = ''
   if ($Server -match '^[0-9a-f]{16}$') {
@@ -727,7 +833,8 @@ function Invoke-Join {
   if (-not $root) { $root = Get-DefaultSteamRoot }
   Test-GameBuild $manifest (Find-AppManifest $root $appId)
   $game = Find-GameFolder $root $appId
-  Say "game found at $game"
+  Write-Host "moonpool: game found at $game"
+  Set-Status 'Found the game'
   if (-not $serverId) { $serverId = 'test-' + ([string](Get-Prop (Get-Prop $manifest 'server' $null) 'id' 'none') -replace '[^A-Za-z0-9-]', '_') }
   $ledgerPath = Join-Path $KitHome 'owned.json'
   $ledger = Read-Ledger $ledgerPath
@@ -806,10 +913,14 @@ function Invoke-Join {
     $expectedFiles[$ModName] = $proof.ToArray()
   }
 
+  $script:UiSteps = ($wanted | Measure-Object).Count
+  if ($loaderSpec) { $script:UiSteps += 1 }
   foreach ($mod in $wanted) {
     $key = "$serverId/$($mod.Name)"
+    $script:UiStep++
     if (Test-ModCurrent $mod) { continue }
     $staleKeys.Add($key)
+    Set-Status "Downloading $($mod.Name) ($script:UiStep of $script:UiSteps)" ([int](100 * ($script:UiStep - 1) / $script:UiSteps))
     $archive = Get-ModArchive $mod $script:Work
     $files = Expand-ModArchive $mod $archive $script:Work
     Add-ToPlan $mod.Name (Get-ModTargets $mod $game) $files
@@ -826,6 +937,8 @@ function Invoke-Join {
     $loaderMod = [pscustomobject]@{ Name = 'UE4SS'; Identity = 'loader'; Version = [string](Get-Prop $loaderSpec 'asset' ''); ArchiveSha = ([string](Get-Prop $loaderSpec 'sha256' '')).ToLowerInvariant() }
     if (-not (Test-ModCurrent $loaderMod)) {
       $staleKeys.Add("$serverId/UE4SS")
+      $script:UiStep = $script:UiSteps
+      Set-Status "Downloading the mod loader ($script:UiStep of $script:UiSteps)" ([int](100 * ($script:UiStep - 1) / $script:UiSteps))
       $loaderFiles = Get-LoaderFiles $loaderSpec $game $script:Work
       $before = $plan.Count
       Add-ToPlan 'UE4SS' $win64 $loaderFiles
@@ -874,6 +987,8 @@ function Invoke-Join {
     foreach ($path in @($desired.Keys)) { $ledger.files[$path] = $desired[$path] }
     foreach ($k in $staleKeys) { $ledger.mods.Remove($k) }
     Write-Ledger $ledgerPath $ledger
+    Set-Status 'Installing mods' 100
+    $script:UiInstalling = $true
     try { Install-Plan $plan $removals $script:Work }
     catch {
       if ($null -ne $ledgerBefore) { [IO.File]::WriteAllText($ledgerPath, $ledgerBefore) }
@@ -899,8 +1014,11 @@ function Invoke-Join {
   if ($session -and [string](Get-Prop $session 'lobby_id' '') -match '^[0-9]+$' -and [string](Get-Prop $session 'host_steamid' '') -match '^[0-9]+$') {
     $url = "steam://joinlobby/$appId/$($session.lobby_id)/$($session.host_steamid)"
   }
-  Say "starting the game through $url"
+  Write-Host "moonpool: starting the game through $url"
+  $script:UiInstalling = $false
+  Set-Status 'Starting Subnautica 2 through Steam' 100
   if ($Launch) { & $Launch $url } else { Start-Process $url }
+  for ($wait = 0; $script:Ui -and $wait -lt 20; $wait++) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
 }
 
 try {
@@ -909,14 +1027,17 @@ try {
 } catch {
   $code = 1
   if ($_.Exception.Data.Contains('sn2code')) { $code = [int]$_.Exception.Data['sn2code'] }
-  Say $_.Exception.Message
+  $script:UiCancelled = $false
+  Write-Host "moonpool: $($_.Exception.Message)"
   # A link or shortcut has no console left open to read this in.
   if (($Link -or $Server) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     Add-Type -AssemblyName System.Windows.Forms
-    [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Subnautica 2 mods')
+    if ($script:Ui) { [void][Windows.Forms.MessageBox]::Show($script:Ui.Form, $_.Exception.Message, 'Subnautica 2 mods') }
+    else { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Subnautica 2 mods') }
   }
   exit $code
 } finally {
+  Close-Window
   if ($script:Work -and (Test-Path -LiteralPath $script:Work)) {
     Remove-Item -LiteralPath $script:Work -Recurse -Force -ErrorAction SilentlyContinue
   }
