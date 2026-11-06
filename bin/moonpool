@@ -65,7 +65,7 @@ The world
   world weather <type>         set the weather to a loaded type (DA_ prefix optional)
   settings apply               copy ./settings.yaml (beside .env) to the mod and re-read it
   mods list                    the mods this server asks players for, as published
-  mods publish                 turn control/plugins.yaml into the signed manifest now
+  mods publish [plugins.yaml]  copy that file in (if given) and turn it into the signed manifest
   mods pin <name> <archive>    record a hand-downloaded archive (Nexus) for one entry
   mods enable|disable <name>   switch one entry on or off in plugins.yaml and republish
   map where <player>           where that player is now, in game units, to line up a map
@@ -133,7 +133,7 @@ STATES = {"ok": ("verified", 0), "accepted": ("submitted", 0), "pending": ("pend
 
 WORLD_USAGE = "usage: moonpool world [time <HH:MM|frozen|normal> | weather <type>]"
 MAP_USAGE = "usage: moonpool map where <player> | bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>"
-MODS_USAGE = "usage: moonpool mods list | publish | pin <name> <archive.zip> | enable <name> | disable <name>"
+MODS_USAGE = "usage: moonpool mods list | publish [plugins.yaml] | pin <name> <archive.zip> | enable <name> | disable <name>"
 SERVER_USAGE = ("usage: moonpool server start | stop [--now] | restart [--now|--force] | cancel | arm | disarm | saves | "
                 "host [save] [--now] | slots <N> | backup | restore <backup> [save] | save")
 
@@ -748,8 +748,11 @@ def inner(r):
     if op == "mods_list":
         mods_list(a)
     if op == "mods_publish":
-        if n:
-            usage_error("usage: moonpool mods publish")
+        if n == 2 and a[0] == "--from":  # the admin's file, uploaded under this run's id
+            install_file(Path(a[1]).read_text(encoding="utf-8"), Path(control_dir()) / "plugins.yaml")
+            drop_staged(a[1])
+        elif n:
+            usage_error("usage: moonpool mods publish [plugins.yaml]")
         rc, out = run_helper("mod-service.sh", "publish")
         res = read_json_text(out) or {}
         if rc != 0:
@@ -774,7 +777,7 @@ def inner(r):
             usage_error(f"no such archive: {file}")
         rc, out = run_helper("mod-service.sh", "pin", name, file)
         if from_host:
-            Path(file).unlink(missing_ok=True)
+            drop_staged(file)
         res = read_json_text(out) or {}
         if rc != 0:
             finish("refused", f"pin failed: {res.get('error') or 'unknown error'}", "", res)
@@ -795,7 +798,7 @@ def inner(r):
             usage_error("usage: moonpool settings apply")
         if n == 3 and a[1] == "--from":  # uploaded under this run's id: install and apply in one locked run
             install_settings(a[2])
-            Path(a[2]).unlink(missing_ok=True)
+            drop_staged(a[2])
         elif n != 1:
             usage_error("usage: moonpool settings apply")
         f = c / "settings.yaml"
@@ -1051,6 +1054,15 @@ def republish():
     Path(run_dir()).mkdir(parents=True, exist_ok=True)
     rc, out = run_helper("mod-service.sh", "publish")
     (Path(run_dir()) / "mod-publish.json").write_text(out, encoding="utf-8")
+
+
+def drop_staged(path):
+    """A file the host copied in with docker compose cp lands owned by root in /tmp, which this
+    user may not delete; it is small and /tmp is the container's own, so a refusal is not an error."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def install_settings(path):
@@ -1398,6 +1410,12 @@ def outer(r):
         if not R["json"]:
             compose("ps", SERVICE)
         forward(["status", *a])
+    if op == "mods_publish" and n:
+        if n != 1 or not Path(a[0]).is_file():
+            usage_error("usage: moonpool mods publish [plugins.yaml]  (a file on this host)")
+        staged = f"/tmp/sn2-plugins-{R['request_id']}.yaml"
+        run_compose("cp", a[0], f"{SERVICE}:{staged}")
+        forward(["mods", "publish", "--from", staged])
     if op == "mods_pin":
         if n != 2:
             usage_error("usage: moonpool mods pin <name> <archive.zip>")

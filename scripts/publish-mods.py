@@ -46,6 +46,10 @@ APP_ID = "1962700"
 SCHEMA = 3
 TRIO = {".pak", ".ucas", ".utoc"}
 CF_API = os.environ.get("CURSEFORGE_API_URL", "https://api.curseforge.com/v1").rstrip("/")
+CF_GAME_ID = int(os.environ.get("CURSEFORGE_GAME_ID", "99704"))  # Subnautica 2 on CurseForge
+URL_SHAPES = ("https://github.com/<owner>/<repo>/releases/download/<tag>/<file>, "
+              "https://www.curseforge.com/subnautica-2/<category>/<mod>/files/<file id>, "
+              "https://www.nexusmods.com/subnautica2/mods/<id>?tab=files&file_id=<file id>")
 CF_HASHES = {1: "sha1", 2: "md5"}
 CF_DOWNLOAD_HOSTS = (".curseforge.com", ".forgecdn.net")
 # The loader players get is the host's own pinned build, from this repository's
@@ -240,6 +244,35 @@ def choose_root(roots, install, name):
 
 # ---- sources --------------------------------------------------------------------
 
+def install_from_url(install, name):
+    """install.url is the link an admin copies from the mod's release or file page. It fills
+    in the fields the resolvers read, and the type when none is given. Explicit fields win."""
+    url = str(install.get("url", "") or "").strip()
+    if not url:
+        return install
+    parts = urllib.parse.urlsplit(url)
+    host, path = parts.netloc.lower(), parts.path
+    m = re.match(r"^/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/releases/download/([^/]+)/([^/]+)$", path)
+    if host == "github.com" and m:
+        install.setdefault("type", "github")
+        install.setdefault("repo", m.group(1)); install.setdefault("tag", urllib.parse.unquote(m.group(2)))
+        install.setdefault("asset", urllib.parse.unquote(m.group(3)))
+        return install
+    m = re.match(r"^/[^/]+/[^/]+/([A-Za-z0-9_-]+)/files/(\d+)", path)
+    if host in ("www.curseforge.com", "curseforge.com") and m:
+        install.setdefault("type", "curseforge")
+        install.setdefault("slug", m.group(1)); install.setdefault("file_id", int(m.group(2)))
+        return install
+    m = re.match(r"^/subnautica2/mods/(\d+)", path)
+    q = urllib.parse.parse_qs(parts.query)
+    if host in ("www.nexusmods.com", "nexusmods.com") and m and q.get("file_id"):
+        install.setdefault("type", "nexus")
+        install.setdefault("mod_id", int(m.group(1))); install.setdefault("file_id", int(q["file_id"][0]))
+        return install
+    raise ValueError(f"{name}: install.url is not a link this reads; paste one shaped like {URL_SHAPES}")
+
+
+
 def github_url(install, name):
     repo, tag, asset = install.get("repo", ""), install.get("tag", ""), install.get("asset", "")
     if not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", repo):
@@ -284,6 +317,11 @@ def resolve_nexus(entry, install, pins, name):
 
 def resolve_curseforge(entry, install, key, temp_dir, name, kind):
     project_id = install.get("project_id")
+    if project_id is None and install.get("slug"):  # from a pasted file link: the project by its slug
+        found = cf_get(f"/mods/search?gameId={CF_GAME_ID}&slug={urllib.parse.quote(str(install['slug']))}", key)
+        if not found:
+            raise ValueError(f"{name}: CurseForge has no Subnautica 2 project called {install['slug']!r}")
+        project_id = install["project_id"] = int(found[0]["id"])
     if not isinstance(project_id, int) or project_id <= 0:
         raise ValueError(f"{name}: install.project_id must be a positive number")
     project = cf_get(f"/mods/{project_id}", key)
@@ -336,6 +374,7 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
     install = entry.get("install")
     if not isinstance(install, dict):
         return None
+    install_from_url(install, name)
     kind = str(install.get("kind", "ue4ss")).lower()
     if kind not in ("ue4ss", "pak"):
         raise ValueError(f"{name}: install.kind must be ue4ss or pak")
@@ -556,6 +595,7 @@ def pin(args):
     install = entry.get("install")
     if not isinstance(install, dict):
         raise ValueError(f"{args.name}: has no install: block to pin")
+    install_from_url(install, args.name)  # a pasted link gains its fields here, and the pin beside them
     archive = Path(args.archive)
     if not archive.is_file():
         raise ValueError(f"no such file: {archive}")

@@ -66,6 +66,43 @@ class ArchiveRootsTests(unittest.TestCase):
             PUBLISH.choose_root(roots, {"folder": "C"}, "Bundle")
 
 
+class InstallUrlTests(unittest.TestCase):
+    def test_a_github_release_link_fills_repo_tag_and_asset(self):
+        install = PUBLISH.install_from_url({"url": "https://github.com/a/b/releases/download/v2.9/More%20Slots.zip"}, "X")
+        self.assertEqual((install["type"], install["repo"], install["tag"], install["asset"]), ("github", "a/b", "v2.9", "More Slots.zip"))
+
+    def test_a_curseforge_file_link_fills_slug_and_file_id_and_the_project_is_found_by_slug(self):
+        install = PUBLISH.install_from_url({"url": "https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap/files/8164990"}, "X")
+        self.assertEqual((install["type"], install["slug"], install["file_id"]), ("curseforge", "simple-minimap", 8164990))
+        calls = []
+
+        def fake_get(path, _key):
+            calls.append(path)
+            if path.startswith("/mods/search?"):
+                return [{"id": 77, "slug": "simple-minimap"}]
+            if path == "/mods/77":
+                return {"allowModDistribution": False, "links": {"websiteUrl": "https://curseforge.test/simple-minimap"}}
+            if path == "/mods/77/files/8164990":
+                return {"id": 8164990, "fileName": "map.zip", "fileLength": 1, "isAvailable": True,
+                        "hashes": [{"algo": 1, "value": "0" * 40}]}
+            raise AssertionError(path)
+        with mock.patch.object(PUBLISH, "cf_get", fake_get):
+            source, _ = PUBLISH.resolve_curseforge({}, install, "k", Path("."), "X", "ue4ss")
+        self.assertEqual(install["project_id"], 77)
+        self.assertEqual(calls[0], f"/mods/search?gameId={PUBLISH.CF_GAME_ID}&slug=simple-minimap")
+        self.assertEqual(source["page"], "https://curseforge.test/simple-minimap")
+
+    def test_a_nexus_file_link_fills_mod_and_file_ids(self):
+        install = PUBLISH.install_from_url({"url": "https://www.nexusmods.com/subnautica2/mods/196?tab=files&file_id=1234"}, "X")
+        self.assertEqual((install["type"], install["mod_id"], install["file_id"]), ("nexus", 196, 1234))
+
+    def test_explicit_fields_win_and_other_links_are_refused(self):
+        install = PUBLISH.install_from_url({"url": "https://github.com/a/b/releases/download/v1/x.zip", "tag": "v2"}, "X")
+        self.assertEqual(install["tag"], "v2")
+        with self.assertRaisesRegex(ValueError, "not a link this reads"):
+            PUBLISH.install_from_url({"url": "https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap"}, "X")
+
+
 class GitHubPinTests(unittest.TestCase):
     def test_bytes_that_change_under_a_tag_are_refused_until_repinned(self):
         with tempfile.TemporaryDirectory() as tmp:

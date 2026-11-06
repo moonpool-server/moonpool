@@ -32,10 +32,11 @@ Experimental. They can't be invited through Steam. They add the hosting account 
 
 ```sh
 cp plugins.example.yaml plugins.yaml   # edit it with any editor
-docker compose cp plugins.yaml sn2:/home/container/control/plugins.yaml
-bin/moonpool mods publish
+bin/moonpool mods publish plugins.yaml
 bin/moonpool mods list
 ```
+
+An entry needs the mod's download link and nothing else: a GitHub release file, a CurseForge file page or a Nexus file page. CurseForge needs your own API key in `.env` (`CURSEFORGE_API_KEY`, free at console.curseforge.com) and a mod whose author allows distribution; otherwise players download that one from its page
 
 A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players then download it themselves and the launcher checks it matches
 

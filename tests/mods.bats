@@ -221,7 +221,19 @@ EOF
   [ "$(jq -r '.mods | length' "$DATA_DIR/public/mods.json")" -eq 1 ]
   run "$CTL" mods
   [ "$status" -ne 0 ]
-  [[ "$output" == *'usage: moonpool mods list | publish | pin'* ]]
+  [[ "$output" == *'usage: moonpool mods list | publish [plugins.yaml] | pin'* ]]
+}
+
+@test "moonpool mods publish --from installs the uploaded list first, then publishes it" {
+  printf 'plugins:\n  - name: Loader\n    version: "2.0"\n    tier: mandatory\n    install: { type: local, kind: ue4ss }\n' >"$BATS_TEST_TMPDIR/new.yaml"
+  run "$CTL" --json mods publish --from "$BATS_TEST_TMPDIR/new.yaml"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(jq -r '.data.mods' <<<"$output")" -eq 1 ]
+  grep -q 'version: "2.0"' "$SN2_CONTROL_DIR/plugins.yaml"
+  [ ! -e "$BATS_TEST_TMPDIR/new.yaml" ]
+  [ "$(jq -r '.mods[0].version' "$DATA_DIR/public/mods.json")" = "2.0" ]
+  run "$CTL" mods publish extra words
+  [ "$status" -ne 0 ]
 }
 
 @test "a server that never listed a mod publishes nothing; one that drops its last mod publishes an empty signed list" {

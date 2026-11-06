@@ -10,6 +10,13 @@
 # start, removes what the server stops asking for, and joins. An entry WITHOUT
 # one is a link on the join page the player follows themselves.
 #
+# The short form: paste the download link and nothing else.
+#   install: { url: https://github.com/32Kallies/Subnautica2Mods/releases/download/v2.9/MoreQuickSlots.zip }
+#   install: { url: https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap/files/8164990 }
+#   install: { url: https://www.nexusmods.com/subnautica2/mods/196?tab=files&file_id=1234 }
+# The link says which site it is; the fields below are read from it. Spell them out only
+# to override one.
+#
 # Where a mod comes from (install.type):
 #   github      a release asset; fetched and hashed here, refused if the bytes
 #               ever change under the same tag (re-pin on purpose: moonpool mods pin)
@@ -49,12 +56,12 @@
 #     summary: "Raises the player cap; the server runs it, players do not need it."
 #     source:  "https://github.com/Zeusfail/Too-Many-Divers"
 #     side:    host
-#   - name: "Propulsion Tweaks"
-#     summary: "Matches the host's vehicle-speed settings (join may desync without it)."
-#     source:  "https://www.curseforge.com/subnautica-2/ue4ss-mods/sn2propulsiontweaks"
-#     tier:    mandatory
-#     version: "1.3"
-#     install: { type: curseforge, project_id: 123456, file_id: 789012 }
+#   - name: "Simple Minimap"
+#     summary: "A minimap in the top right. M for the big map, H hides it."
+#     source:  "https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap"
+#     tier:    optional
+#     version: "1.0"
+#     install: { url: https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap/files/8164990 }
 #   - name: "Bigger FoV"
 #     summary: "Wider field of view."
 #     source:  "https://www.nexusmods.com/subnautica2/mods/196"

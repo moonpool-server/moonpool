@@ -18,7 +18,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 Run these in a terminal on the machine that will host the server
 
 ```sh
-git clone --branch v0.3.1 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
+git clone --branch v0.3.2 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -62,16 +62,16 @@ The Discord card and the join page, as players see them
 
 ## Mods
 
-Your mod list lives inside the server's data volume. Copy [plugins.example.yaml](plugins.example.yaml) in
+Copy [plugins.example.yaml](plugins.example.yaml), paste in each mod's download link and publish
 
 ```sh
 cp plugins.example.yaml plugins.yaml   # edit it with any editor
-docker compose cp plugins.yaml sn2:/home/container/control/plugins.yaml
+bin/moonpool mods publish plugins.yaml
 ```
 
 Your join page then offers Play with mods
 
-Players install our launcher once: [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which is what the join page hands them. It shows them what your server wants and asks before installing anything and asks again when that changes. It keeps them on your versions from then on
+Players install our launcher once: [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which is what the join page hands them. It shows them what your server wants and asks before installing anything and asks again when that changes. It keeps them on the exact files you published from then on
 
 Mods run with the player's Windows rights and nobody here reviews them so only say yes to a host you trust. The launcher asks Windows Defender to scan each download when Defender is available but a clean scan doesn't prove a mod is safe. A saved yes stays until the list changes. A new key at the same address counts as a new server and warns you
 
