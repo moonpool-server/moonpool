@@ -561,7 +561,7 @@ policy_env() {
 
 @test "in-game beacon admin policy passes its pure Lua spec" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
-  run lua5.4 tests/lua/admin_beacon_spec.lua
+  run lua5.4 tests/lua/admin_signal_spec.lua
   echo "$output"
   [ "$status" -eq 0 ]
   [[ "$output" == *"all passed"* ]]

@@ -693,8 +693,8 @@ end
 -- In-game administration through the PDA's own Signals > EDIT screen. The
 -- hook copies plain values only; all policy and game work waits for the next
 -- game-thread poll. Ordinary signal names never enter this queue.
-local admin_beacon = require('admin_beacon')
-local ADMIN = admin_beacon.new({ admins = os.getenv('SN2_ADMINS') or '',
+local admin_signal = require('admin_signal')
+local ADMIN = admin_signal.new({ admins = os.getenv('SN2_ADMINS') or '',
   prefix = os.getenv('SN2_ADMIN_PREFIX') or '!' })
 local ADMIN_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetPingDisplayName'
 local COLOR_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetThumbnailColor'
@@ -724,7 +724,7 @@ local function admin_identity(component)
     if not pc.NetConnection then pc = pc:GetOwner() end
     connection = pc.NetConnection:GetFName():ToString()
   end)
-  return { name = name or '?', eos = admin_beacon.connection_id(ADMIN, connection) }
+  return { name = name or '?', eos = admin_signal.connection_id(ADMIN, connection) }
 end
 
 local function admin_receipt(sender, command, r)
@@ -733,7 +733,7 @@ local function admin_receipt(sender, command, r)
   local request_id = string.format('%08x%08x%08x%08x', os.time() % 0x100000000,
     math.random(0, 0x7fffffff), math.random(0, 0x7fffffff), math.random(0, 0x7fffffff))
   f:write(json.encode({ schema_version = 1, request_id = request_id,
-    actor = sender.eos or sender.name, source = 'in_game', command = 'admin.beacon',
+    actor = sender.eos or sender.name, source = 'in_game', command = 'admin.signal',
     arguments = { command = command }, started_at = os.date('!%Y-%m-%dT%H:%M:%SZ'),
     completed_at = os.date('!%Y-%m-%dT%H:%M:%SZ'), duration_ms = 0,
     exit_code = r.ok and 0 or 77, ok = r.ok, state = r.ok and 'submitted' or 'refused',
@@ -851,7 +851,7 @@ local function admin_drain()
   local q; admin_queue, q = {}, admin_queue
   for _, item in ipairs(q) do
     local sender = item.sender
-    local r = admin_beacon.run(ADMIN, sender, item.text, { now = os.time, call = admin_call })
+    local r = admin_signal.run(ADMIN, sender, item.text, { now = os.time, call = admin_call })
     if r and r.silent then
       -- A non-admin: no reply, no restore, no receipt; logged once a minute.
       if r.log then
@@ -896,7 +896,7 @@ LoopAsync(5000, function()
           admin_queue[#admin_queue + 1] = { sender = sender, ping_id = ping_id, text = text, old_name = old }
         end)
         admin_hooked = true
-        log('admin beacon hook registered on game thread')
+        log('admin signal hook registered on game thread')
       end
     end
     if not color_hooked then
@@ -1139,8 +1139,8 @@ local function hold_poll()
   local lines
   lines, hold_buf = hold.split_new(hold_buf, chunk)
   for _, l in ipairs(lines) do
-    admin_beacon.note_connection(ADMIN, l)
-    local player, id = admin_beacon.login_label(l)
+    admin_signal.note_connection(ADMIN, l)
+    local player, id = admin_signal.login_label(l)
     if player then log('player ' .. player .. ' eos=' .. id) end -- the value ADMINS takes
     if LIFEPOD_JOIN_HOLD then hold_act(hold.line(HOLD, l, os.time())) end
     if UNLOCK_REPLAY_ENABLED then pcall(unlock_line, l) end

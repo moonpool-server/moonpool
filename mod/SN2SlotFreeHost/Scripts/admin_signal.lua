@@ -1,6 +1,6 @@
--- admin_beacon.lua: pure policy for commands entered by renaming a PDA signal.
+-- admin_signal.lua: pure policy for commands entered by renaming a PDA
 -- The game, clock and command handlers are supplied through `g`, so this file
--- is exercised by tests/lua/admin_beacon_spec.lua without UE4SS.
+-- is exercised by tests/lua/admin_signal_spec.lua without UE4SS.
 local M = {}
 
 M.MAX_REPLY = 40
