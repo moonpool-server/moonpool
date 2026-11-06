@@ -488,6 +488,8 @@ def publish_card(container, world):
         if E.get("PUBLISH_CARD") == "true":  # what the card shows, for another world's board; names included
             write(PUBLIC / "card.json.tmp", dumps({"ts": now(), "world": world, "container": container}))
             os.replace(PUBLIC / "card.json.tmp", PUBLIC / "card.json")
+        else:
+            (PUBLIC / "card.json").unlink(missing_ok=True)
     except OSError:
         pass
 
