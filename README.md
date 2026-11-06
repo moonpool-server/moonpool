@@ -40,7 +40,7 @@ The Discord card and the join page, as players see them
 
 ![The Discord card: two worlds, who is on, the codes to add and a Join button](docs/images/discord-card.png)
 
-![The join page: one button that opens the game through Steam](docs/images/join-page.png)
+![The join page: Play with mods installs the list and joins, or join without them](docs/images/join-page.png)
 
 ## What's exposed
 
@@ -71,11 +71,11 @@ bin/moonpool mods publish plugins.yaml
 
 Your join page then offers Play with mods
 
-Players install our launcher once: [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which is what the join page hands them. It shows them what your server wants and asks before installing anything and asks again when that changes. It keeps them on the exact files you published from then on
+Players install the launcher once, [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which the join page links. It shows them what your server wants, asks before installing anything and asks again when that changes. From then on it keeps them on the exact files you published
 
-Mods run with the player's Windows rights and nobody here reviews them so only say yes to a host you trust. The launcher asks Windows Defender to scan each download when Defender is available but a clean scan doesn't prove a mod is safe. A saved yes stays until the list changes. A new key at the same address counts as a new server and warns you
+Mods run with the player's Windows rights and nobody here reviews them, so only say yes to a host you trust. A saved yes stays until the list changes and a new key at the same address counts as a new server
 
-The launcher comes only from this repo's releases. Setup and every update check its signature and the private key isn't on GitHub. It has no Windows code signing so Windows may warn about it. You can also check a copy against its release
+The launcher comes only from this repo's releases. Setup and every update check its signature and the private key isn't on GitHub. It has no Windows code signing so Windows may warn about it. To check a copy against its release
 
 ```sh
 gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-workflow moonpool-server/moonpool/.github/workflows/ci.yml
@@ -83,7 +83,7 @@ gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-work
 
 ## Does it work
 
-Tested by hand with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. The fix in v0.3.0 for the crash on join has had short sessions only, on experimental build `26283380`. CI runs the code's own tests but not the real game
+Tested by hand with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. The fix in v0.3.0 for the crash on join and the mod install through the launcher have had short sessions only, one player on experimental build `26283380`. CI runs the code's own tests but not the real game
 
 A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. Moonpool supports the game's public branch. Other branches need files for their exact build that this project doesn't ship
 
@@ -104,7 +104,7 @@ Issues and pull requests are welcome. `pre-commit run --all-files` runs the same
 
 Moonpool's own code is MIT licensed so you can reuse it. That licence covers only this code. The game and Steam have their own terms and MIT can't change those
 
-This is unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve. Owning the game doesn't override the game's or Steam's terms and nothing here changes that. Read both sets of terms before you run it
+Owning the game doesn't override the game's or Steam's terms and nothing here changes that. Read both sets of terms before you run it
 
 The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is with KRAFTON. It limits the game to personal non-commercial use. It bars modifying the game and using it with unauthorized software, bots or scripts and it says breaking its terms can end your licence. Moonpool loads a mod into the game so running it goes against those terms as written
 
@@ -112,7 +112,7 @@ The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agree
 
 Unknown Worlds doesn't officially support mods yet. KRAFTON, Unknown Worlds or Valve could act against this project or the hosting account. Use a spare account you can afford to lose and decide for yourself. This isn't legal advice
 
-We try to stay out of the studio's way. Moonpool ships no game files, no data taken from them and none of the game's art. Its code does name objects in the game so it can call them. It has no item spawning or teleport commands. It hosts four players by default, the game's own limit. If something breaks take mods out and check the game alone before you report anything to Unknown Worlds, and report Moonpool problems here
+We try to stay out of the studio's way. Moonpool ships no game files, no data taken from them and none of the game's art. Its code does name objects in the game so it can call them. Its own commands don't spawn items or teleport anyone, and the game's console is reachable from the host only if you turn that on. It hosts four players by default, the game's own limit. If something breaks take mods out and check the game alone before you report anything to Unknown Worlds, and report Moonpool problems here
 
 If Unknown Worlds or KRAFTON ask us to change or stop something we'll do it. If an official dedicated server covers what this does we'll point people to it
 
