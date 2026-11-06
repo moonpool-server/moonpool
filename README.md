@@ -38,7 +38,7 @@ Anyone already friends with the hosting account can join too, so use a fresh acc
 
 The Discord card and the join page, as players see them
 
-![The Discord card: two worlds, who is on, the codes to add and a Join button](docs/images/discord-card.png)
+![The Discord card: who is on, the codes to add, the map and a Join button](docs/images/discord-card.png)
 
 ![The join page: Play with mods installs the list and joins, or join without them](docs/images/join-page.png)
 
