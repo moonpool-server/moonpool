@@ -28,6 +28,7 @@ from PIL import Image, ImageDraw
 STILL_W = 1200  # the still's width in pixels; link previews want about this
 FOCUS_MIN_M = 800  # the still never shows less than this across
 FOCUS_PAD_M = 150  # room around the outermost dot
+STILL_VERSION = 2  # bump when the drawing changes, so a cached still is fetched again
 STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
 CELL_M = 50  # one square on the chart
@@ -305,7 +306,7 @@ def main():
         print("map-chart: no background: %s" % err, file=sys.stderr)
     page_data["background"] = page_data["backgrounds"][0] if page_data["backgrounds"] else None
     # The still only when what it shows changed: the chart, the bases, the lifepods or the backdrop.
-    sig = hashlib.sha256(json.dumps([page_data["cells"], page_data["bases"], page_data["lifepods"],
+    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["cells"], page_data["bases"], page_data["lifepods"],
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)
