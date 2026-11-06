@@ -119,5 +119,3 @@ If Unknown Worlds or KRAFTON ask us to change or stop something we'll do it. If 
 This project doesn't sell hosting and asks you not to. That's a stance and a way to reduce that risk, not a limit in the licence
 
 Don't share or rent accounts
-
-Parts come from [BeaconServer](https://github.com/HumanGenome/BeaconServer) and other projects listed in NOTICE

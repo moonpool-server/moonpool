@@ -1,6 +1,6 @@
 -- SN2SlotFreeHost status writer: status.json for the Discord card.
 --
--- Beacon's rule for mods (HumanGenome/BeaconServer, docs/RUNTIME.md): never
+-- One rule for everything here: never
 -- search the whole object list on a timer, it stalls the world. Players are kept
 -- as paths, never objects (a freed address is reused and IsValid passes the new
 -- occupant because this crashes UE4SS.dll), bases and lifepods as positions;

@@ -31,12 +31,10 @@ end
 -- After the world map loads: raise the world GameSession limit, then (optionally) remove the host's
 -- own player with GameplayStatics.RemovePlayer so the lifepod's "all active players aboard" check
 -- passes. Removing the host's player crashes the game right after launch, so RemovePlayer is gone.
--- HOST_PRUNE (default on): port of BeaconServer v0.3.137 (MIT),
--- read from ue4ss/Mods/BeaconNoPhantomHost/Scripts/main.lua (prune_phantom_player_array:
--- gs.PlayerArray = kept, the host's PlayerState left alive with bIsSpectator/bOnlySpectator/bIsABot set)
--- and ue4ss/Mods/BeaconStoryGoalUnlock/Scripts/main.lua (the three Ch1 lifepod goals unlocked through
--- UWEStoryGoalsWorldSubsystem:UnlockStoryGoal(goal, nil, false) once a real player has a body).
--- The host's controller and local player are kept; RemovePlayer is never called.
+-- HOST_PRUNE (default on): the host's own PlayerState is taken out of GameState.PlayerArray and
+-- flagged spectator, so joiners never see a phantom crew member; STORY_GOALS (default on) unlocks
+-- the three Ch1 lifepod goals through UWEStoryGoalsWorldSubsystem:UnlockStoryGoal(goal, nil, false)
+-- once a real player has a body, so lifepods can launch on a world nobody played by hand.
 -- SN2_HOST_PRUNE=false keeps the host's PlayerState in the array (no spectator/bot flags):
 -- on the public build every join crashed the host in the join's own frame,
 -- "Join succeeded" then EXCEPTION_ACCESS_VIOLATION reading 0x10), with body hiding off too.
@@ -54,7 +52,7 @@ local STORY_GOALS = {
 }
 local function ps_name(ps) local n = "?"; pcall(function() n = ps.PlayerNamePrivate:ToString() end); return n end
 local function ps_has_pawn(ps) local p = false; pcall(function() local pw = ps.PawnPrivate; p = (pw ~= nil and pw:IsValid()) end); return p end
--- Prune the host's PlayerState from GameState.PlayerArray (Beacon's method). Returns the name of a
+-- Prune the host's PlayerState from GameState.PlayerArray. Returns the name of a
 -- real player with a body, or nil. Safe to call repeatedly: a no-op when the host is already out.
 local function prune_host(PM)
     local gs = FindFirstOf("GameStateBase")
@@ -338,7 +336,7 @@ LoopAsync(2000, function()
         print("[SN2SlotFreeHost] Host call NOT made: no lobby game mode and no subsystem+PlayerController")
     end
     -- After "Load map complete": wait for the world game mode, then (1) set the world GameSession
-    -- limit and (2) if HOST_PRUNE, prune the host's PlayerState and unlock the lifepod goals (Beacon port).
+    -- limit and (2) if HOST_PRUNE, prune the host's PlayerState and unlock the lifepod goals.
     local PM = "[SN2SlotFreeHost] postmap: "
     local waited = 0
     LoopAsync(2000, function()
