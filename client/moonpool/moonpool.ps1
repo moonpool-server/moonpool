@@ -5,8 +5,9 @@
   then starts the game through Steam.
 
 .DESCRIPTION
-  Installed once from the project's releases and opened by a join page's moonpool: link; a server
-  supplies data, never code. It asks before installing anything a server names, verifies and places
+  Installed once from the project's releases, which its release key signs, and opened by a join page's
+  moonpool: link. The server's own key signs its mod list; the mods are code that runs as you, and
+  nothing here reviews them. It asks before installing anything a server names, verifies and places
   the mods the server's signed manifest declares (rolling all of it back on a failure, never removing
   a file it did not place), then starts the game through Steam. Windows PowerShell 5.1 compatible.
 #>
@@ -543,6 +544,11 @@ function Get-WantedMods($Manifest, $Skipped) {
     if (-not $source) { Fail "mod $name has no source" }
     $fileName = [string](Get-Prop $source 'file_name' '')
     if ($fileName -notmatch '^[A-Za-z0-9][A-Za-z0-9 _.+()\[\]-]*\.zip$') { Fail "mod $name has an unsafe archive name '$fileName'" }
+    # The prefix picks the folder inside the unpacked archive; every part stays a plain name in it.
+    $prefix = ([string](Get-Prop $mod 'prefix' '')).Trim('/')
+    if ($prefix -and @($prefix -split '/' | Where-Object { $_ -notmatch '^[A-Za-z0-9_][A-Za-z0-9 _.+()\[\]-]*$' }).Count) {
+      Fail "mod $name has an unsafe folder inside its archive '$prefix'"
+    }
     if (@(Get-Prop $source 'hashes' @()).Count -eq 0) { Fail "mod $name has no archive hash" }
     $required = [bool](Get-Prop $mod 'required' $true)
     if (-not $required -and $Skipped.Contains($name)) {
@@ -550,9 +556,9 @@ function Get-WantedMods($Manifest, $Skipped) {
       continue
     }
     $wanted.Add([pscustomobject]@{
-      Identity = "$kind|$folder|$(([string](Get-Prop $mod 'prefix' '')).Trim('/'))"
+      Identity = "$kind|$folder|$prefix"
       Name = $name; Version = [string](Get-Prop $mod 'version' ''); Required = $required; Kind = $kind
-      Folder = $folder; Prefix = ([string](Get-Prop $mod 'prefix' '')).Trim('/'); Source = $source
+      Folder = $folder; Prefix = $prefix; Source = $source
       Native = [bool](Get-Prop $mod 'native' $false)
       # The archive's name in the ledger: its sha256 when the server listed one, else the first hash.
       ArchiveSha = (([string](Get-Prop (@(@(Get-Prop $source 'hashes' @()) | Where-Object { ([string](Get-Prop $_ 'algorithm' '')).ToLowerInvariant() -eq 'sha256' }) + @(Get-Prop $source 'hashes' @()) | Select-Object -First 1) 'value' '')).ToLowerInvariant())
@@ -691,7 +697,7 @@ function Expand-ModArchive($Mod, [string]$Archive, [string]$Stage) {
 }
 
 # The loader itself, when the manifest says any mod needs it: the server's own pinned
-# build, only on a game executable the server has proven it on.
+# build, only on a game executable the server lists.
 function Get-LoaderFiles($Spec, [string]$Game, [string]$Stage) {
   $win64 = Join-Path $Game 'Subnautica2\Binaries\Win64'
   $exe = Get-ChildItem -LiteralPath $win64 -Filter 'Subnautica2-Win64-*.exe' -File | Select-Object -First 1
@@ -699,7 +705,7 @@ function Get-LoaderFiles($Spec, [string]$Game, [string]$Stage) {
   $digest = ''
   if ($exe) { $digest = Get-Sha256 $exe.FullName }
   if (-not $digest -or $allowed -notcontains $digest) {
-    Fail "the server's mods need the UE4SS loader, which the server has not proven on this game build ($($digest.Substring(0, [Math]::Min(12, $digest.Length)))); ask the admin to allow it, nothing changed, game not started"
+    Fail "the server's mods need the UE4SS loader, which the server has not listed for this game build ($($digest.Substring(0, [Math]::Min(12, $digest.Length)))); ask the admin to allow it, nothing changed, game not started"
   }
   $zip = Join-Path $Stage 'ue4ss.zip'
   try { Save-Url (Resolve-Url $ManifestUrl ([string]$Spec.url)) $zip }

@@ -271,17 +271,19 @@ make_backup() {
 
 # A player's world as a zip, and the game's later word on loading it in a fake log.
 world_zip() { (cd "$BATS_TEST_TMPDIR" && mkdir -p w && echo world >w/savegame_2.sav && echo bak >w/savegame_2_0.bak && python3 -m zipfile -c "$1" w/savegame_2.sav w/savegame_2_0.bak); }
-game_says() { export SN2_UE_LOG="$BATS_TEST_TMPDIR/game.log"; (sleep 1; printf 'LogSaveSystem: Loading save slot: %s
+# The game empties its log in place on a restart, so the new result lands in a shorter file.
+game_says() { export SN2_UE_LOG="$BATS_TEST_TMPDIR/game.log"; printf 'LogSaveSystem: Loading save slot: %s\nLogGameMode: Save system initialize with result: (LoadGameSucceeded)\n' "$1" >"$SN2_UE_LOG"; (sleep 1; printf 'LogSaveSystem: Loading save slot: %s
 LogGameMode: Save system initialize with result: (%s)
-' "$1" "$2" >>"$SN2_UE_LOG") & }
+' "$1" "$2" >"$SN2_UE_LOG") & }
 
-@test "import puts a player's world in, hosts it, and keeps it when the game loads it" {
+@test "import puts a player's world in, re-hosts on it, and keeps it when the game loads it" {
   save_env
   echo old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
   world_zip "$BATS_TEST_TMPDIR/w.zip"
   game_says savegame_2 LoadGameSucceeded
+  printf '{"hosted":true,"ts":9999999999}' >"$SN2_CONTROL_DIR/readiness.json"
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] && [[ $output == *"savegame_2 loaded and is hosted"* ]]
   [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = world ] && [ -f "$SN2_SAVE_DIR/savegame_2_0.bak" ]
   [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = savegame_2 ] && [ "$(cat "$STAGED/Slot1.sav")" = old ]
 }

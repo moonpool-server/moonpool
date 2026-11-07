@@ -14,7 +14,7 @@ The viewer controls a signed in Steam so keep it off the internet. It always ask
 
 Use the hosting account with Steam Guard on and pick Remember me. To paste open the noVNC side panel and put it in the clipboard there then press Ctrl+V in Steam
 
-Moonpool never sees your password and it's not in `.env`. The sign in stays in the data volume and anything running in the container can use it. To accept friend requests by itself Moonpool reads the Steam client's own web session out of its cookie store in the volume and talks to Steam as that account, and it reads which lobby the account is in through the same session for the join link; `AUTO_ACCEPT_FRIENDS=0` turns the accepting off and you accept requests in the viewer. So use a dedicated account, keep Steam Guard on and keep the volume private
+Moonpool doesn't ask for your password or keep it, and it's not in `.env`: you type it into Steam through the viewer. The sign in stays in the data volume and anything running in the container can use it. To accept friend requests by itself Moonpool reads the Steam client's own web session out of its cookie store in the volume and talks to Steam as that account, and it reads which lobby the account is in through the same session for the join link; `AUTO_ACCEPT_FRIENDS=0` turns the accepting off and you accept requests in the viewer. So use a dedicated account, keep Steam Guard on and keep the volume private
 
 Lost the machine? Deauthorize devices in Steam and change the password. `docker compose down -v` deletes the world and its saves for good
 
@@ -94,7 +94,7 @@ bin/moonpool server import savegame_2.zip
 bin/moonpool server import SaveGames/ Reef    # another name for it
 ```
 
-It snapshots the current saves, hosts the imported world and waits for the game to say it loaded. The game only loads a save from its own build and branch, so bring a world from the same branch as the server and update the game on that PC first. A save it can't load is taken back out and the previous world hosted again. To take a world home `bin/moonpool server export` writes a zip to drop into a player's SaveGames folder
+It snapshots the current saves, re-hosts on the imported world and waits for the game to say it loaded and for the session to come up. The game only loads a save from its own build and branch, so bring a world from the same branch as the server and update the game on that PC first. A save it can't load is taken back out and the previous world hosted again. To take a world home `bin/moonpool server export` writes a zip, from a quiet copy of the saves, to drop into a player's SaveGames folder
 
 ## Updates
 

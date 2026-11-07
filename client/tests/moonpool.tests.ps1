@@ -294,11 +294,18 @@ try {
   $r = Invoke-Join $w9
   Check ($r.Code -ne 0 -and $r.Out -match 'unsafe path in the archive' -and -not (Test-Path -LiteralPath $w9.Mods) -and $null -eq $r.Launched) "a climbing path is refused (got: $($r.Out.Trim()))"
 
-  Write-Host 'the loader is refused on a game build the server has not proven it on'
+  Write-Host 'a mod whose folder inside the archive climbs out of it is refused before anything is fetched'
+  $wp = New-World; $worlds += $wp
+  New-Zip (Join-Path $wp.Server 'Up.zip') @('Up\Scripts\main.lua')
+  Write-Manifest $wp @((Mod $wp 'Up' 'Up.zip' 'Up' '../../Up'))
+  $r = Invoke-Join $wp
+  Check ($r.Code -ne 0 -and $r.Out -match 'unsafe folder inside its archive' -and -not $r.Launched) "the escape is refused (got: $($r.Out.Trim()))"
+
+  Write-Host 'the loader is refused on a game build the server has not listed'
   $w4 = New-World; $worlds += $w4
   Write-Manifest $w4 @((Mod $w4 'Foo' 'Foo.zip' 'Foo' 'Foo')) 'server-a' $true @('0' * 64)
   $r = Invoke-Join $w4
-  Check ($r.Code -ne 0 -and $r.Out -match 'not proven on this game build' -and -not (Test-Path -LiteralPath $w4.Mods)) 'plain line, nothing written'
+  Check ($r.Code -ne 0 -and $r.Out -match 'not listed for this game build' -and -not (Test-Path -LiteralPath $w4.Mods)) 'plain line, nothing written'
 
   Write-Host 'wrong branch or build, a running game, and a corrupt archive each stop before any write'
   $w5 = New-World; $worlds += $w5
