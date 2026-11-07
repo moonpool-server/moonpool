@@ -237,7 +237,7 @@ echo 4242
   [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Join false' ]
 }
 
-@test "a world without a webhook publishes its panel; a board shows it beside its own, and a silent world as No signal" {
+@test "a world without a webhook publishes its panel; a board shows it beside its own, and a silent world as Offline" {
   printf '{"ts":1700000000,"world_name":"All Blue","players":[]}' >"$CONTROL_DIR/status.json"
   run env SN2_NOW=1700000000 python3 "$ROOT/scripts/discord-notify.py" status
   [ "$status" -eq 0 ]
@@ -252,11 +252,11 @@ echo 4242
   [ "$(jq '.components | length' <<<"$body")" -eq 4 ]
   [[ $(jq -r '.components[0] | tostring' <<<"$body") == *'Midnight Zone'* ]]
   [[ $(jq -r '.components[1] | tostring' <<<"$body") == *'All Blue'* ]]
-  [[ $(jq -r '.components[2].components[0].content' <<<"$body") == *'**No signal**'* ]]
+  [[ $(jq -r '.components[2].components[0].content' <<<"$body") == *'**Offline**'* ]]
   # A panel past DISCORD_PEER_MAX_AGE is no signal too, never a stale Open.
   body=$(SN2_NOW=1700009999 DISCORD_BOARD_PEERS="$peer/card.json" \
     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
-  [[ $(jq -r '.components[1].components[0].content' <<<"$body") == *'All Blue'*'**No signal**'* ]]
+  [[ $(jq -r '.components[1].components[0].content' <<<"$body") == *'All Blue'*'**Offline**'* ]]
 }
 
 @test "Discord alerts are silent unless pushes are asked for, and mention the role as a role" {

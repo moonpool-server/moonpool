@@ -220,12 +220,19 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
   if ($new.Count -gt 0) {
     $name = [string](Get-Prop $Config 'server_name' 'this server')
     $where = [string](Get-Prop $Config 'address' '')
-    $text = "$name`n$where`nserver key $ServerId`n`nwants to run on this PC:`n`n" +
-      (($new | ForEach-Object { $p = $_ -split '\|'; $kind = if ($p[-1] -eq 'native code') { ', NATIVE CODE (a DLL)' } else { '' }; "  $($p[0]) $($p[1]) ($(([string]$p[2]).Split(':')[-1].Substring(0, 12))) from $($p[-2])$kind" }) -join "`n") +
-      "`n`nMods and the loader run with your Windows account's rights. Accept only from a host you trust.`n`nInstall?"
+    $text = "$name wants to install these on this PC:`n`n" +
+      (($new | ForEach-Object {
+        $p = $_ -split '\|'
+        $label = [string]$p[0]
+        if ($label -ne 'UE4SS loader' -and $p[1]) { $label += " $($p[1])" }
+        $kind = if ($p[-1] -eq 'native code') { ', native code' } else { '' }
+        "  - $label from $($p[-2])$kind"
+      }) -join "`n") +
+      "`n`nThese run with your Windows account's rights, so only say yes to a host you trust.`n`nServer: $where`n`nInstall?"
     $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
       $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
     if ($where -and $known) { $text = "WARNING: this address had a different server key before. It may not be the same server.`n`n" + $text }
+    Set-Status 'Waiting for your answer'
     if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text }
     if (-not $yes) { Fail 'you declined; nothing changed, game not started. The join page can join without mods.' 3 }
   }

@@ -495,7 +495,7 @@ def publish_card(container, world):
 
 
 def peer_containers():
-    """The other worlds' panels (DISCORD_BOARD_PEERS); a silent one shows as No signal, never a stale Open."""
+    """The other worlds' panels (DISCORD_BOARD_PEERS); a silent one shows as Offline, never a stale Open."""
     out = []
     for url in (E.get("DISCORD_BOARD_PEERS") or "").split():
         key = hashlib.sha256(url.encode()).hexdigest()[:12]
@@ -515,7 +515,7 @@ def peer_containers():
         world = (body or {}).get("world") or "another world"
         ts = (body or {}).get("ts")
         seen = f" · last seen <t:{ts}:R>" if ts else ""
-        out.append({"type": 17, "accent_color": 15158332, "components": [{"type": 10, "content": f"## 🌊 {world}\n🔴 **No signal**{seen}"}]})
+        out.append({"type": 17, "accent_color": 9807270, "components": [{"type": 10, "content": f"## 🌊 {world}\n⚪ **Offline**{seen}"}]})
     return out
 
 

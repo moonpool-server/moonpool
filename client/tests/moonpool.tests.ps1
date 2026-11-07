@@ -330,7 +330,7 @@ try {
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
   Check ($r.Code -eq 3 -and $r.Out -match 'you declined' -and -not (Test-Path -LiteralPath (Join-Path $w6.Mods 'Foo'))) "declining installs nothing and does not start the game (got $($r.Code)): $($r.Out.Trim())"
   Check ($r.Asked -match 'Foo' -and $r.Asked -match 'UE4SS loader' -and $r.Asked -match 'Signed' -and -not $r.Launched) 'it names the server, each mod and the loader'
-  Check ($r.Asked -match 'UE4SS loader .* from this server, NATIVE CODE') "the loader comes from this server and is native code (asked: $($r.Asked))"
+  Check ($r.Asked -match 'UE4SS loader from this server, native code') "the loader comes from this server and is native code (asked: $($r.Asked))"
   Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '1.0' 'ue4ss' $true 'https://mods.example/foo')) 'signed'; Sign-Manifest
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
   Check ($r.Code -eq 3 -and $r.Asked -match 'Foo .* from mods\.example') "the question names the host a mod comes from: $($r.Asked)"
@@ -384,7 +384,7 @@ try {
   New-Zip (Join-Path $wn.Server 'Prox.zip') @('Prox\Scripts\main.lua', 'Prox\dlls\main.dll')
   Write-Manifest $wn @((Mod $wn 'Prox' 'Prox.zip' 'Prox' 'Prox' -Native $true))
   $r = Invoke-Join $wn
-  Check ($r.Code -eq 0 -and $r.Asked -match 'Prox 1\.0 .* NATIVE CODE \(a DLL\)' -and $r.Asked -match "Windows account's rights") "the consent text says native code and the rights it runs with (asked: $($r.Asked.Trim()))"
+  Check ($r.Code -eq 0 -and $r.Asked -match 'Prox 1\.0 from .*, native code' -and $r.Asked -match "Windows account's rights") "the consent text says native code and the rights it runs with (asked: $($r.Asked.Trim()))"
 
   Write-Host 'an archive Defender could not scan is asked about, once, and a no stops it'
   $wu = New-World; $worlds += $wu

@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw
 STILL_W = 1200  # the still's width in pixels; link previews want about this
 FOCUS_MIN_M = 800  # the still never shows less than this across
 FOCUS_PAD_M = 150  # room around the outermost dot
-STILL_VERSION = 2  # bump when the drawing changes, so a cached still is fetched again
+STILL_VERSION = 3  # bump when the drawing changes, so a cached still is fetched again
 STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
 CELL_M = 50  # one square on the chart
@@ -130,15 +130,6 @@ def published(chart, status, world, delay_s, now):
                       if key in current and now - first >= delay_s)
     return {"world": world, "cell_m": CELL_M, "delay_minutes": delay_s // 60, "updated": now,
             "cells": sorted(cells), "bases": settled("bases"), "lifepods": settled("lifepods")}
-
-
-def depth_colour(depth):
-    for i in range(1, len(STOPS)):
-        if depth <= STOPS[i][0]:
-            (d0, a), (d1, b) = STOPS[i - 1], STOPS[i]
-            t = (depth - d0) / (d1 - d0)
-            return tuple(round(a[k] + (b[k] - a[k]) * t) for k in range(3))
-    return STOPS[-1][1]
 
 
 MAX_PICTURE_BYTES = 20 * 1024 * 1024  # a tile or picture past this is treated as missing
@@ -261,9 +252,6 @@ def still(page, bg, public, cache):
         return ((x - left) * sx, (y - top) * sy)
 
     draw = ImageDraw.Draw(img)
-    for x, y, d in page["cells"]:
-        px, py = at(x + page["cell_m"] / 2, y + page["cell_m"] / 2)
-        draw.ellipse([px - 5, py - 5, px + 5, py + 5], fill=depth_colour(d), outline=(255, 255, 255), width=2)
     for kind, fill in (("lifepods", (255, 90, 79)), ("bases", (126, 231, 135))):
         for x, y in page[kind]:
             px, py = at(x, y)
