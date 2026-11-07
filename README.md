@@ -29,7 +29,7 @@ docker compose up -d --build
 
 Open `http://127.0.0.1:8080/vnc.html` with the password `bin/moonpool diag viewer` shows and sign in to Steam once. From another machine tunnel it first with `ssh -L 8080:127.0.0.1:8080 you@server`
 
-The game downloads and the world comes up on its own. That can take a while and the log shows how far along it is
+The game downloads and the world comes up on its own. If Steam or the game shows a licence to accept on first install, accept it in the viewer; Moonpool never clicks it for you. That can take a while and the log shows how far along it is
 
 ```sh
 docker compose logs -f sn2

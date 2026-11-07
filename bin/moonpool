@@ -1098,16 +1098,31 @@ def world_files(folder, name):
     return [f for f in Path(folder).iterdir() if f.is_file() and (f.name == f"{name}.sav" or re.fullmatch(rf"{re.escape(name)}_\d+\.bak", f.name))]
 
 
-def load_result(name, since, wait=240):
-    """The game's own word on loading a save: LoadGameSucceeded, LoadGameFailed, or '' when it never said."""
+def log_mark():
+    """Where the game log stands now, so only what is written after it is read."""
     log = Path(E.get("SN2_UE_LOG") or cfg().get("UE_LOG") or "")
+    try:
+        st = log.stat()
+        return log, st.st_ino, st.st_size, st.st_mtime_ns
+    except OSError:
+        return log, None, 0, 0
+
+
+def load_result(mark, name, wait=240):
+    """The game's own word on loading a save after the mark: LoadGameSucceeded, LoadGameFailed, or ''."""
+    log, ino, size, mtime = mark
     until = time.time() + wait
     while time.time() < until:
         time.sleep(5)
         try:
-            if log.stat().st_mtime < since:
-                continue
-            text = log.read_text(encoding="utf-8", errors="replace")
+            with log.open("rb") as fh:
+                st = os.fstat(fh.fileno())
+                if st.st_ino == ino and st.st_size > size:
+                    fh.seek(size)
+                elif st.st_ino == ino and st.st_mtime_ns == mtime:
+                    continue
+                # Otherwise the game emptied and rewrote its log on the restart, so all of it is new.
+                text = fh.read().decode("utf-8", "replace")
         except OSError:
             continue
         at = text.rfind(f"Loading save slot: {name}")
@@ -1117,6 +1132,17 @@ def load_result(name, since, wait=240):
     return ""
 
 
+def hosted_after(since, wait=120):
+    """True once the mod reports a hosted session written after `since`."""
+    until = time.time() + wait
+    while time.time() < until:
+        r = read_json(Path(control_dir()) / "readiness.json") or {}
+        if r.get("hosted") is True and (r.get("ts") or 0) >= since:
+            return True
+        time.sleep(5)
+    return False
+
+
 def import_world(a):
     if not 1 <= len(a) <= 2:
         usage_error("usage: moonpool server import <save.zip|folder|file.sav> [name]")
@@ -1124,6 +1150,15 @@ def import_world(a):
         usage_error("save names are letters, digits, _ and - only")
     given = Path(a[0])
     x = Path(tempfile.mkdtemp())
+    try:
+        import_from(given, x, a[1] if len(a) == 2 else "")
+    finally:
+        shutil.rmtree(x, ignore_errors=True)
+        if given.is_file():
+            drop_staged(given)
+
+
+def import_from(given, x, wanted):
     if given.is_dir():
         src = given
     elif given.suffix.lower() == ".sav" and given.is_file():
@@ -1131,11 +1166,14 @@ def import_world(a):
     elif given.suffix.lower() == ".zip" and given.is_file():
         try:
             with zipfile.ZipFile(given) as z:
-                for m in z.infolist():
-                    p = Path(m.filename)
-                    if m.is_dir() or p.is_absolute() or ".." in p.parts or not p.name.endswith((".sav", ".bak")):
-                        continue
-                    (x / p.name).write_bytes(z.read(m))
+                members = [m for m in z.infolist() if not m.is_dir() and Path(m.filename).name.endswith((".sav", ".bak"))]
+                names = [Path(m.filename).name for m in members]
+                if len(members) > 64 or sum(m.file_size for m in members) > 512 * 1024 * 1024:
+                    usage_error(f"{given.name} holds more than one world's worth of files")
+                if len(set(names)) != len(names):
+                    usage_error(f"{given.name} holds two files with the same name; zip one SaveGames folder")
+                for m in members:
+                    (x / Path(m.filename).name).write_bytes(z.read(m))
         except (OSError, zipfile.BadZipFile) as err:
             usage_error(f"cannot read {given.name}: {err}")
         src = x
@@ -1147,9 +1185,9 @@ def import_world(a):
     if not found:
         refuse(f"refused: {given.name} holds no world (.sav)")
     old = found[0].stem
-    name = a[1] if len(a) == 2 else old
+    name = wanted or old
     if not valid_save(name):
-        refuse(f"refused: {old} is not a save name this host can select; give one: moonpool server import {given.name} <name>")
+        refuse(f"refused: {old} is not a save name this host can select; give one: moonpool server import <file> <name>")
     save_dir = Path(E.get("SN2_SAVE_DIR") or cfg()["SAVE_DIR"])
     if (save_dir / f"{name}.sav").exists():
         refuse(f"refused: this server already has a world called {name}; give the import another name")
@@ -1167,16 +1205,16 @@ def import_world(a):
         dest = save_dir / (f.name.replace(old, name, 1))
         shutil.copyfile(f, dest)
         placed.append(dest)
-    if given.is_file():
-        drop_staged(given)
-    since = time.time()
+    mark, since = log_mark(), time.time()
     do_stop_game()
     time.sleep(float(E.get("SN2_RESTART_WAIT") or 5))
     sel.write_text(name + "\n", encoding="utf-8")
     do_start_game()
-    result = load_result(name, since)
+    result = load_result(mark, name)
     if result == "LoadGameSucceeded":
-        finish("ok", f"{name} is hosted: the game loaded it", "", {"save": name, "files": len(placed)})
+        hosted = hosted_after(since)
+        finish("ok", f"{name} loaded" + (" and is hosted" if hosted else "; not hosted yet (moonpool status)"), "",
+               {"save": name, "files": len(placed), "hosted": hosted})
     for f in placed:
         f.unlink(missing_ok=True)
     do_stop_game()
@@ -1199,14 +1237,22 @@ def export_world(a):
     if not name:
         newest = sorted(list_saves(save_dir), key=lambda f: f.stat().st_mtime, reverse=True)
         name = newest[0].stem if newest else ""
-    files = world_files(save_dir, name) if name and save_dir.is_dir() else []
-    if not files:
+    if not (name and (save_dir / f"{name}.sav").is_file()):
         refuse(f"refused: no world called {name or '(none)'} on this server (moonpool server saves)")
+    # From a staged copy, taken once the game has stopped writing, never the live folder.
+    rc, _ = run_helper("save-stage.sh", "--now", capture=False)
+    staging = Path(E.get("SN2_STAGING_DIR") or cfg()["STAGING_DIR"])
+    stamped = sorted(d for d in staging.glob("20*") if (d / "SaveGames" / f"{name}.sav").is_file()) if rc == 0 and staging.is_dir() else []
+    if not stamped:
+        refuse("refused: could not stage a quiet copy of the saves; try again in a minute")
+    files = world_files(stamped[-1] / "SaveGames", name)
     out = Path(a[1]) if len(a) == 2 else Path(cfg()["DATA_DIR"]) / "exports" / f"{name}.zip"
     out.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    part = out.with_name(out.name + ".part")
+    with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED) as z:
         for f in files:
             z.write(f, f.name)
+    os.replace(part, out)
     finish("ok", f"{name} written to {out}", "", {"save": name, "file": str(out), "files": len(files)})
 
 
