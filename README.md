@@ -1,8 +1,12 @@
 # Moonpool
 
-Run a Subnautica 2 server in Docker with nobody at the keyboard
+Keep your Subnautica 2 world online so friends can play when the host can't
 
-It runs the real Windows game under Wine on your own Steam account and hosts a world for people you let in. No GPU needed
+Moonpool runs the real game in Docker on a spare PC or server, hosts your world on a Steam account of its own and keeps it there. No GPU needed
+
+## For your friends
+
+Nothing new to install. They add the hosting account as a Steam friend and press Join Game like any co-op session, or use the join page. The launcher is only for servers that ask for mods
 
 Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no game files in this repo and nothing here is for sale
 
@@ -18,7 +22,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 Run these in a terminal on the machine that will host the server
 
 ```sh
-git clone --branch v0.3.12 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
+git clone --branch v0.3.13 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -42,6 +46,17 @@ The Discord card and the join page, as players see them
 
 ![The join page: Play with mods installs the list and joins, or join without them](docs/images/join-page.png)
 
+## Bring your world
+
+Already playing a world in co-op? Zip the save from the PC that hosted it and move it over. Moonpool waits for the game to confirm it loaded, and puts the old world back if it can't
+
+```sh
+bin/moonpool server import savegame_2.zip
+bin/moonpool server export          # a zip to take it home again
+```
+
+Where the save lives and which builds load is in the [guide](docs/operating.md#bring-your-world)
+
 ## What's exposed
 
 - Port 8081 (`SN2_MODS_PORT`) serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel. The first time a player presses Play with mods their launcher saves this server's signing key from that address and holds every later list to it, so over plain http that first fetch trusts the network; the launcher allows http only on a private network and anything else needs the tunnel or HTTPS. `PUBLISH_CARD=true` adds `/card.json`, what the Discord card shows, player names included
@@ -55,7 +70,6 @@ The Discord card and the join page, as players see them
 - More than one world on a machine with `bin/moonpool-instance add`
 - Admin from the shell with `bin/moonpool`
 - Admin in game by naming a PDA signal `!help`
-- Bring the world you already play onto the server, and take it home again
 - Backups you can restore with one command
 - A Discord card showing who is on with a join button
 - An optional map that charts where players have been
@@ -85,9 +99,9 @@ gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-work
 
 ## Does it work
 
-Tested by hand by the maintainer, with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633`. The fix in v0.3.0 for the crash on join and the mod install through the launcher have had short sessions only, one player on experimental build `26283380`. CI runs the code's own tests but not the real game
+Tested by hand by the maintainer, with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633` and experimental `26283380`. The fix for the crash on join, the mod install through the launcher and moving a world between hosts have had short sessions only. CI runs the code's own tests but not the real game
 
-A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. It ran on public build `25400633` and experimental `26283380`; a newer build is unproven until a host comes up on it. Other branches need files for their exact build that this project doesn't ship
+A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. A newer build is unproven until a host comes up on it
 
 ## More
 
