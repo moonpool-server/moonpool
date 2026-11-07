@@ -75,7 +75,8 @@ def render(plugins: list, manifest: dict, address: str = "") -> str:
         return f'<li>{text}{" (" + ", ".join(notes) + ")" if notes else ""}</li>'
 
     head = (f'<a class="button" id="playmods" href="moonpool:{esc(address)}">Play with mods</a>'
-            f'<p class="fine">Asks you first, installs these, and joins. First time? '
+            f'<p class="fine">Asks you first, then joins. Play with mods installs or updates this server\'s mods '
+            f'and enables them only until Subnautica 2 closes; normal launches do not load Moonpool\'s mods. First time? '
             f'<a href="{SETUP_URL}">Get the launcher</a> once, from the project on GitHub. '
             f'Mods run with your Windows account\'s rights, so only say yes to a host you trust.</p>'
             f'<p class="fine" id="nothing" hidden><strong>Nothing opened?</strong> This PC needs the launcher once: '

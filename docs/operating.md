@@ -42,6 +42,8 @@ A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players the
 
 A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. Everything optional installs by default; a player can leave one out
 
+Play with mods turns the mods on only until Subnautica 2 closes, so starting the game from Steam loads none of them. If the launcher is killed mid-game, the next run or the Subnautica 2 (Moonpool mods off) shortcut turns them off. The launcher is Steam-only, so Xbox and Game Pass players join without mods
+
 ## In game admin
 
 Put each admin's Epic ID in `ADMINS`. The UE4SS log prints `player NAME eos=...` when someone joins. Names and Steam IDs don't count because a client can claim those

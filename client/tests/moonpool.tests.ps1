@@ -112,22 +112,36 @@ function Write-Manifest($w, $Mods, [string]$ServerId = 'server-a', [bool]$Loader
 
 # Runs the launcher in a child PowerShell 5.1 so its exit code is real; the
 # running-game check, the launch and the pages opened are stubbed through files.
-function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Answer = '$true', [string]$Scan = "`$p -notmatch 'Flagged'") {
+# The launch starts a fake game that is seen running once, when the game folder is
+# listed into Session, runs $Game, and has exited by the next look.
+function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Answer = '$true', [string]$Scan = "`$p -notmatch 'Flagged'",
+                     [string]$Game = '', [switch]$NoStart, [string]$LaunchExtra = '') {
   $launchLog = Join-Path $w.Root 'launched.txt'
   $pageLog = Join-Path $w.Root 'page.txt'
   $askLog = Join-Path $w.Root 'asked.txt'
-  foreach ($f in @($launchLog, $pageLog, $askLog)) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f } }
-  $running = '$false'; if ($GameRunning) { $running = '$true' }
+  $gameFlag = Join-Path $w.Root 'game.txt'
+  $sessionLog = Join-Path $w.Root 'session.txt'
+  foreach ($f in @($launchLog, $pageLog, $askLog, $gameFlag, $sessionLog)) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f } }
+  if ($GameRunning) { Set-Content -LiteralPath $gameFlag -Value 'up' }
+  $start = "Set-Content -LiteralPath '$gameFlag' -Value 'up'"; if ($NoStart) { $start = ''; $Extra += ' -StartWait 1' }
+  $running = "if (Test-Path -LiteralPath '$gameFlag') { Remove-Item -LiteralPath '$gameFlag'; Get-ChildItem -LiteralPath '$($w.Game)' -Recurse -File -Name | Set-Content -LiteralPath '$sessionLog'; $Game; `$true } else { `$false }"
   $cmd = "`$env:LOCALAPPDATA='$($w.Root)'; & '$Script' -ManifestUrl '$(([Uri]$w.Manifest).AbsoluteUri)' -SteamRoot '$($w.Steam)' " +
-         "-Downloads '$($w.Downloads)' -IsGameRunning { $running } -Launch { param(`$u) Set-Content -LiteralPath '$launchLog' -Value `$u } " +
+         "-Downloads '$($w.Downloads)' -IsGameRunning { $running } -Launch { param(`$u) Set-Content -LiteralPath '$launchLog' -Value `$u; $start; $LaunchExtra } " +
          "-OpenPage { param(`$u) Set-Content -LiteralPath '$pageLog' -Value `$u } -Approve { param(`$q) Set-Content -LiteralPath '$askLog' -Value `$q; $Answer } -OpenFriend { param(`$u) } -ScanFile { param(`$p) $Scan } -NoShortcuts $Extra; exit `$LASTEXITCODE"
   $out = & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String
-  $launched = $null; $page = $null; $asked = ''
+  $launched = $null; $page = $null; $asked = ''; $session = @()
   if (Test-Path -LiteralPath $askLog) { $asked = (Get-Content -LiteralPath $askLog -Raw) }
   if (Test-Path -LiteralPath $launchLog) { $launched = (Get-Content -LiteralPath $launchLog -Raw).Trim() }
   if (Test-Path -LiteralPath $pageLog) { $page = (Get-Content -LiteralPath $pageLog -Raw).Trim() }
-  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out; Launched = $launched; Page = $page; Asked = $asked }
+  if (Test-Path -LiteralPath $sessionLog) { $session = @(Get-Content -LiteralPath $sessionLog) }
+  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out; Launched = $launched; Page = $page; Asked = $asked; Session = $session }
 }
+
+# The files that make Moonpool's mods load, relative to the game folder, and whether each is on now.
+$Activation = @('Subnautica2\Binaries\Win64\dwmapi.dll', 'Subnautica2\Binaries\Win64\ue4ss\Mods\Foo\enabled.txt',
+                'Subnautica2\Content\Paks\~mods\Baz.pak', 'Subnautica2\Content\Paks\~mods\Baz.ucas', 'Subnautica2\Content\Paks\~mods\Baz.utoc')
+function All-Off($w) { -not @($Activation | Where-Object { (Test-Path -LiteralPath (Join-Path $w.Game $_)) -or -not (Test-Path -LiteralPath (Join-Path $w.Game "$_.moonpool-off")) }).Count }
+function All-On($w) { -not @($Activation | Where-Object { -not (Test-Path -LiteralPath (Join-Path $w.Game $_)) -or (Test-Path -LiteralPath (Join-Path $w.Game "$_.moonpool-off")) }).Count }
 
 function Snapshot([string]$Dir) {
   if (-not (Test-Path -LiteralPath $Dir)) { return '' }
@@ -144,9 +158,9 @@ try {
   $r = Invoke-Join $w
   Check ($r.Code -eq 0) "exit 0 (got $($r.Code)): $($r.Out.Trim())"
   Check ((Text (Join-Path $w.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v1') 'Foo placed from its folder inside the archive'
-  Check (Test-Path -LiteralPath (Join-Path $w.Mods 'Foo\enabled.txt')) 'Foo is enabled'
+  Check ($r.Session -contains 'Subnautica2\Binaries\Win64\ue4ss\Mods\Foo\enabled.txt') 'Foo is enabled while the game runs'
   Check ((Text (Join-Path $w.Mods 'Bar\Scripts\main.lua')) -eq 'Scripts\main.lua v1') 'optional Bar installed by default from a root-level archive'
-  Check ((Test-Path -LiteralPath (Join-Path $w.Win64 'dwmapi.dll')) -and (Test-Path -LiteralPath (Join-Path $w.Win64 'ue4ss\UE4SS.dll'))) 'the loader is placed beside the executable'
+  Check (($r.Session -contains 'Subnautica2\Binaries\Win64\dwmapi.dll') -and (Test-Path -LiteralPath (Join-Path $w.Win64 'ue4ss\UE4SS.dll'))) 'the loader is placed beside the executable'
   Check ($r.Out -match 'installing Foo 1\.0' -and $r.Out -match 'installing Bar 2\.0' -and $r.Out -match 'installing the UE4SS loader') 'says what it installed'
   Check ($r.Launched -eq 'steam://joinlobby/1962700/16/76561198000000000') "live lobby join used (got '$($r.Launched)')"
   Check (-not (Test-Path -LiteralPath (Join-Path $w.Steam 'steamapps\common'))) 'nothing written to the default library'
@@ -196,6 +210,7 @@ try {
   Check (-not (Test-Path -LiteralPath (Join-Path $w.Mods 'Foo'))) "the other server's mod is gone"
   Check (-not (Test-Path -LiteralPath (Join-Path $w.Win64 'dwmapi.dll')) -and -not (Test-Path -LiteralPath (Join-Path $w.Win64 'ue4ss'))) 'the loader is gone when nothing needs it'
   Check ($r.Out -match "removing Foo \(another server's mod\)") 'says whose mod it removed'
+  Check (@(Get-ChildItem -LiteralPath $w.Win64 -Recurse -File -Filter '*.moonpool-off').Count -eq 0) "the first server's files went whole, none left behind switched off"
   Write-Manifest $w @((Mod $w 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '1.1'))
   $r = Invoke-Join $w
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $w.Mods 'Foo\Scripts\main.lua')) -and -not (Test-Path -LiteralPath $w.Paks)) 'back on the first server: its set returns, the pak goes'
@@ -238,10 +253,19 @@ try {
   Copy-Item -LiteralPath (Join-Path $unz 'ue4ss') -Destination $w7.Win64 -Recurse
   Set-Content -LiteralPath (Join-Path $w7.Win64 'ue4ss\Mods\mods.txt') -Value 'MyMod : 1' -NoNewline
   Set-Content -LiteralPath (Join-Path $w7.Win64 'ue4ss\UE4SS-settings.ini') -Value 'my settings' -NoNewline
+  New-Item -ItemType Directory -Path (Join-Path $w7.Mods 'MyMod') -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $w7.Mods 'MyMod\enabled.txt') -Value '' -NoNewline
   Write-Manifest $w7 @((Mod $w7 'Foo' 'Foo.zip' 'Foo' 'Foo'))
   $r = Invoke-Join $w7
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $w7.Mods 'Foo\Scripts\main.lua'))) "the mod installs beside their loader (got $($r.Code)): $($r.Out.Trim())"
   Check ((Text (Join-Path $w7.Win64 'ue4ss\Mods\mods.txt')) -eq 'MyMod : 1' -and (Text (Join-Path $w7.Win64 'ue4ss\UE4SS-settings.ini')) -eq 'my settings') 'their mods.txt and settings are untouched'
+  Write-Host "a player's own loader and mods are never switched off, only Moonpool's mod is"
+  $theirs = @('dwmapi.dll', 'ue4ss\Mods\mods.txt', 'ue4ss\Mods\MyMod\enabled.txt')
+  function Theirs-InPlace { -not @($theirs | Where-Object { -not (Test-Path -LiteralPath (Join-Path $w7.Win64 $_)) -or (Test-Path -LiteralPath (Join-Path $w7.Win64 "$_.moonpool-off")) }).Count }
+  Check (($r.Session -contains 'Subnautica2\Binaries\Win64\ue4ss\Mods\Foo\enabled.txt') -and (Test-Path -LiteralPath (Join-Path $w7.Mods 'Foo\enabled.txt.moonpool-off'))) "Moonpool's mod was on for the session and is off after"
+  Check (Theirs-InPlace) 'their proxy, mods.txt and own mod stay where they are after the session'
+  $r = Invoke-Join $w7 -Extra '-DisableMoonpoolMods'
+  Check ($r.Code -eq 0 -and (Theirs-InPlace)) "the mods-off shortcut leaves them too (got $($r.Code)): $($r.Out.Trim())"
   Remove-Item -LiteralPath (Join-Path $w7.Server 'ue4ss.zip')
   $r = Invoke-Join $w7
   Check ($r.Code -eq 0 -and $r.Out -match 'mods up to date') 'their loader counts as current: no download on the next run'
@@ -251,6 +275,51 @@ try {
   Check ($r.Code -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $w7.Mods 'Foo'))) 'leaving the server removes the mod it placed'
   Check ($r.Out -notmatch 'removing UE4SS') 'and does not claim to remove a loader it did not place'
   Check ((Test-Path -LiteralPath (Join-Path $w7.Win64 'dwmapi.dll')) -and (Test-Path -LiteralPath (Join-Path $w7.Win64 'ue4ss\UE4SS.dll')) -and (Text (Join-Path $w7.Win64 'ue4ss\Mods\mods.txt')) -eq 'MyMod : 1') 'their loader survives leaving the server'
+
+  Write-Host "a session: Moonpool's mods are on while the game runs and off once it closes"
+  $ws = New-World; $worlds += $ws
+  Write-Manifest $ws @((Mod $ws 'Foo' 'Foo.zip' 'Foo' 'Foo'), (Mod $ws 'Baz' 'Baz.zip' 'Baz' 'Baz' $true '3' 'pak'))
+  function Was-On($r) { -not @($Activation | Where-Object { $r.Session -notcontains $_ }).Count -and -not ($r.Session -like '*.moonpool-off') }
+  $r = Invoke-Join $ws
+  Check ($r.Code -eq 0 -and (Was-On $r)) "the loader, the enabled.txt and the pak trio were on while the game ran (got $($r.Code)): $($r.Out.Trim())"
+  Check ((All-Off $ws) -and $r.Out -match "Moonpool's mods are off") 'and all of them are off after it closed'
+
+  Write-Host 'the next session turns them on again without downloading anything'
+  foreach ($z in @('Foo.zip', 'Baz.zip', 'ue4ss.zip')) { Rename-Item -LiteralPath (Join-Path $ws.Server $z) -NewName "$z.away" }
+  $r = Invoke-Join $ws
+  Check ($r.Code -eq 0 -and $r.Out -match 'mods up to date' -and (Was-On $r) -and (All-Off $ws)) "switched-off mods count as installed and current (got $($r.Code)): $($r.Out.Trim())"
+  foreach ($z in @('Foo.zip', 'Baz.zip', 'ue4ss.zip')) { Rename-Item -LiteralPath (Join-Path $ws.Server "$z.away") -NewName $z }
+
+  Write-Host 'a game that crashes, a launch that fails and a game that never starts all leave them off'
+  $r = Invoke-Join $ws -Game 'Write-Host crashed'
+  Check ($r.Code -eq 0 -and (Was-On $r) -and (All-Off $ws)) "a game gone at the next look still turns them off (got $($r.Code)): $($r.Out.Trim())"
+  $r = Invoke-Join $ws -LaunchExtra "throw 'Steam is not running'"
+  Check ($r.Code -ne 0 -and $r.Out -match 'Steam is not running' -and (All-Off $ws)) "a launch that throws turns them off (got $($r.Code)): $($r.Out.Trim())"
+  $r = Invoke-Join $ws -NoStart
+  Check ($r.Code -ne 0 -and $r.Out -match 'did not start in time' -and (All-Off $ws)) "a game that never appears turns them off and says so (got $($r.Code)): $($r.Out.Trim())"
+
+  Write-Host 'a launcher that dies mid-session leaves them on; the mods-off shortcut and the next run each clear that'
+  $r = Invoke-Join $ws -Game 'Stop-Process -Id $PID -Force'
+  Check ((Was-On $r) -and (All-On $ws)) 'killed while the game ran, the launcher left them on'
+  $r = Invoke-Join $ws -Extra '-DisableMoonpoolMods'
+  Check ($r.Code -eq 0 -and (All-Off $ws) -and -not $r.Launched -and $r.Out -match "Moonpool's mods are off") "-DisableMoonpoolMods turns them off and starts nothing (got $($r.Code)): $($r.Out.Trim())"
+  [void](Invoke-Join $ws -Game 'Stop-Process -Id $PID -Force')
+  Write-Manifest $ws @((Mod $ws 'Foo' 'Foo.zip' 'Foo' 'Foo'), (Mod $ws 'Baz' 'Baz.zip' 'Baz' 'Baz' $true '3' 'pak')) 'server-a' $true $null '9999' 'public'
+  $r = Invoke-Join $ws
+  Check ($r.Code -ne 0 -and $r.Out -match 'server needs Steam branch' -and (All-Off $ws)) "the next run clears them even when it stops before the launch (got $($r.Code)): $($r.Out.Trim())"
+  Write-Manifest $ws @((Mod $ws 'Foo' 'Foo.zip' 'Foo' 'Foo'), (Mod $ws 'Baz' 'Baz.zip' 'Baz' 'Baz' $true '3' 'pak'))
+
+  Write-Host 'a second launcher started during a session is refused and changes nothing'
+  $second = Join-Path $ws.Root 'second.txt'
+  $r = Invoke-Join $ws -Game "& powershell -NoProfile -ExecutionPolicy Bypass -File '$Script' -DisableMoonpoolMods *> '$second'; Add-Content -LiteralPath '$second' -Value ('exit ' + `$LASTEXITCODE)"
+  $b = Text $second
+  Check ($b -match 'another Moonpool launcher is running' -and $b -match 'exit 2') "the second one names the first and exits 2 (got: $($b.Trim()))"
+  Check ($r.Code -eq 0 -and (Was-On $r) -and (All-Off $ws)) 'the first finishes its session as usual'
+
+  Write-Host 'a game build the server has not listed is refused every session, even with the loader in place'
+  Set-Content -LiteralPath $ws.Exe -Value 'the game after a Steam update' -NoNewline
+  $r = Invoke-Join $ws
+  Check ($r.Code -ne 0 -and $r.Out -match 'not listed for this game build' -and -not $r.Launched -and (All-Off $ws)) "refused, game not started, mods off (got $($r.Code)): $($r.Out.Trim())"
 
   Write-Host 'one missing file of a current mod is repaired; a removal that fails puts everything back'
   $w8 = New-World; $worlds += $w8
@@ -264,7 +333,7 @@ try {
   $lock = [IO.File]::Open((Join-Path $w8.Mods 'Bar\Scripts\main.lua'), 'Open', 'Read', 'Read')
   try { $r = Invoke-Join $w8 } finally { $lock.Dispose() }
   Check ($r.Code -ne 0 -and $r.Out -match 'the previous set was put back' -and $null -eq $r.Launched) "a locked file stops the run (got: $($r.Out.Trim()))"
-  Check ((Text (Join-Path $w8.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v1' -and (Test-Path -LiteralPath (Join-Path $w8.Mods 'Bar\enabled.txt'))) 'the update was rolled back with it, no mixed set'
+  Check ((Text (Join-Path $w8.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v1' -and (Test-Path -LiteralPath (Join-Path $w8.Mods 'Bar\enabled.txt.moonpool-off'))) 'the update was rolled back with it, no mixed set'
   $r = Invoke-Join $w8
   Check ($r.Code -eq 0 -and (Text (Join-Path $w8.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v3' -and -not (Test-Path -LiteralPath (Join-Path $w8.Mods 'Bar'))) 'the next run finishes the change'
   Write-Host 'a release laid out the way real ones are: nested, its own enabled.txt, a sibling folder'
@@ -272,7 +341,7 @@ try {
   Write-Manifest $w8 @((Mod $w8 'Nested' 'Nested.zip' 'Nested' 'Install-Nested/Nested'))
   $r = Invoke-Join $w8
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $w8.Mods 'Nested\Scripts\main.lua')) -and -not (Test-Path -LiteralPath (Join-Path $w8.Mods 'Other')) -and -not (Test-Path -LiteralPath (Join-Path $w8.Mods 'Nested\README.md'))) "only the chosen folder installs (got: $($r.Out.Trim()))"
-  Check ((Text (Join-Path $w8.Mods 'Nested\enabled.txt')) -eq 'Install-Nested\Nested\enabled.txt v1') 'its own enabled.txt is kept'
+  Check ((Text (Join-Path $w8.Mods 'Nested\enabled.txt.moonpool-off')) -eq 'Install-Nested\Nested\enabled.txt v1') 'its own enabled.txt is kept'
   $r = Invoke-Join $w8
   Check ($r.Code -eq 0 -and $r.Out -match 'mods up to date') "and it is current on the next run (got: $($r.Out.Trim()))"
   Write-Manifest $w8 @((Mod $w8 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '3.0'))
