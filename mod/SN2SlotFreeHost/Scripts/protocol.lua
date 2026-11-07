@@ -1,5 +1,4 @@
--- Control-queue validation for SN2SlotFreeHost. Pure Lua with no game calls, so
--- it is tested outside the game (tests/lua/protocol_spec.lua).
+-- Control-queue validation for SN2SlotFreeHost; pure Lua, no game calls.
 local M = {}
 
 M.VERSION = 1
@@ -12,21 +11,14 @@ M.MAX_RESPONSE_BYTES = 65536
 M.ALLOWLIST = {
   status = { args = {} },
   players = { args = {} },
-  host = { args = {} },
-  receipt = { args = {} },
   -- A console command run server-side as one named player. Off by default.
   player = { args = { player = 'string', command = 'string' } },
   -- Remove one connected player; the mod builds the line, run as the host.
   kick = { args = { player = 'string' } },
   save = { args = {} },
-  -- Real player slots, changed live; the mod checks the range (idle.lua).
   slots = { args = { slots = 'number' } },
-  -- EXPERIMENTAL: the host's Sonar friend code (friend_code.lua).
   friend_code = { args = { force = 'boolean?' } },
-  -- Replay the starter set and the host's base-piece and tool unlocks to one
-  -- player or all, one batch each (unlock_replay.lua).
   unlocks = { args = { player = 'string?' } },
-  -- Re-read control/settings.yaml; only verified commands run (settings.lua).
   settings = { args = {} },
 }
 
@@ -60,9 +52,7 @@ function M.new_seen(initial)
   }
 end
 
--- JSON is UTF-8 on the wire. Reject overlong encodings, surrogates, stray
--- continuation bytes and code points beyond U+10FFFF before the decoder sees
--- the request. Lua strings are bytes, so this is independent of the locale.
+-- Strict UTF-8: no overlong encodings, surrogates, stray continuation bytes or code points past U+10FFFF.
 function M.valid_utf8(s)
   if type(s) ~= 'string' then return false end
   local i, n = 1, #s
@@ -135,15 +125,6 @@ function M.result(id, ok, data, err, game_build_id)
   return { v = M.VERSION, accepts = M.ACCEPTED_VERSIONS, id = id, ok = ok,
     data = data or {}, error = err,
     meta = { game_build_id = game_build_id or 'unknown', mod_version = M.MOD_VERSION } }
-end
-
--- Readiness: required checks named in config, all must be true.
-function M.ready(checks, required)
-  local missing = {}
-  for _, name in ipairs(required) do
-    if checks[name] ~= true then missing[#missing + 1] = name end
-  end
-  return #missing == 0, missing
 end
 
 return M

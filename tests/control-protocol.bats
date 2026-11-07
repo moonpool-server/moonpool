@@ -567,13 +567,6 @@ policy_env() {
   [[ "$output" == *"all passed"* ]]
 }
 
-@test "sky actor clock adapter passes its pure Lua spec" {
-  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
-  run lua5.4 tests/lua/sky_spec.lua
-  echo "$output"
-  [ "$status" -eq 0 ]
-}
-
 @test "idle policy and slots range pass the stub-clock Lua spec" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/idle_spec.lua
@@ -2348,7 +2341,7 @@ container_start_with() {
     grep -q "tests/lua/$(basename "$spec")" tests/*.bats || unrun="$unrun $(basename "$spec")"
   done
   # A floor, so a moved or renamed spec folder cannot pass by reading nothing.
-  [ "$specs" -ge 16 ]
+  [ "$specs" -ge 15 ]
   [ -z "$unrun" ] || { echo "specs no bats test runs:$unrun"; false; }
 }
 

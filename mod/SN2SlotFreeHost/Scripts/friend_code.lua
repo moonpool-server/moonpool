@@ -1,22 +1,14 @@
--- friend_code.lua: the host's Sonar friend code, for players not on Steam.
--- EXPERIMENTAL. The game makes the code only while its Friends screen view
--- model exists (/Script/Subnautica2.SN2InGameFriendScreenViewModel, seen in the
--- function dump). A headless host has no screen to click, so when none is open
--- the game's own Friends screen widget is built for the host's player and added
--- to the viewport (g.open_screen): the widget makes and owns the view model, the
--- way a click does. The mod never constructs a view model itself: one built by
--- the mod belongs to nothing in the game, and the host crashed inside the loader
--- 20 s after a constructed one made a code. No view model is held between ticks;
--- each poll finds it again, and a screen this module opened is closed by finish.
--- Pure Lua; the game calls come in through `g` (tests/lua/friend_code_spec.lua).
+-- friend_code.lua: the host's Sonar friend code, for players not on Steam. EXPERIMENTAL.
+-- The game makes the code only while its Friends screen view model exists, so the game's own
+-- widget is built (it owns the view model). A view model the mod constructed crashed the host.
+-- No view model is held between ticks. Pure Lua; the game calls come in through `g`.
 local M = {}
 
 M.CLASS = '/Script/Subnautica2.SN2InGameFriendScreenViewModel'
--- Read first, with the loose check below; every other property of the view
--- model is read after them and taken only in the shape of a code.
+-- Read first; any other property is taken only in the shape of a code.
 M.PROPS = { 'FriendCode', 'SonarFriendCode', 'MyFriendCode' }
 M.MAX_TICKS = 15
--- A code made by the game read 3647-1991: two groups of four.
+-- Two groups of four, such as 3647-1991.
 M.SHAPE = '^%w%w%w%w%-%w%w%w%w$'
 
 local function loose(v) return type(v) == 'string' and v:match('^%w[%w%-]+$') ~= nil end
@@ -47,7 +39,6 @@ function M.start(g, force)
   return job
 end
 
--- Closes a screen start opened; nothing otherwise.
 function M.finish(g, job)
   if job and job.opened and g.close_screen then g.close_screen() end
 end

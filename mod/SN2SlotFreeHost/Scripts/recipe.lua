@@ -1,9 +1,5 @@
--- recipe.lua: what the container adds to SN2SlotFreeHost, loaded from its
--- main.lua: the moonpool file-drop queue, status.json, the idle freeze, the
--- slots and player commands. Hosting, the host prune and
--- the story-goal unlock stay in main.lua as written. Original code, MIT.
--- What nothing else provides: a socket-free control queue and a status file
--- read by the Discord card; no community mod exposes either.
+-- recipe.lua: what the container adds to SN2SlotFreeHost: the moonpool control queue, status.json,
+-- the idle freeze and the player commands. Hosting itself stays in main.lua. Original code, MIT.
 local json = require('json')
 local protocol = require('protocol')
 local status = require('status')
@@ -12,18 +8,11 @@ local controller_named = host_core.controller_named
 local idle = require('idle')
 local access = require('access')
 local voice_range = require('voice_range')
-local sky = require('sky')
 local notify = require('notify')
 local hosted_poll_gate = require('hosted_poll')
--- Per-module switches, so one module at a time can be turned off when the host misbehaves.
--- Off means not registered or not run at all, never half-run.
--- true: the clock settings go straight to UWESkyActor (no notice for players). Off by
--- default: the console fallback is the proven path.
-local SKY_CLOCK = os.getenv('SN2_SKY_CLOCK') == 'true'
 
 local log = host_core.log
--- GetFullName() is "<Class> <path>"; StaticFindObject takes the path alone. Every proven lookup
--- here passes a bare path; a full name (with the class in front) would not find its object.
+-- GetFullName() is "<Class> <path>"; StaticFindObject takes the path alone.
 local object_path = status.object_path
 
 -- Configuration --------------------------------------------------------------
@@ -40,8 +29,7 @@ local DEFAULTS = {
     save_slot = 'Slot1',
     max_players = 4,
   },
-  enabled_commands = { 'status', 'players', 'host', 'receipt', 'kick', 'slots',
-    'friend_code' },
+  enabled_commands = { 'status', 'players', 'kick', 'slots', 'friend_code' },
 }
 
 local read_file = host_core.read_file
@@ -57,30 +45,6 @@ local function merge(base, over)
   return base
 end
 
--- The operator's file is copied from config.example.json on the first start
--- and kept, so a list the example shipped is not the operator's choice: on a
--- host first started under an older release it keeps every newer command
--- refused as disabled_by_config (unlocks,
--- waypoint and settings all refused). A file list equal to any list the
--- example ever carried gives way to the default and is said once; any other
--- list is the operator's own and is kept as set. The example carries no
--- list now; these are the ones it did.
-local EXAMPLE_LISTS = {
-  'status,players,host,receipt,player',
-  'status,players,host,receipt,player,bring',
-  'status,players,host,receipt,player,bring,slots',
-  'status,players,host,receipt,player,bring,slots,unlocks',
-  'status,players,host,receipt,player,bring,slots,unlocks,waypoint',
-  'status,players,host,receipt,player,bring,slots,unlocks,waypoint,settings',
-}
-local function is_example_list(list)
-  if type(list) ~= 'table' then return false end
-  local key = table.concat(list, ',')
-  for _, l in ipairs(EXAMPLE_LISTS) do if l == key then return true end end
-  return false
-end
-_G.SN2_IS_EXAMPLE_LIST = is_example_list -- read by tests/lua/host_mod_spec.lua
-
 local function load_config()
   local cfg = merge({}, DEFAULTS)
   cfg.host = merge({}, DEFAULTS.host)
@@ -91,11 +55,6 @@ local function load_config()
   if raw then
     local ok, parsed = pcall(json.decode, raw)
     if ok and type(parsed) == 'table' then
-      if is_example_list(parsed.enabled_commands) then
-        log(string.format('config.json enabled_commands is an older example list (%d of %d); using the full list. '
-          .. 'Set your own list to restrict commands.', #parsed.enabled_commands, #DEFAULTS.enabled_commands))
-        parsed.enabled_commands = nil
-      end
       merge(cfg, parsed)
     else
       log('config.json unreadable, using defaults: ' .. tostring(parsed))
@@ -112,24 +71,21 @@ end
 
 local CFG = load_config()
 local GAME_BUILD_ID = os.getenv('SN2_GAME_BUILD_ID') or 'unknown'
--- PLAYER_SLOTS + 1 from the launcher: the host account holds a player slot
--- (measured: GetNumPlayers 2 with one joiner).
+local HOST_NAME = os.getenv('SN2_HOST_NAME') or 'SN2 Host'
+-- PLAYER_SLOTS + 1 from the launcher: the host account holds a player slot.
 local env_limit = tonumber(os.getenv('SN2_SESSION_LIMIT') or '')
 if env_limit and env_limit >= 2 and env_limit <= 64 then CFG.host.max_players = env_limit end
--- The launcher exports SN2_CONTROL_WIN; config.json may override it.
 local DIR = os.getenv('SN2_CONTROL_WIN') or CFG.control_dir
 if CFG.control_dir ~= DEFAULTS.control_dir then DIR = CFG.control_dir end
 host_core.configure({ dir = DIR })
 local cpath = host_core.cpath
 
--- Atomic write: temp file in control\tmp, then rename into place.
 local function write_atomic(dest, tbl)
   local tmp = cpath('tmp', 'mod-' .. tostring(os.time()) .. '-' .. tostring(math.random(1, 1e9)) .. '.json')
   local encoded = json.encode(tbl)
   if dest:find('\\outbox\\', 1, true) and #encoded > protocol.MAX_RESPONSE_BYTES then
     local id = dest:match('\\([0-9a-f]+)%.json$') or ''
-    encoded = json.encode(protocol.result(id, false, {}, 'response_too_large',
-      os.getenv('SN2_GAME_BUILD_ID') or 'unknown'))
+    encoded = json.encode(protocol.result(id, false, {}, 'response_too_large', GAME_BUILD_ID))
   end
   local f, err = io.open(tmp, 'wb')
   if not f then log('cannot write ' .. tmp .. ': ' .. tostring(err)); return false end
@@ -156,15 +112,8 @@ local function find(class)
   return nil
 end
 
-local state = {
-  started = os.time(),
-  checks = {},
-  details = {},
-  host_attempted = false,
-  host_result = nil,
-}
--- Player limits are IntProperty on both objects: the subsystem's
--- MaxSessionPlayerCount and the lobby game mode's GameSession.MaxPlayers.
+local state = { started = os.time() }
+-- Player limits: the subsystem's MaxSessionPlayerCount and the lobby game mode's GameSession.MaxPlayers.
 local function read_limits(sub, gm)
   local r = {}
   pcall(function() r.max_session_player_count = sub.MaxSessionPlayerCount end)
@@ -181,8 +130,7 @@ local function set_limits(sub, gm, cap)
   return r
 end
 
--- Save slot: an explicit name (moonpool host <save>, SAVE_NAME) wins; else the
--- newest <name>.sav in the save folder; else the configured new-world slot.
+-- An explicit save name wins, then SAVE_SELECT, then the newest .sav, then the new-world slot.
 local function pick_save(explicit)
   if explicit and explicit ~= '' then return explicit end
   local sel = (read_file(cpath('SAVE_SELECT')) or ''):match('^%s*([%w_%-]+)%s*$')
@@ -201,7 +149,6 @@ local function pick_save(explicit)
   end
   return CFG.host.save_slot
 end
--- main.lua's Host call asks this for its SaveSlot (it falls back to "Slot1").
 _G.SN2_PICK_SAVE = pick_save
 
 -- Commands -------------------------------------------------------------------
@@ -218,24 +165,11 @@ local handlers = {
     return true, { uptime_s = os.time() - state.started, hosted = _G.SN2_HOSTED == true }
   end,
   players = function() return true, { players = players(true) } end,
-  -- Hosting is SN2SlotFreeHost's own armed one-shot; moonpool arm writes HOST_ARMED.
-  host = function() return false, nil, 'use_moonpool_arm' end,
-  receipt = function()
-    return true, { checks = state.checks, details = state.details, host_attempted = state.host_attempted,
-      hosted = _G.SN2_HOSTED == true, player_slots = state.player_slots, uptime_s = os.time() - state.started,
-      limits = read_limits(find('UWEOnlineSessionSubsystem'), find('BP_ClientLobbyGameMode_C')) }
-  end,
-  save = function() return false, nil, 'not_implemented' end,
 }
 _G.SN2_HANDLERS = handlers -- read by tests/lua/host_behaviour_spec.lua
--- Player services ------------------------------------------------------------
--- The game's own command class (BP_SN2CheatManager_C) hangs off every player
--- controller; KismetSystemLibrary:ExecuteConsoleCommand(World, Command,
--- SpecificPlayer) runs a console line as that player, server-side
--- (PLAYER_SERVICES.md). The game's reply lines go to its own log.
 
 handlers.save = function()
-  local pc = controller_named(os.getenv('SN2_HOST_NAME') or 'SN2 Host')
+  local pc = controller_named(HOST_NAME)
   if not pc then return false, nil, 'host_controller_not_found' end
   local component
   pcall(function() component = pc.SaveCommunication end)
@@ -260,33 +194,14 @@ end
 
 handlers.kick = function(args)
   if not controller_named(args.player) then return false, nil, 'unknown_player' end
-  return handlers.player({ player = os.getenv('SN2_HOST_NAME') or 'SN2 Host', command = 'KickPlayer ' .. args.player })
+  return handlers.player({ player = HOST_NAME, command = 'KickPlayer ' .. args.player })
 end
 
--- Server settings (settings.lua): moonpool copies the operator's settings.yaml
--- into the control folder; the mod reads it once hosted and on `moonpool
--- settings apply`. Only a key with a verified command runs, as the host's own
--- controller; every other key is logged and shown as "no verified command".
+-- settings.yaml (settings.lua): read once hosted and on `moonpool settings apply`; only a key
+-- with a verified command runs, as the host's own controller.
 local settings = require('settings')
 local set_weather -- defined beside the weather readback below
 local settings_block, settings_readback -- defined beside the readbacks below
-local function apply_clock(key, value, fallback_pc, fallback_line, why)
-  local actor, ok, err
-  if SKY_CLOCK then
-    pcall(function() actor = FindFirstOf('UWESkyActor') end)
-    ok, err = sky.apply(valid(actor) and actor or nil, key, value)
-  else
-    ok, err = false, 'switched off by SN2_SKY_CLOCK=false'
-  end
-  if ok then
-    log(string.format('%s: %s=%s through UWESkyActor', why, key, value))
-    return true, false
-  end
-  log(string.format('%s: UWESkyActor path failed (%s); using logged console fallback', why, tostring(err)))
-  if not fallback_pc then return false, false, err end
-  run_as(fallback_pc, fallback_line, why .. ' fallback')
-  return true, true
-end
 local function apply_settings(why)
   local cfg, err = settings.parse(read_file(cpath('settings.yaml')))
   if not cfg then
@@ -295,9 +210,7 @@ local function apply_settings(why)
     return nil, err
   end
   local p = settings.plan(cfg)
-  local host_pc = #p.apply > 0 and controller_named(os.getenv('SN2_HOST_NAME') or 'SN2 Host') or nil
-  -- What the card shows as applied is what ran: a console line needs the
-  -- host's controller, the weather call needs a loaded type of that name.
+  local host_pc = #p.apply > 0 and controller_named(HOST_NAME) or nil
   local ran = {}
   for _, a in ipairs(p.apply) do
     if a.key == 'weather' then
@@ -307,19 +220,10 @@ local function apply_settings(why)
       else
         p.refused[#p.refused + 1] = { key = a.key, value = a.value, desired = a.desired, reason = miss }
       end
-    elseif a.key == 'time_of_day' or a.key == 'daylight' then
-      local ok, _, miss = apply_clock(a.key, a.value, host_pc, a.line, 'settings ' .. a.key)
-      -- The idle freeze owns the clock while nobody is in and unfreezes on a
-      -- join only from its own flag, so a daylight line hands it the state it
-      -- just set (idle_tick reads this once).
-      if ok then
-        if a.key == 'daylight' then state.daylight_frozen = (a.line == 'FreezeTime') end
-        ran[#ran + 1] = a
-      else
-        p.refused[#p.refused + 1] = { key = a.key, value = a.value, desired = a.desired, reason = miss }
-      end
     elseif host_pc then
       run_as(host_pc, a.line, 'settings ' .. a.key)
+      -- The idle freeze owns the clock while nobody is in, so it is handed the operator's hold.
+      if a.key == 'daylight' then state.daylight_frozen = (a.line == 'FreezeTime') end
       ran[#ran + 1] = a
     else
       p.refused[#p.refused + 1] = { key = a.key, value = a.value, desired = a.desired,
@@ -330,23 +234,18 @@ local function apply_settings(why)
   for _, r in ipairs(p.refused) do
     log(string.format('settings (%s): %s=%s refused: %s', why, r.key, tostring(r.value), r.reason))
   end
-  log(string.format('settings (%s): %d applied, %d refused, %d mods listed',
-    why, #p.apply, #p.refused, #p.mods))
-  -- The latest submission: every status write judges the readbacks against
-  -- it (settings_block) and nothing applies it again.
+  log(string.format('settings (%s): %d applied, %d refused', why, #p.apply, #p.refused))
+  -- Every status write judges the readbacks against this submission; nothing applies it again.
   state.settings = { plan = p, track = settings.submission(p) }
   return p
 end
--- The answer separates what was asked, what ran, what was refused and why,
--- and what the readbacks show now; the per-key block and the card's older
--- rows ride beside them. The answer's look marks nothing: `verified_at` is
--- set by a status write.
+-- What was asked, what ran, what was refused and why, and what the readbacks show now.
+-- `verified_at` is set by a status write, never by this answer.
 handlers.settings = function()
   local p, err = apply_settings('moonpool')
   if not p then return false, nil, err end
   local block = settings_block(settings_readback())
-  local a = { requested = {}, submitted = {}, refused = {}, observed = {}, settings = {},
-    values = block.values, mods = block.mods }
+  local a = { requested = {}, submitted = {}, refused = {}, observed = {}, settings = {}, values = block.values }
   for _, v in ipairs(p.values) do
     a.requested[#a.requested + 1] = { key = v.key, value = v.value, desired = v.desired }
   end
@@ -362,11 +261,7 @@ handlers.settings = function()
   return true, a
 end
 
-
-
--- The game's saved signal store (UWEPingSystemComponent) and one location ping
--- in it. Shared by every feature that shows a player a signal; the caller
--- chooses the colour.
+-- The game's saved signal store (UWEPingSystemComponent) and one location ping in it.
 local ping_store_name
 local function saved_ping_store()
   if ping_store_name then
@@ -385,33 +280,27 @@ local function add_location_ping(store, name, pos, tracking, color)
   local data = StaticFindObject(LOCATION_PING)
   if not valid(data) then return nil, 'location ping data unavailable' end
   local out = {}
-  -- UWEPingSystem.hpp:124; UE4SS LuaUObject.cpp updates an FStructProperty
-  -- out parameter in the same table supplied by Lua.
+  -- UE4SS fills an FStructProperty out parameter into the table passed in.
   store:AddPing(pos, FText(name), data, 0.0, nil, tracking, out,
     false, tracking ~= nil, color)
   return out
 end
 
--- moonpool friend-code (EXPERIMENTAL): ask the game's Friends view model for the
--- Sonar code and keep it for status.json. Every game call stays in the game
--- thread; only a string comes back out. The view model is the one the game made
--- for its open Friends screen, found again on every tick (friend_code.lua says
--- why one is never constructed here).
+-- moonpool diag friend-code (EXPERIMENTAL): the Sonar code from the game's Friends view model.
 local friend_code = require('friend_code')
 local SONAR_FILE = cpath('sonar-code.txt')
 local FRIENDS_SCREEN = '/Game/Blueprints/UI/Friends/WBP_InGameFriends.WBP_InGameFriends_C'
--- The signed-in hosting account (launch-headless.sh); the code is that account's,
--- so a volume signed in to another account never shows the old one's code.
+-- A kept code is shown only for the account that made it.
 local HOST_SID = os.getenv('SN2_HOST_STEAMID') or ''
-do -- the last code the game made survives a restart of the host
+do
   local kept, sid = (read_file(SONAR_FILE) or ''):match('^%s*(%S+)%s+(%d+)%s*$')
   if HOST_SID ~= '' and sid == HOST_SID and friend_code.is_code(kept) then state.friend_code = kept end
 end
 local FC_GAME = {
   find_vm = function() local v = FindFirstOf('SN2InGameFriendScreenViewModel'); return valid(v) and v or nil end,
   others = function()
-    local host, n = os.getenv('SN2_HOST_NAME') or 'SN2 Host', 0
-    for _, p in ipairs(players()) do if p.name ~= host then n = n + 1 end end
+    local n = 0
+    for _, p in ipairs(players()) do if p.name ~= HOST_NAME then n = n + 1 end end
     return n
   end,
   call = function(vm, f) return pcall(function() vm[f](vm) end) end,
@@ -426,9 +315,7 @@ local FC_GAME = {
     end)
     return names
   end,
-  -- No screen to click on a headless host, so the screen a click would open is built the
-  -- game's own way: its widget, made for the host's player controller and added to the
-  -- viewport. The widget makes and owns the view model. Closed again by close_screen.
+  -- Headless, so the Friends screen is built the game's way: its widget, which owns the view model.
   open_screen = function()
     local pc = FindFirstOf('PlayerController')
     if not valid(pc) then return false, 'no player controller' end
@@ -464,8 +351,7 @@ handlers.friend_code = function(args)
     end
     log(job.how == 'opened' and 'friend-code: opened the Friends screen the way a click does'
       or 'friend-code: requested from the open Friends screen')
-    -- done lives outside the loop: the game-thread poll sets it after the loop's own return,
-    -- so the next round ends the loop instead of polling and logging the code again.
+    -- Set on the game thread after the loop returns, so the next round ends the loop.
     local done = false
     LoopAsync(2000, function()
       if done then return true end
@@ -495,14 +381,10 @@ handlers.friend_code = function(args)
   return true, { queued = true, experimental = true }
 end
 
--- Shared unlocks (unlock_replay.lua says why): a host-side "Unlocked story
--- goal DA_BasePiece_*" or "DA_Tools_*" is sent as the command class's
--- `Unlock <form>` to every connected non-host player; a joiner gets the
--- starter set plus everything the host unlocked, as ONE batch. The set lives
--- in status.json, keyed by the save.
+-- Shared unlocks (unlock_replay.lua): the host's unlocks are sent to every player, and a joiner
+-- gets the starter set plus all of them as one batch.
 local unlocks = require('unlock_replay')
 local UNLOCK_REPLAY_ENABLED = (os.getenv('SN2_UNLOCK_REPLAY') or 'true') ~= 'false'
-local HOST_NAME = os.getenv('SN2_HOST_NAME') or 'SN2 Host'
 local function prev_status()
   local raw = read_file(cpath('status.json'))
   if not raw then return nil end
@@ -513,11 +395,7 @@ unlocks.interval = unlocks.interval_ms(os.getenv('SN2_UNLOCK_INTERVAL_MS'))
 local UNLOCKS = unlocks.seed(state.save or os.getenv('SN2_SAVE_NAME') or 'newest', prev_status())
 local asset_index -- the join replay's name lookups, defined with the index below
 local UNLOCK_GAME = {
-  -- One batch: every line for one player in one pass, one controller lookup
-  -- (176 lines in one command file ran in 4 s; one line per file took 30 s).
-  -- Lines are spaced `interval` ms apart (UNLOCK_INTERVAL_MS, default 50): a
-  -- A 20 ms burst froze the client's toolbar. Each line runs
-  -- on the game thread; the controller is checked before every line.
+  -- Lines go `interval` ms apart (UNLOCK_INTERVAL_MS): a 20 ms burst froze the client's toolbar.
   send = function(player, lines, interval)
     local pc = controller_named(player, true)
     if not pc then log('unlocks: ' .. player .. ' gone before ' .. #lines .. ' lines'); return end
@@ -541,12 +419,7 @@ local UNLOCK_GAME = {
       end) end)
     end
   end,
-  -- The join clock (ms, 1 s resolution) and "has a body" for the pre-control
-  -- send: the batch goes out 2 s after the first poll that sees the pawn.
   now = function() return os.time() * 1000 end,
-  -- The body is read off the PlayerState's PawnPrivate, the check main.lua's
-  -- lifepod step was proven live with a real player body; the
-  -- controller's Pawn is the second try.
   has_body = function(player)
     local pc = controller_named(player)
     local b = false
@@ -556,26 +429,15 @@ local UNLOCK_GAME = {
     end
     return b
   end,
-  -- Names-only lookup: an asset already loaded under that short name. Names
-  -- compare without case (FName), so the object's own spelling is returned
-  -- (DA_FlashLight_ItemType for a lookup of DA_Flashlight_ItemType). Answered
-  -- from the asset index below, never a FindObject per name: each of those
-  -- walked the whole object array on the game thread.
+  -- FNames compare without case, so the game's own spelling is returned.
   exists = function(name)
     local idx = asset_index()
     return idx and idx.names[tostring(name):lower()] or false
   end,
   log = log,
 }
--- The join replay's lookups, from ONE FindAllOf('DataAsset'): UE4SS filters it in
--- C++ and it includes subclasses, so it returns every scan data, item type,
--- recipe, construct data and story goal asset. names: lowercase short name ->
--- the game's own spelling, for exists(); scans: display name -> its *_ScanData
--- assets. Before, a Lua ForEachUObject over every object built the scan index
--- and every candidate name ran a FindObject that walked the object array again;
--- one join froze the game thread for 47-67 s, Epic's services dropped the
--- lobby, and UE4SS crashed. Data assets load with the world and
--- stay loaded; on a scan miss the index is rebuilt at most once a minute.
+-- One FindAllOf('DataAsset') builds every lookup: walking all objects per name froze the game
+-- thread for a minute on a join and crashed UE4SS. Rebuilt at most once a minute on a scan miss.
 local ASSET_INDEX, ASSET_INDEX_AT = nil, -60
 local function build_asset_index()
   local idx, names, scans = { names = {}, scans = {} }, 0, 0
@@ -616,11 +478,7 @@ UNLOCK_GAME.scan_assets = function(display)
 end
 _G.SN2_UNLOCK_GAME = UNLOCK_GAME -- read by tests/lua/host_behaviour_spec.lua
 _G.SN2_ASSET_INDEX_RESET = function() ASSET_INDEX, ASSET_INDEX_AT = nil, -60 end -- tests only
-_G.SN2_UNLOCK_GAME = UNLOCK_GAME -- read by tests/lua/host_behaviour_spec.lua
-_G.SN2_ASSET_INDEX_RESET = function() ASSET_INDEX, ASSET_INDEX_AT = nil, -60 end -- tests only
--- Named players whose controller exists: a PlayerState seen before its
--- controller is not counted yet, so a joiner is replayed to only once the
--- Unlock lines can run as them.
+-- Named players whose controller exists, so the Unlock lines can run as them.
 local function player_names()
   local out = {}
   for _, p in ipairs(players()) do
@@ -649,10 +507,7 @@ handlers.unlocks = function(args)
     scans = UNLOCKS.scans, queued = true }
 end
 
--- moonpool slots N: the live limit, no re-host. Writes the lobby subsystem's
--- MaxSessionPlayerCount and, once the world is loaded, the world
--- GameSession.MaxPlayers, then reads both back; the result names which took.
--- Lasts until the next start; PLAYER_SLOTS in .env makes it permanent.
+-- moonpool server slots N: the live limit until the next start, read back.
 handlers.slots = function(args)
   local cap = idle.session_limit(args.slots)
   if not cap then return false, nil, 'slots_out_of_range' end
@@ -681,9 +536,8 @@ handlers.slots = function(args)
     world_game_session_max_players = world }, took = took }
 end
 
--- In-game administration through the PDA's own Signals > EDIT screen. The
--- hook copies plain values only; all policy and game work waits for the next
--- game-thread poll. Ordinary signal names never enter this queue.
+-- In-game administration through the PDA's Signals > EDIT screen. The hook copies plain values;
+-- the work waits for the next game-thread poll.
 local admin_signal = require('admin_signal')
 local ADMIN = admin_signal.new({ admins = os.getenv('SN2_ADMINS') or '',
   prefix = os.getenv('SN2_ADMIN_PREFIX') or '!' })
@@ -695,8 +549,7 @@ local REPLY_SECONDS = 8
 local admin_restores = {} -- guid key -> { ping, name, color, at }
 local admin_colors = {}   -- guid key -> { color, at }: the colour picked in the same EDIT
 
--- Plain copies: a hook's parameters live only for the call, and the work happens
--- on a later tick. Structs are handed back to UFunctions as plain tables.
+-- A hook's parameters live only for the call, so its structs are copied out.
 local function guid_copy(g) return { A = g.A, B = g.B, C = g.C, D = g.D } end
 local function guid_key(g) return string.format('%d:%d:%d:%d', g.A, g.B, g.C, g.D) end
 local function color_copy(c) return { R = c.R, G = c.G, B = c.B, A = c.A } end
@@ -718,42 +571,25 @@ local function admin_identity(component)
   return { name = name or '?', eos = admin_signal.connection_id(ADMIN, connection) }
 end
 
-local function admin_receipt(sender, command, r)
-  local f, err = io.open(cpath('receipts.jsonl'), 'ab')
-  if not f then log('admin receipt not written: ' .. tostring(err)); return end
-  local request_id = string.format('%08x%08x%08x%08x', os.time() % 0x100000000,
-    math.random(0, 0x7fffffff), math.random(0, 0x7fffffff), math.random(0, 0x7fffffff))
-  f:write(json.encode({ schema_version = 1, request_id = request_id,
-    actor = sender.eos or sender.name, source = 'in_game', command = 'admin.signal',
-    arguments = { command = command }, started_at = os.date('!%Y-%m-%dT%H:%M:%SZ'),
-    completed_at = os.date('!%Y-%m-%dT%H:%M:%SZ'), duration_ms = 0,
-    exit_code = r.ok and 0 or 77, ok = r.ok, state = r.ok and 'submitted' or 'refused',
-    code = r.ok and 'ok' or 'refused', protocol_result = {}, message = r.text }) .. '\n')
-  f:close()
-end
-
 local function admin_settings(key, value)
-  local desired = settings.VERIFIED[key] and settings.VERIFIED[key](value)
-  if not desired then return false, nil, 'value out of range' end
+  local line = settings.VERIFIED[key] and settings.VERIFIED[key](value)
+  if not line then return false, nil, 'value out of range' end
   if key == 'weather' then
-    local ok, why = set_weather(desired)
-    return ok, ok and { value = desired } or nil, why
+    local ok, why = set_weather(line)
+    return ok, ok and { value = line } or nil, why
   end
-  local pc = controller_named(os.getenv('SN2_HOST_NAME') or 'SN2 Host')
-  local line = desired
-  if value == 'frozen' then line = 'FreezeTime'
-  elseif value == 'normal' then line = 'UnfreezeTime' end
-  local ok, _, err = apply_clock(key, value, pc, line, 'in-game admin ' .. key)
-  return ok, ok and { value = value } or nil, err
+  local pc = controller_named(HOST_NAME)
+  if not pc then return false, nil, 'host controller not found' end
+  run_as(pc, line, 'in-game admin ' .. key)
+  return true, { value = value }
 end
 
 local function admin_call(name, args)
   if name == 'ping' then
     local rows = status.players(to_str)
-    local host_name = os.getenv('SN2_HOST_NAME') or 'SN2 Host'
     local lines = {}
     for _, row in ipairs(rows) do
-      if row.name ~= host_name and (args.all or row.name == args.sender.name) then
+      if row.name ~= HOST_NAME and (args.all or row.name == args.sender.name) then
         local suffix = row.ping_ms ~= nil and (tostring(row.ping_ms) .. ' ms') or 'unknown'
         lines[#lines + 1] = row.name .. ' · ' .. suffix
       end
@@ -786,8 +622,7 @@ local function admin_call(name, args)
   return false, nil, 'unsupported command'
 end
 
--- True only while the store still has this signal: a signal removed during the
--- reply window is never written to (a stale id could crash the game natively).
+-- Writing to a signal that was removed meanwhile can crash the game natively.
 local function ping_alive(store, ping)
   local alive = false
   pcall(function() alive = store:IsPingIDAlreadyRegistered(ping) == true end)
@@ -805,10 +640,7 @@ local function admin_reply(ping_id, r)
   if not ok then log('admin reply failed: ' .. tostring(err)) end
 end
 
--- After REPLY_SECONDS the signal gets back the name it had before the command
--- (read in the hook, before the rename applied) and the colour the admin's own
--- EDIT sent with it. A second command on the same signal keeps the first
--- original. An unknown original name is left as the answer, and said so.
+-- After REPLY_SECONDS the signal gets back the name and colour it had before the command.
 local function remember_restore(item)
   local key = guid_key(item.ping_id)
   local r = admin_restores[key]
@@ -848,7 +680,6 @@ local function admin_drain()
     local sender = item.sender
     local r = admin_signal.run(ADMIN, sender, item.text, { now = os.time, call = admin_call })
     if r and r.silent then
-      -- A non-admin: no reply, no restore, no receipt; logged once a minute.
       if r.log then
         log(string.format('admin: ignored %s from %s (eos %s): not an admin', item.text,
           tostring(sender.name), tostring(sender.eos)))
@@ -857,7 +688,6 @@ local function admin_drain()
     if r and not r.silent then
       log(string.format('admin command: sender=%s eos=%s command=%s result=%s %s',
         tostring(sender.name), tostring(sender.eos), item.text, r.ok and 'done' or 'refused', r.text))
-      admin_receipt(sender, item.text, r)
       admin_reply(item.ping_id, r)
       remember_restore(item)
     end
@@ -865,8 +695,7 @@ local function admin_drain()
   admin_restore_due()
 end
 
--- RegisterHook itself must run on the game thread on UE4SS 1190. Retry until
--- the function has loaded; never hook HostSessionAsync (see main.lua).
+-- RegisterHook must run on the game thread on UE4SS 1190; retried until the function has loaded.
 LoopAsync(5000, function()
   if admin_hooked and color_hooked then return true end
   ExecuteInGameThread(function()
@@ -878,13 +707,11 @@ LoopAsync(5000, function()
           pcall(function() text = NewName:get():ToString() end)
           if type(text) ~= 'string' then return end
           if text:sub(1, #ADMIN.prefix) ~= ADMIN.prefix then
-            -- An ordinary rename during a reply window: it wins, no restore over it.
             pcall(function() admin_restores[guid_key(PingId:get())] = nil end)
             return
           end
           pcall(function() ping_id = guid_copy(PingId:get()) end)
           if not ping_id then return end
-          -- Before the rename applies (this runs first): the name to give back.
           pcall(function() old = find('UWEPingSystemComponent'):GetPingDisplayName({}, PingId:get()):ToString() end)
           if type(old) ~= 'string' or old == '' or old:sub(1, #ADMIN.prefix) == ADMIN.prefix then old = nil end
           local sender = admin_identity(Context:get())
@@ -897,8 +724,7 @@ LoopAsync(5000, function()
     if not color_hooked then
       local fn = StaticFindObject(COLOR_HOOK)
       if fn and fn:IsValid() then
-        -- The PDA's EDIT sends the colour right after the name, under a millisecond
-        -- apart: that colour is the one to give back.
+        -- EDIT sends the colour right after the name: that colour is the one to give back.
         RegisterHook(COLOR_HOOK, function(_, PingId, Color)
           pcall(function()
             admin_colors[guid_key(PingId:get())] = { color = color_copy(Color:get()), at = os.time() }
@@ -912,9 +738,8 @@ LoopAsync(5000, function()
   return admin_hooked and color_hooked
 end)
 
--- Empty-server policy (idle.lua): FreezeTime after IDLE_FREEZE_MINUTES with no
--- joiner, UnfreezeTime on the next join, and (optional) a stop request after
--- IDLE_STOP_HOURS that the join watcher carries out outside the game.
+-- Empty-server policy (idle.lua): FreezeTime with nobody in, UnfreezeTime on a join, and an
+-- optional stop request that the join watcher carries out.
 local IDLE = idle.new({
   freeze_s = idle.seconds(os.getenv('SN2_IDLE_FREEZE_MINUTES') or '10', 60),
   stop_s = idle.seconds(os.getenv('SN2_IDLE_STOP_HOURS'), 3600),
@@ -926,8 +751,6 @@ local function idle_tick(st)
     if p.name ~= st.host_name then joiners = joiners + 1 end
   end
   if state.daylight_frozen ~= nil then
-    -- The operator's daylight line: `frozen` holds the clock for everyone until
-    -- `normal`; the idle freeze only ever acts on a clock it may touch.
     idle.hold(IDLE, state.daylight_frozen)
     state.daylight_frozen = nil
   end
@@ -935,10 +758,10 @@ local function idle_tick(st)
     local host = controller_named(st.host_name)
     if act == 'freeze' and host then
       log('idle: nobody in for the freeze time; FreezeTime as the host')
-      apply_clock('daylight', 'frozen', host, 'FreezeTime', st.host_name .. ' (idle freeze)')
+      run_as(host, 'FreezeTime', st.host_name .. ' (idle freeze)')
     elseif act == 'unfreeze' and host then
       log('idle: a player joined; UnfreezeTime as the host')
-      apply_clock('daylight', 'normal', host, 'UnfreezeTime', st.host_name .. ' (idle unfreeze)')
+      run_as(host, 'UnfreezeTime', st.host_name .. ' (idle unfreeze)')
     elseif act == 'stop' then
       log('idle: nobody in for IDLE_STOP_HOURS; asking the container to stop the game')
       write_atomic(cpath('idle-stop-request.json'), { ts = os.time(), reason = 'idle_stop_hours' })
@@ -946,9 +769,7 @@ local function idle_tick(st)
   end
 end
 
--- The replay ledger survives a game restart. It is deliberately bounded: the
--- newest 1024 nonces cover more than the 120-second acceptance window even at
--- the queue's maximum useful rate.
+-- The replay ledger survives a game restart; 1024 nonces outlast the 120 s acceptance window.
 local NONCE_LEDGER = cpath('receipts', 'nonces.txt')
 local remembered = {}
 for id in (read_file(NONCE_LEDGER) or ''):gmatch('[0-9a-f]+') do remembered[#remembered + 1] = id end
@@ -974,10 +795,8 @@ local function list_inbox()
 end
 
 local function regular_not_reparse(path)
-  -- /a:-d: not a directory. Wine's cmd honours no "l" (reparse point) filter:
-  -- the -d-l form matched nothing, so every request was refused as non_regular_file
-  -- and it follows a symlink as a plain file. Only the container's
-  -- own user can write the inbox, so a link there crosses no privilege boundary.
+  -- Wine's cmd has no reparse-point filter (-l matches nothing), so a link passes as a file;
+  -- only the container's own user can write the inbox.
   local p = io.popen('cmd /c dir /a:-d /b "' .. path .. '" 2>nul')
   if not p then return false end
   local line = p:read('*l'); p:close()
@@ -1012,9 +831,7 @@ local function process_inbox()
           result = answer(id, false, nil, args)
         else
           remember_nonce(id)
-          -- The handler runs on the game thread: a UFunction called from this loop fails.
-          -- The answer is written when it returns; until then the nonce is in flight,
-          -- and a repeat in the same pass is dropped.
+          -- A UFunction called from this loop fails, so the handler runs on the game thread.
           inflight[id] = true
           ExecuteInGameThread(function()
             local hok, ret, data, err = pcall(handlers[cmd], args)
@@ -1037,8 +854,7 @@ local function process_inbox()
       write_atomic(cpath('outbox', name), result)
     end
   end
-  -- Answers are useful only briefly: moonpool normally consumes its own. Keep a
-  -- hard ceiling for clients that died before reading them.
+  -- A ceiling for answers whose client died before reading them.
   local answers = {}
   local p = io.popen('cmd /c dir /b "' .. cpath('outbox') .. '\\*.json" 2>nul')
   if p then for line in p:lines() do answers[#answers + 1] = line:gsub('%s+$', '') end; p:close() end
@@ -1046,18 +862,14 @@ local function process_inbox()
   while #answers > 128 do os.remove(cpath('outbox', table.remove(answers, 1))) end
 end
 
--- Crash recovery: mod temporary files were never published, while inbox
--- files were. Remove the former and arrange to answer the latter on the first
--- poll even when the dead process removed .pending before it crashed.
+-- After a crash: drop the mod's unpublished temp files and answer whatever is still in the inbox.
 os.execute('cmd /c del /q "' .. cpath('tmp', 'mod-*.json') .. '" 2>nul')
 if #list_inbox() > 0 then
   local f = io.open(cpath('inbox', '.pending'), 'wb'); if f then f:close() end
 end
 
--- Launch-cinematic join hold (cinematic_hold.lua says why this way): the game
--- log is tailed from its end; while Gamestate.LifepodAscending is set the
--- session limit is the players already in, so the game refuses a joiner as
--- full; when the tag clears the configured limit is written back and read.
+-- Launch-cinematic join hold (cinematic_hold.lua): while Gamestate.LifepodAscending is set in the
+-- game log, the limit is the players already in.
 local hold = require('cinematic_hold')
 local LIFEPOD_JOIN_HOLD = (os.getenv('SN2_LIFEPOD_JOIN_HOLD') or 'true') ~= 'false'
 local HOLD = hold.new()
@@ -1087,8 +899,6 @@ local function hold_act(acts)
     end
   end
 end
--- The log tail and the join replay are two jobs: the replay runs whether or not the
--- log can be opened, and each failure is logged once per distinct reason.
 local hold_log_said, poll_said = nil, {}
 local roster_rows = {}
 local function refresh_roster()
@@ -1142,14 +952,11 @@ local function hold_poll()
   end
   if LIFEPOD_JOIN_HOLD then hold_act(hold.tick(HOLD, os.time())) end
 end
--- One poll on the game thread: the log tail, then the join replay. An error in
--- either is logged once per message, never swallowed, and one does not stop the other.
 local function said_once(what, err)
   local key = what .. '\0' .. tostring(err)
   if not poll_said[key] then poll_said[key] = true; log(what .. ' error: ' .. tostring(err)) end
 end
 local no_controller_said = {}
-local roster_said = nil
 local banned_seen = {}
 local function hosted_replay()
   local ok, err = pcall(function()
@@ -1159,19 +966,6 @@ local function hosted_replay()
         return ran, why
       end, log)
     local named = player_names()
-    -- The roster as this poll sees it, logged whenever it changes (a join, a
-    -- leave, a body arriving): name, controller found, body seen.
-    local parts = {}
-    for _, p in ipairs(cached_players()) do
-      local pc = p.name ~= '?' and controller_named(p.name) or nil
-      parts[#parts + 1] = string.format('%s (controller %s, body %s)', tostring(p.name),
-        pc and 'yes' or 'no', pc and (UNLOCK_GAME.has_body(p.name) and 'yes' or 'no') or '-')
-    end
-    table.sort(parts) -- FindAllOf order is not stable; an unchanged roster must not re-log
-    local roster = #parts == 0 and 'no player states' or table.concat(parts, '; ')
-    if roster ~= roster_said then roster_said = roster; log('replay poll sees: ' .. roster) end
-    -- A listed player the replay cannot reach is said once, by name or '?',
-    -- so a silent joiner is a line in this log, not a guess.
     local reachable = {}
     for _, n in ipairs(named) do reachable[n] = true end
     for _, p in ipairs(cached_players()) do
@@ -1202,7 +996,6 @@ local HOSTED_GATE = hosted_poll_gate.new({
 })
 local function hosted_poll() hosted_poll_gate.tick(HOSTED_GATE) end
 
--- Main loop: queue and a small readiness file for moonpool status.
 math.randomseed(os.time())
 log('loaded; control dir ' .. DIR)
 LoopAsync(CFG.poll_ms, function()
@@ -1214,8 +1007,7 @@ LoopAsync(CFG.poll_ms, function()
       local notice = json.decode(notice_raw)
       ExecuteInGameThread(function()
         local ok, err = pcall(function()
-          local notice_players, names = notify.targets(status.live_players(to_str),
-            os.getenv('SN2_HOST_NAME') or 'SN2 Host', notice.players)
+          local notice_players, names = notify.targets(status.live_players(to_str), HOST_NAME, notice.players)
           local game = { find = StaticFindObject, world = function() return notice_players[1] end,
             log = log, text = FText }
           notify.send(game, notice_players, notice.kind == 'warning' and 'warning' or 'info',
@@ -1232,19 +1024,12 @@ LoopAsync(CFG.poll_ms, function()
     end
     if _G.SN2_HOSTED then
       ExecuteInGameThread(function()
-        -- Build the join replay's lookups once the world is hosted, before anyone
-        -- joins, so the first join pays nothing and the log shows what it cost.
+        -- Built before anyone joins, so the first join pays nothing.
         if UNLOCK_REPLAY_ENABLED and not state.asset_index_primed then
           state.asset_index_primed = true
           asset_index()
         end
-        local started = os.clock()
         hosted_poll()
-        local now = os.time()
-        if not state.hosted_cost_logged_at or now - state.hosted_cost_logged_at >= 60 then
-          state.hosted_cost_logged_at = now
-          log(string.format('hosted poll cost: %.3f ms', (os.clock() - started) * 1000))
-        end
       end)
     end
     write_atomic(cpath('readiness.json'), { ts = os.time(), hosted = _G.SN2_HOSTED == true,
@@ -1255,14 +1040,9 @@ LoopAsync(CFG.poll_ms, function()
   return false
 end)
 
--- status.json: its own 30 s timer, cached lookups only (see status.lua). The
--- Discord script, the viewer status line and the map card read this file.
-local STATUS_MS = tonumber(os.getenv('SN2_STATUS_MS') or '') or 30000
--- The world clock as hours (0-24) off the day-sequence actor's GetTimeOfDay, nil when none; the
--- readback a time-of-day setting is verified against. Exact-class order: the game's own actors first
--- (SunMoonDaySequenceActor, UWESkyActor: loaded-class walk), then the subsystem's. Each
--- source names its unit (UWESkyActor answers a day fraction: 0.36 morning, 0.52 after SetTimeOfDay
--- 12:00; the engine's actors answer hours); the unit is never guessed.
+-- status.json, read by the Discord card, the viewer status line and the map card.
+local STATUS_MS = 30000
+-- The world clock: UWESkyActor answers a fraction of the day, the engine's actors answer hours.
 local CLOCK_CLASSES = {
   { cls = 'UWESkyActor', unit = 'fraction' },
   { cls = 'SunMoonDaySequenceActor', unit = 'hours' },
@@ -1306,13 +1086,9 @@ local function time_of_day()
     local minutes = math.floor(frac * 24 * 60 + 0.5) % (24 * 60)
     return string.format('%02d:%02d', minutes // 60, minutes % 60), math.floor(frac * 1000 + 0.5) / 1000
   end
-  -- No clock under those names: say once which loaded actor classes look like
-  -- one (names only, nothing called), so the next name to try is in the log.
+  -- No clock: log once which loaded classes are named like one (names only, nothing called).
   if not clock_said and _G.SN2_HOSTED then
     clock_said = true
-    -- Every loaded object's class, not only actors: on the headless host the
-    -- loaded actors held no clock, so it is a subsystem, a
-    -- component or a game-state field.
     local names, named, n = {}, {}, 0
     pcall(function()
       ForEachUObject(function(o)
@@ -1335,10 +1111,7 @@ local function time_of_day()
 end
 _G.SN2_TIME_OF_DAY = time_of_day -- read by tests/lua/host_behaviour_spec.lua
 
--- The current weather's asset name off the weather sync component (its
--- GetCurrentWeather; a names-only walk of UWEWeatherSyncComponent listed it on
--- and the names of the loaded weather types, which are the
--- values SetCurrentWeather takes. The readback for a weather setting.
+-- The current weather and the loaded weather types, which are what SetCurrentWeather takes.
 local function object_name(o)
   local n
   pcall(function() n = o:GetFName():ToString() end)
@@ -1367,8 +1140,6 @@ local function weather()
     end
   end)
   table.sort(types)
-  -- Said once: the asset path behind each type name, for a command that may
-  -- want the path rather than the name (names only, nothing called).
   if #types > 0 and not weather_paths_said then
     weather_paths_said = true
     local parts = {}
@@ -1379,12 +1150,8 @@ local function weather()
 end
 _G.SN2_WEATHER = weather -- read by tests/lua/host_behaviour_spec.lua
 
--- The weather setting: the named type handed to the sync component's own
--- SetCurrentWeather (the console forms moved nothing). Called on the game
--- thread already (the armed apply runs in the status loop's game-thread
--- step, the moonpool one in a handler), so it answers at once: true, or false
--- and why, which the card shows as refused. The readback above judges it on
--- the next status write.
+-- The console's weather commands moved nothing; the sync component's SetCurrentWeather does.
+-- Called on the game thread already.
 set_weather = function(name)
   local ok, err = pcall(function()
     local sync = FindFirstOf('UWEWeatherSyncComponent')
@@ -1402,11 +1169,8 @@ set_weather = function(name)
 end
 _G.SN2_SET_WEATHER = set_weather -- read by tests/lua/host_behaviour_spec.lua
 
--- The per-key settings block for status.json and the settings answer: the
--- clock and weather readbacks given, the clock hold's own state as daylight,
--- judged against the latest submission (settings.lua observe). The status
--- write passes its time and marks `verified_at`; the answer passes none and
--- marks nothing. Nothing is applied again here.
+-- The per-key settings block, judged against the latest submission; only a status write
+-- (which passes `now`) marks `verified_at`.
 settings_block = function(tod, wx, now)
   local s = state.settings
   if not s then return nil end
@@ -1420,13 +1184,11 @@ local function current_map()
   return m
 end
 
--- Private voice-range signals. UWEPingSystemComponent is the game's own saved
--- signal store; default visibility is disabled before the one listener is
--- enabled. AddPing and visibility names and arguments come from UWEPingSystem.hpp:111-124.
+-- Private voice-range signals in the game's saved signal store, visible to one listener only.
 local VOICE_WARN = (os.getenv('SN2_VOICE_WARN') or 'true') ~= 'false'
 local VOICE = voice_range.new({
   range_m = tonumber(os.getenv('SN2_VOICE_RANGE_M') or '') or voice_range.DEFAULT_RANGE_M,
-  host = os.getenv('SN2_HOST_NAME') or 'SN2 Host',
+  host = HOST_NAME,
 })
 local voice_ping_error
 local function ping_store()
@@ -1445,7 +1207,6 @@ local function ping_store()
       end
       return nil
     end
-    -- UWEPingSystem.hpp:111,115: hidden by default, visible only to listener.
     component:SetDefaultPingVisibility(id, false)
     component:SetPingVisibilityForPlayer(listener.player, id, true)
     return id
@@ -1500,7 +1261,7 @@ LoopAsync(STATUS_MS, function()
         branch = os.getenv('SN2_STEAM_BRANCH') or 'unknown',
         save = state.save or os.getenv('SN2_SAVE_NAME') or 'newest',
         player_slots = state.player_slots or tonumber(os.getenv('SN2_PLAYER_SLOTS') or '') or 4,
-        host_name = os.getenv('SN2_HOST_NAME') or 'SN2 Host',
+        host_name = HOST_NAME,
         time_of_day = tod, day_fraction = frac,
         weather = wx, weather_types = wxt,
       }, to_str)
