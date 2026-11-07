@@ -5,32 +5,10 @@
   then starts the game through Steam.
 
 .DESCRIPTION
-  Installed once from the project's GitHub releases; a server supplies data, never code. A join
-  page opens it with a moonpool: link. It asks before installing anything a server names: on the
-  first join, and whenever that server's mods or loader change.
-
-  Every run, in this order:
-    1. refuses while the game is running (nothing is written);
-    2. finds the game through Steam's libraryfolders.vdf and the app manifest
-       (any library, never a fixed path);
-    3. fetches the server's signed mod manifest (one JSON, schema 3) and checks
-       the Steam branch and build the server runs;
-    4. works out what this server wants installed: every required mod, every
-       optional mod the player has not skipped, and the UE4SS loader when any
-       mod needs it, and asks the player about anything not already accepted;
-    5. obtains each archive it does not already have (a direct download, or a
-       file the player saved in Downloads for a site that needs a sign-in),
-       verifies every hash, checks the archive's entries, and unpacks into a
-       staging folder; one bad file stops the run with the previous set as it was;
-    6. places and removes files together, rolling all of it back on a failure,
-       and records what it placed in one ledger, so switching servers swaps the
-       sets and a file it did not place is never removed (-Adopt hands a file
-       over, on the player's say);
-    7. starts the game through steam://joinlobby or steam://rungameid.
-  A run with nothing to change touches no game file. Runs without admin rights
-  and changes nothing in Steam's own settings.
-
-  Windows PowerShell 5.1 compatible.
+  Installed once from the project's releases and opened by a join page's moonpool: link; a server
+  supplies data, never code. It asks before installing anything a server names, verifies and places
+  the mods the server's signed manifest declares (rolling all of it back on a failure, never removing
+  a file it did not place), then starts the game through Steam. Windows PowerShell 5.1 compatible.
 #>
 [CmdletBinding()]
 param(
