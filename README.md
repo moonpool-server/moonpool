@@ -55,6 +55,7 @@ The Discord card and the join page, as players see them
 - More than one world on a machine with `bin/moonpool-instance add`
 - Admin from the shell with `bin/moonpool`
 - Admin in game by naming a PDA signal `!help`
+- Bring the world you already play onto the server, and take it home again
 - Backups you can restore with one command
 - A Discord card showing who is on with a join button
 - An optional map that charts where players have been

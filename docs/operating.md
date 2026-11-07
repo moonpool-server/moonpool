@@ -85,6 +85,17 @@ Restore keeps a safety copy of your current saves and then hosts again, about a 
 
 Two worlds must not share a `BACKUP_DIR`: they overwrite each other's archives. `bin/moonpool-instance` gives each its own
 
+## Bring your world
+
+A world you already play in co-op can move onto the server, so it's there when the old host is offline. On the PC that hosted it, open `%LOCALAPPDATA%\Subnautica2\Saved\SaveGames` (for the experimental branch also look in the game's own `Subnautica2\Saved\SaveGames` folder under its Steam library) and take the newest world, a `.sav` like `savegame_2.sav` with its numbered `.bak` files. Zip them or copy the folder to the server, then
+
+```sh
+bin/moonpool server import savegame_2.zip
+bin/moonpool server import SaveGames/ Reef    # another name for it
+```
+
+It snapshots the current saves, hosts the imported world and waits for the game to say it loaded. The game only loads a save from its own build and branch, so bring a world from the same branch as the server and update the game on that PC first. A save it can't load is taken back out and the previous world hosted again. To take a world home `bin/moonpool server export` writes a zip to drop into a player's SaveGames folder
+
 ## Updates
 
 The game updates when the container starts, but only after a save copy works. `UPDATE_WITHOUT_BACKUP=true` skips that check. `AUTO_UPDATE=false` holds it on the build you have. Check nobody's online before you recreate the host
