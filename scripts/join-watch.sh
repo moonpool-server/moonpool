@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
-# Filters join and slot lines out of the game log; the game writes no
-# separate join log.
-# Join watcher: copies game-log lines about joins and slots to $LOG_DIR/join_watch.log,
-# writes metrics and a heartbeat, and refreshes the Discord card. Supervised through
-# docker/sn2-service.sh; read with `moonpool logs join_watch`.
+# Copies the game log's join and slot lines to $LOG_DIR/join_watch.log, writes metrics and a
+# heartbeat, and refreshes the Discord card.
 set -u
 # shellcheck source=scripts/common.sh
 . "$(dirname "$0")/common.sh"
 
-# The game's own log, not the console capture: on the public build the console
-# carries only warnings, so joins never reached it (common.sh, ue_log_for_exe).
+# The game's own log: the public build's console output carries only warnings.
 GAME_LOG="${JOIN_WATCH_LOG:-$UE_LOG}"
 OUT="$LOG_DIR/join_watch.log"
 PAT='PostLogin|Login request|Join succeeded|Join request|NotifyAcceptingConnection|NotifyAcceptedConnection|AddClientConnection|UNetConnection|NetConnection.*(Open|Close|Cleanup)|registered players|NumOpenPrivateConnections|NumPrivateConnections|RegisterPlayer|UnregisterPlayer|OnSessionParticipant|OnCreateSessionComplete|LobbyId=Lobby\[0x|SessionId: Lobby\[0x|LobbyMemberStatus|member (joined|left)|PeerConnectionEstablished|Connection established|NetworkType=|ConnectionType=|IncomingConnection|connection request|Logout|PlayerState|HandleStartingNewPlayer|Kicked|rejected|Server full|MaxPlayers|autosave_completed'
@@ -21,8 +17,7 @@ echo "[$(stamp)] join watch started; following $GAME_LOG" >>"$OUT"
 NOTIFY="$(dirname "$0")/discord-notify.py"
 METRICS="$DATA_DIR/metrics.csv"
 [ -f "$METRICS" ] || echo "utc,cpu_cores,mem_mib,players" >"$METRICS"
-# The whole container, as docker stats counts it: the game is many Wine processes, and
-# the recorded game pid is only the shell that waits on them (it reads 13 MiB and no CPU).
+# The whole container: the game is many Wine processes, and its pid is only the shell waiting on them.
 usage_usec_was=''; usage_at_was=''
 container_usage() {
   local dir=${SN2_CGROUP:-/sys/fs/cgroup} usec at total inactive
@@ -48,9 +43,7 @@ record_lobby() { # hex lobby id from the UE log
   python3 "$(dirname "$0")/join-page.py" || true
 }
 
-# A watcher restart must recover the currently hosted lobby from the existing log.
-# The whole lobby id as either build writes it. The public build masks the middle
-# ("Lobby[0x18...B694]"), which this never matches; Steam answers there.
+# A watcher restart recovers the hosted lobby from the log; the public build masks its id.
 LOBBY_RE='(LobbyId=|SessionId: )Lobby\[(0x[0-9A-Fa-f]+)\]'
 # The log outlives the game: only a running game means its last lobby is still open.
 if [ -n "$(game_pid)" ]; then
@@ -84,8 +77,7 @@ heartbeat() {
       python3 "$(dirname "$0")/join-page.py" || true
     fi
     was=$now
-    # Reap the one in-game countdown without stalling joins, leaves, the card,
-    # or cancellation. Only a normally completed countdown stops the game.
+    # Only a countdown that completed stops the game.
     if [ -n "$restart_warning_pid" ] && ! kill -0 "$restart_warning_pid" 2>/dev/null; then
       if wait "$restart_warning_pid"; then
         pid=$(game_pid)
@@ -97,8 +89,7 @@ heartbeat() {
       fi
       restart_warning_pid=''
     fi
-    # IDLE_STOP_HOURS: the mod asks, the container stops the game (the same stop
-    # flag as `moonpool stop-game`); `moonpool start` or the next RESTART_CRON clears it.
+    # IDLE_STOP_HOURS: the mod asks and the game stops; `moonpool server start` or RESTART_CRON clears it.
     if [ -f "$CONTROL_DIR/idle-stop-request.json" ]; then
       rm -f "$CONTROL_DIR/idle-stop-request.json"
       if CONTROL_DIR="$CONTROL_DIR" session_up; then
@@ -106,12 +97,10 @@ heartbeat() {
       else
         : >"$STOP_FLAG"; : >"$RUN_DIR/idle-stopped"
         [ -n "$pid" ] && kill "$pid" 2>/dev/null
-        echo "[$(stamp)] idle: nobody in for ${IDLE_STOP_HOURS:-?} h; game stopped (moonpool start brings it back)" >>"$OUT"
+        echo "[$(stamp)] idle: nobody in for ${IDLE_STOP_HOURS:-?} h; game stopped (moonpool server start brings it back)" >>"$OUT"
       fi
     fi
-    # A confirmed in-game admin restart uses the same supervised game-process
-    # lifecycle as a normal restart: remove the request, stop this process, and
-    # let the game service start it again. The container itself is untouched.
+    # An in-game admin restart stops the game and the supervisor starts it again.
     if [ -f "$CONTROL_DIR/admin-restart-request.json" ]; then
       rm -f "$CONTROL_DIR/admin-restart-request.json"
       if [ -z "$restart_warning_pid" ]; then
@@ -147,9 +136,7 @@ heartbeat() {
       STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" 2>&1 |
         grep -v '^friend accept skipped' | sed "s/^/[$(stamp)] /" >>"$OUT" || true
     fi
-    # The lobby id from Steam itself, through the host's own web session, for a build
-    # whose log masks it (public Shipping: Lobby[0x18...B694]): while hosted,
-    # when none is recorded yet, then every 5 minutes in case the session was re-created.
+    # For a build whose log masks the lobby id, Steam's own answer: once, then every 5 minutes.
     if [ -n "$pid" ] && jq -e '.hosted == true' "$CONTROL_DIR/readiness.json" >/dev/null 2>&1 &&
       { [ ! -s "$RUN_DIR/mod-session.json" ] || [ $((n % 10)) -eq 0 ]; }; then
       lobby=$(STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" \

@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# The Windows Steam client under Wine has no CLI for its
-# beta opt-in or persona; both live in its own VDF files, which this edits.
-# Applies two operator settings in the Steam client's own config, the same
-# keys its menus write:
-#   STEAM_BRANCH  -> "BetaKey" in steamapps/appmanifest_<appid>.acf
-#                    (Properties > Betas); the password, if any, is passed to
-#                    Steam once via steam://setbeta and never stored by us.
-#   HOST_NAME     -> "PersonaName" in userdata/<account>/config/localconfig.vdf
-#                    (Steam > Settings > Friends; seen as "SN2 Host").
-# Run while Steam is stopped (sn2-service.sh does, before starting it), so the
-# client reads the values on start and does not overwrite them.
-#   steam-config.sh            apply both
-#   steam-config.sh --report   print branch and build id from the manifest
+# The Windows Steam client has no CLI for its beta opt-in or persona, so STEAM_BRANCH and HOST_NAME
+# are written into its own VDF files while it is stopped. --report prints branch and build id.
 set -u
 # shellcheck source=scripts/common.sh
 . "$(dirname "$0")/common.sh"
@@ -19,8 +8,7 @@ set -u
 manifest="$STEAM_DIR/steamapps/appmanifest_$GAME_APP_ID.acf"
 
 if [ "${1:-}" = --report ]; then
-  # The game's own build label (version.json) names the build even without a manifest.
-  # (version.json ships as UTF-16; dropping NULs reads it as ASCII.)
+  # version.json names the build even without a manifest; it ships as UTF-16.
   label=$(tr -d '\000\r' <"$GAME_DIR/version.json" 2>/dev/null | grep -ao '"build_server_label": *"[^"]*"' | cut -d'"' -f4)
   [ -f "$manifest" ] || { echo "no Steam manifest at $manifest; game build label=${label:-unknown}"; exit 1; }
   branch=$(vdf_get "$manifest" BetaKey)
@@ -54,8 +42,7 @@ elif [ "$STEAM_BRANCH" != public ]; then
 fi
 
 name=${HOST_NAME//[\"\\]/}
-# Both files carry the persona (both read
-# "PersonaName" "SN2 Host" and the game showed PlayerNamePrivate = SN2 Host).
+# Both files carry the persona.
 for cfg in "$STEAM_DIR"/config/loginusers.vdf "$STEAM_DIR"/userdata/*/config/localconfig.vdf; do
   [ -f "$cfg" ] || continue
   if grep -q '"PersonaName"' "$cfg"; then

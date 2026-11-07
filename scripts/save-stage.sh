@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
-# Offen/docker-volume-backup archives a folder; it cannot
-# tell when the game has finished writing a save, so this stages a quiet copy.
-# Copies the game's save folder plus the host account's Steam userdata for the
-# game into $STAGING_DIR/<UTC timestamp>/, keeps the newest 3, and writes the
-# outcome to $BACKUP_STATUS (shown on the viewer's status line by moonpool/x11vnc).
-#   save-stage.sh            stage once if the saves have been quiet >= 60 s
-#   save-stage.sh --now      stage now: on the game's autosave_completed log line
-#                            (join-watch.sh) and before moonpool restore writes
-# Trigger: the game logs "Queuing up event 'autosave_completed'" when an
-# autosave finishes;
-# quiet-for-60-s stays as the fallback if that line ever stops appearing.
+# The backup sidecar cannot tell when a save is finished, so this stages a quiet copy of the saves
+# and the game's Steam userdata in $STAGING_DIR/<UTC timestamp>/ and keeps the newest 3.
+#   save-stage.sh         stage if the saves have been quiet for 60 s
+#   save-stage.sh --now   stage now (after an autosave, and before a restore)
 set -u
 # shellcheck source=scripts/common.sh
 . "$(dirname "$0")/common.sh"

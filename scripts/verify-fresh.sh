@@ -10,9 +10,7 @@ json=0
 
 SERVICES_LOG="$LOG_DIR/services.log"
 UE4SS_LOG="$UE4SS_DIR/UE4SS.log"
-# The engine's own log: OnCreateSessionComplete and Load map complete are
-# written here, never into game.log. Where it
-# lives depends on the executable (common.sh, ue_log_for_exe).
+# OnCreateSessionComplete and Load map complete are in the engine's own log, never game.log.
 ENGINE_LOG="${ENGINE_LOG:-$UE_LOG}"
 JOIN_LOG="$LOG_DIR/join_watch.log"
 results="" failures=0
@@ -88,15 +86,11 @@ fi
 if [ -z "$layout_bad" ]; then
   if [ -n "$l" ]; then record layout 1 "$(line_time "$l")" "$l"
   elif [ -n "${set_dir:-}" ]; then
-    # The byte comparison above is the proof; the install's log line may have
-    # gone only to the console on images before it was teed to services.log.
     record layout 1 "$(file_time "$UE4SS_DIR/MemberVariableLayout.ini")" "set ${set_dir##*/} applied (exe sha256 $hash; both ini files byte-equal)"
   else record layout 1 "$(file_time "$exe")" "channel $(ue4ss_channel) needs no per-build layout for $GAME_EXE_NAME"; fi
 else record layout 0 unknown "${layout_bad# }"; fi
 
-# 5. UE4SS must progress beyond the named scan into mod startup and load ours.
-# The experimental DLL prints "Locating KismetStringLibrary...", the pinned
-# v3.0.1 DLL "Locating KismetSystemLibrary..." (strings in both DLLs).
+# 5. UE4SS must get past its scan into mod startup and load ours.
 loc=$(grep -anE 'Locating Kismet(String|System)Library' "$UE4SS_LOG" 2>/dev/null | tail -n1 | cut -d: -f1)
 mods=$(grep -aniE 'start(ing|ed).*(lua )?mods|mods.*start(ing|ed)' "$UE4SS_LOG" 2>/dev/null | tail -n1)
 loaded=$(grep -aniE 'SN2SlotFreeHost.*loaded|loaded.*SN2SlotFreeHost' "$UE4SS_LOG" 2>/dev/null | tail -n1)
@@ -105,11 +99,7 @@ if [ -n "$loc" ] && [ -n "$mods" ] && [ -n "$loaded" ] && [ "$mn" -gt "$loc" ] &
   proof=${loaded#*:}; record ue4ss 1 "$(line_time "$proof")" "$proof"
 else record ue4ss 0 unknown "missing ordered scan -> mods starting -> SN2SlotFreeHost loaded evidence in $UE4SS_LOG"; fi
 
-# 6. All session evidence must exist; report the last proving line. Engine
-# lines are searched in the game log and UE4SS.log; the mod's own lines
-# (SN2SlotFreeHost main.lua: "Hooked GameMode -> GameSession.MaxPlayers set to
-# N", "postmap: world GameSession.MaxPlayers A -> N", "postmap: prune host
-# PlayerState: ok") are printed into UE4SS.log.
+# 6. All session evidence must exist; the mod's own lines are in UE4SS.log.
 session_bad=""; proof=""
 specs=(
   "$SERVICES_LOG|AUTO_HOST: armed.*session limit $SESSION_LIMIT\)"
@@ -121,8 +111,7 @@ specs=(
 )
 for spec in "${specs[@]}"; do
   p=${spec#*|}; x=""
-  # Files are ':'-separated: the loader and engine logs live under
-  # "Program Files (x86)", which a space split broke.
+  # ':'-separated: the logs live under "Program Files (x86)".
   IFS=: read -r -a files <<<"${spec%%|*}"
   for f in "${files[@]}"; do x=$(last_line "$p" "$f"); [ -n "$x" ] && break; done
   [ -n "$x" ] && proof=$x || session_bad="$session_bad missing:$p"
@@ -138,9 +127,7 @@ if [ -n "$l" ] && [ "$epoch" -gt 0 ] && [ $((now - epoch)) -ge 0 ] && [ $((now -
   record watcher 1 "$ts" "$l"
 else record watcher 0 "${ts:-unknown}" "no RUNNING heartbeat within 5 minutes in $JOIN_LOG"; fi
 
-# 8. The world hosted is the configured save, by its own slot name. With SAVE_NAME empty the
-# launcher takes the newest save, so the slot is whatever the mod's Host call named.
-# The mod's prints share one physical line, so take the last slot token on the last such line.
+# 8. The world hosted is the configured save. The mod's prints share one line, so the last slot token counts.
 hosted=$(last_line 'SN2SlotFreeHost\] Host call: ServerName=.* SaveSlot=' "$UE4SS_LOG" | grep -oE 'Host call: ServerName=.* SaveSlot=[A-Za-z0-9_]+' | sed -E 's/.*SaveSlot=//' | tail -n1)
 SAVE_SLOT="${SAVE_NAME:-${hosted:-Slot1}}"
 l=$(last_line "LoadMap: /Game/Maps/Main/L_Main.*SaveSlotName=$SAVE_SLOT([^A-Za-z0-9_]|$)" "$ENGINE_LOG")

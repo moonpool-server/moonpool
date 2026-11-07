@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
-# The per-service start commands (display, viewer, Windows Steam, game,
-# join watcher) that s6-overlay supervises; it does not know what to run here.
-# One foreground process per service name. The supervisor restarts it when it
-# exits: s6-overlay (/etc/s6-overlay/s6-rc.d/<name>). Nothing here loops to
-# restart anything; a service that is not ready yet exits and is started again.
-#   xvfb x11vnc novnc clipboard clipboard-primary   the viewer
-#   steam        Wine prefix, Windows Steam client, kept sign-in token
-#   game         install, UE4SS, auto-arm, launch (exits when the game exits)
-#   join-watch   join and slot lines from the game log
-#   cron         RESTART_CRON and the admin's crontab through supercronic (idle when neither)
+# One foreground process per service name, which s6-overlay restarts when it exits; a service
+# that is not ready yet exits and is started again.
 set -uo pipefail
 # shellcheck source=../scripts/common.sh
 . /opt/sn2/bin/common.sh
@@ -31,11 +23,8 @@ wait_display() {
   exit 1
 }
 
-# Steam's remembered-login token lives in the Wine profile's AppData/Local/Steam;
-# keep it under the volume so a rebuilt image or prefix keeps the sign-in.
 persist_steam_session() {
   local local_dir
-  # Wine names the profile after $USER, so follow it rather than id -un.
   local_dir="$WINEPREFIX/drive_c/users/${USER:-$(id -un)}/AppData/Local"
   mkdir -p "$STEAM_SESSION_DIR" "$local_dir"
   chmod 0700 "$DATA_DIR/steam-session"
@@ -49,12 +38,9 @@ persist_steam_session() {
   fi
 }
 
-# The sign-in rule and what each Steam client build writes: steam_signed_in in
-# scripts/common.sh. A client must be running for the account to count.
+# A client must be running for the account to count.
 write_identity() {
   local signed=false
-  # steam_signed_in sets the signal; with no client running it is never called, and
-  # `set -u` otherwise stops the game service on every attempt until Steam is up.
   STEAM_SIGNIN_SIGNAL="Steam client not running"
   if steam_running && steam_signed_in; then
     signed=true
@@ -90,8 +76,7 @@ svc_steam() {
   fi
   persist_steam_session
   /opt/sn2/bin/steam-config.sh || { say "steam-config refused the settings; see $LOG_DIR"; sleep 30; exit 1; }
-  # steam.exe hands off to a client that is already running and exits at once:
-  # start one client, wait on the one that runs, and log only when that state changes.
+  # steam.exe hands off to a client that is already running and exits at once.
   if steam_running; then
     say_on_change steam-client "Windows Steam client running; sign in on the viewer page if it asks"
     while steam_running; do sleep 5; done
@@ -116,14 +101,8 @@ svc_game() {
     sleep 10; exit 0
   fi
   if ! write_identity; then sleep 10; exit 0; fi
-  # Installed is Steam's own record (game_install_state in common.sh), never the
-  # executable alone: Steam preallocates it when the download starts. While the
-  # game is not installed this service exits after 30 s and the supervisor runs
-  # it again, so the launch follows the install in the same container run
-  # because an install can finish without launching the game.
   local state mismatch
-  # Never launch a build that is not the configured branch's: it can crash, and players
-  # must be on the host's branch anyway.
+  # Players must be on the host's branch, so another branch's build is never launched.
   if mismatch=$(game_exe_mismatch); then
     say_on_change install "$mismatch; not launching, switching Steam to $STEAM_BRANCH"
     # steam-config sets the branch when the client next starts: restart it once, not while it downloads.
@@ -137,8 +116,7 @@ svc_game() {
     case $state in
       installing*) install_progress "$state" ;;
       *)
-        # Not taken yet: ask on every start, and every 10 min within one, until
-        # Steam starts the download.
+        # Asked on every start and every 10 min within one, until Steam starts the download.
         local asked="$RUN_DIR/install-asked"
         if [ ! -f "$asked" ] || [ "$(stat -c %Y "$asked")" -lt "$(container_start)" ] \
            || [ $(($(date +%s) - $(stat -c %Y "$asked"))) -ge 600 ]; then
@@ -150,17 +128,12 @@ svc_game() {
     sleep 30; exit 0
   fi
   say_on_change install installed
-  # A failed loader install never stops the launch: the game starts without
-  # UE4SS (launch-headless.sh logs why and what waits for it) and the install
-  # is tried again on the next launch.
+  # A failed loader install never stops the launch; it is tried again on the next one.
   if ue4ss_install_step /opt/sn2/bin/install-ue4ss.sh; then
     say "UE4SS installed for channel $(ue4ss_channel)"
   else
     say "UE4SS install failed: $(cat "$UE4SS_FAILED_FILE"); launching without the loader"
   fi
-  # A build with no shipped layout set starts without the loader and is never
-  # armed (install-ue4ss.sh fails closed); the mod's readiness checks are the
-  # smoke check before its Host call.
   local mode
   mode=$(ue4ss_launch_mode "$WIN64_DIR")
   if [ "$mode" != loader ]; then
@@ -172,9 +145,6 @@ svc_game() {
     say "AUTO_HOST: armed; the mod hosts once the lobby is reached ($PLAYER_SLOTS player slots, session limit $SESSION_LIMIT)"
   fi
   say_on_change install launching
-  # A game that dies within 60 s is backed off (30 s, 60, 120 ... 10 min) with
-  # the last three game-log lines logged once per backoff; otherwise it can relaunch
-  # every ~14 s with none.
   local t0 rc ran wait_s
   t0=$(date +%s)
   /opt/sn2/bin/launch-headless.sh; rc=$?
@@ -195,21 +165,17 @@ case $name in
     exec Xvfb "$DISPLAY" -screen 0 1280x800x24 -nolisten tcp >>"$LOG_DIR/xvfb.log" 2>&1 ;;
   x11vnc)
     wait_display x11vnc
-    # Always a password (common.sh viewer_password): moonpool diag viewer shows it.
     pw=$(viewer_password) || { say "viewer not started: could not make a password"; exec sleep infinity; }
     x11vnc -storepasswd "$pw" "$RUN_DIR/vncpass" >/dev/null 2>&1
     chmod 0600 "$RUN_DIR/vncpass"
     auth=(-rfbauth "$RUN_DIR/vncpass")
     [ -n "${VNC_PASSWORD:-}" ] || say_on_change viewer-password "viewer password made at first start; moonpool diag viewer shows it"
-    # A failed backup is shown on the page title (the viewer's status line).
     if grep -q FAILED "$BACKUP_STATUS" 2>/dev/null; then
       VIEWER_TITLE="SN2 host - $(cut -c1-90 "$BACKUP_STATUS")"
     fi
-    # x11vnc carries the VNC clipboard to the X selections by default.
     exec x11vnc -display "$DISPLAY" -forever -shared -localhost -rfbport "$VNC_PORT" \
       -desktop "$VIEWER_TITLE" "${auth[@]}" >>"$LOG_DIR/x11vnc.log" 2>&1 ;;
   novnc)
-    # This viewer controls a signed-in Steam: it always asks for the password x11vnc holds.
     exec websockify --web "$NOVNC_WEB" "$NOVNC_PORT" "localhost:$VNC_PORT" >>"$LOG_DIR/novnc.log" 2>&1 ;;
   clipboard | clipboard-primary)
     [ "$CLIPBOARD_BRIDGE" = true ] || exec sleep infinity
@@ -220,12 +186,9 @@ case $name in
   game) svc_game ;;
   join-watch) exec /opt/sn2/bin/join-watch.sh ;;
   mods)
-    # The player web root on SN2_MODS_PORT: the join page, the map, the signed mod
-    # manifest and launcher, and the tunnel's origin. Read-only, no listing;
-    # mod-service.sh runs lighttpd and republishes the manifest from plugins.yaml.
+    # The player web root: the join page, the map, the signed mod manifest and the launcher.
     exec /opt/sn2/bin/mod-service.sh serve ;;
   cron)
-    # Both are opt-in; a restart waits for an autosave. A broken admin file is said and skipped.
     : >"$RUN_DIR/crontab"
     [ -z "${RESTART_CRON:-}" ] || printf '%s /opt/sn2/bin/restart-after-autosave.sh\n' "$RESTART_CRON" >>"$RUN_DIR/crontab"
     if [ -s "$DATA_DIR/crontab" ]; then
