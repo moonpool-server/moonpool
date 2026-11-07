@@ -1,22 +1,16 @@
 #!/usr/bin/env bash
-# One place for the defaults every script shares.
+# The defaults every script shares. Everything persistent lives under $DATA_DIR, the one volume.
 # shellcheck disable=SC2034  # variables here are used by the scripts that source this file
-# Shared settings for every script in the container. Everything persistent
-# lives under $DATA_DIR (the one volume); nothing here is baked into the image.
 
 DATA_DIR="${DATA_DIR:-/data}"
-# The user the game (and so the mod) runs as: panel image sets USER=container.
 GAME_USER="${GAME_USER:-${USER:-container}}"
 export WINEPREFIX="${WINEPREFIX:-$DATA_DIR/wine}"
 export WINEARCH=win64
 export WINEDEBUG="${WINEDEBUG:--all}"
-# Both images run their own virtual display for Wine and the viewer
-# (docker/sn2-service.sh), as the working container does.
 export DISPLAY="${DISPLAY:-:99}"
 
 GAME_APP_ID="${GAME_APP_ID:-${STEAM_APPID:-1962700}}"
-# Passed to the game as -port=; nothing listens on it, since players join through the
-# game's own peer session.
+# Nothing listens on it: players join through the game's own peer session.
 GAME_PORT="${GAME_PORT:-7777}"
 # PRESET supplies defaults only. A non-empty explicitly supplied setting wins;
 # an empty value is the panel-friendly way to request the preset default.
@@ -49,25 +43,19 @@ export PRESET HOST_PRUNE HIDE_HOST_BODY AUTO_ACCEPT_FRIENDS RESTART_CRON RESTART
 VOICE_RANGE_M="${VOICE_RANGE_M:-100}"
 export VOICE_RANGE_M VOICE_WARN
 
-# PLAYER_SLOTS = real player slots. The host account counts as a player
-# so the session
-# limit the mod writes is PLAYER_SLOTS + 1.
+# The host account counts as a player, so the session limit is PLAYER_SLOTS + 1.
 PLAYER_SLOTS="${PLAYER_SLOTS//[^0-9]/}"
 SESSION_LIMIT=$((${PLAYER_SLOTS:-4} + 1))
 HOST_NAME="${HOST_NAME:-SN2 Host}"
 STEAM_BRANCH="${STEAM_BRANCH:-public}"
 # Empty SAVE_NAME = newest save, or a new world (Slot1) when none exists.
 SAVE_NAME="${SAVE_NAME:-}"
-# WORLD_NAME: the session and save display name (SESSION_NAME is its old name).
-WORLD_NAME="${WORLD_NAME:-${SESSION_NAME:-Subnautica 2 server}}"
-# No -nosound: it also puts the game's FMOD audio in "nosound mode", where a joining
-# player's positional voice event is invalid; the public build crashed on every join
-# right after "Invalid FMOD Event" and joined cleanly without the flag.
+WORLD_NAME="${WORLD_NAME:-Subnautica 2 server}"
+# No -nosound: with it a joining player's voice event is invalid and the game crashed on every join.
 NULLRHI_ARGS="${NULLRHI_ARGS:--nullrhi -unattended -log}"
-# UE4SS's experimental build loads through its dwmapi.dll proxy at process
-# start (WINEDLLOVERRIDES dwmapi=n,b). The working container runs it this way.
+# UE4SS loads through its dwmapi.dll proxy at process start (WINEDLLOVERRIDES dwmapi=n,b).
 UE4SS_AT_START="${UE4SS_AT_START:-true}"
-# Microsoft's C++ runtime for the game process only (install-msvc-runtime.sh).
+# Microsoft's C++ runtime for the game process only.
 NATIVE_MSVC="${NATIVE_MSVC:-1}"
 MSVC_DLLS="msvcp140.dll vcruntime140.dll vcruntime140_1.dll msvcp140_atomic_wait.dll msvcp140_1.dll msvcp140_codecvt_ids.dll vccorlib140.dll"
 NOVNC_PORT="${NOVNC_PORT:-8080}"
@@ -78,9 +66,6 @@ STEAM_DIR="$WINEPREFIX/drive_c/Program Files (x86)/Steam"
 STEAM_EXE="$STEAM_DIR/steam.exe"
 GAME_DIR="${GAME_DIR:-$STEAM_DIR/steamapps/common/Subnautica2}"
 WIN64_DIR="$GAME_DIR/Subnautica2/Binaries/Win64"
-# The executable follows the branch. With STEAM_BRANCH unset Steam installs the public branch,
-# whose executable is Subnautica2-Win64-Shipping.exe; experimental ships
-# Subnautica2-Win64-Test.exe. Only the branch's own executable is ever launched.
 exe_for_branch() {
   case $1 in
     experimental) echo Subnautica2-Win64-Test.exe ;;
@@ -88,12 +73,8 @@ exe_for_branch() {
   esac
 }
 GAME_EXE_NAME="${GAME_EXE_NAME:-$(exe_for_branch "$STEAM_BRANCH")}"
-# The game's own Unreal log (every line, joins included), as opposed to
-# $GAME_LOG, the console output the launcher captures. Each build writes it
-# somewhere else: the experimental Test build beside the game, the public
-# Shipping build in the Wine user's AppData, whose console output carries only
-# warnings ("Join succeeded" may appear only in the AppData log).
-# Wine names the profile after $USER, which is set even when the uid has no passwd entry.
+# The game's own Unreal log: the Test build writes it beside the game, the Shipping build in the
+# Wine user's AppData. Wine names the profile after $USER, set even for a uid with no passwd entry.
 ue_log_for_exe() {
   case $1 in
     *-Shipping.exe) echo "$WINEPREFIX/drive_c/users/${USER:-$(id -un)}/AppData/Local/Subnautica2/Saved/Logs/Subnautica2.log" ;;
@@ -111,8 +92,7 @@ set_background_fps() {
   case $2 in '' | *[!0-9]* | 0) return 2 ;; esac
   set_ini_key "$1" /Script/Subnautica2.SN2SettingsLocal FrameRateLimit_WhenBackgrounded "$2"
 }
-# When the branch's executable is missing but the other branch's is installed,
-# print the one mismatch line and return 0; otherwise print nothing, return 1.
+# Prints the mismatch line when only the other branch's executable is installed.
 game_exe_mismatch() {
   local dir="${1:-$WIN64_DIR}" other=experimental
   [ -f "$dir/$(exe_for_branch "$STEAM_BRANCH")" ] && return 1
@@ -121,13 +101,7 @@ game_exe_mismatch() {
   echo "installed build is $other, STEAM_BRANCH says $STEAM_BRANCH"
 }
 UE4SS_DIR="$WIN64_DIR/ue4ss"
-# Measured in a running host: the game writes <slot>.sav (plus a
-# _0_0.bak) under its own install's Saved/SaveGames, not the Wine user profile
-# (that one held only steam_autocloud.vdf). Steam's per-account game data is
-# userdata/<account>/<appid>.
-# Where each executable keeps its saves, like its log (ue_log_for_exe): the public
-# Shipping build in the Wine user's AppData (Slot1.sav was present there,
-# while backups staged the empty folder beside the game), the Test build beside it.
+# The saves follow the executable the way its log does.
 save_dir_for_exe() {
   case $1 in
     *-Shipping.exe) echo "$WINEPREFIX/drive_c/users/${USER:-$(id -un)}/AppData/Local/Subnautica2/Saved/SaveGames" ;;
@@ -135,11 +109,9 @@ save_dir_for_exe() {
   esac
 }
 SAVE_DIR="${SAVE_DIR:-$(save_dir_for_exe "$GAME_EXE_NAME")}"
-# Backups: the join watcher copies quiet saves here (last 3 kept);
-# offen/docker-volume-backup archives this folder, never the live one.
+# The join watcher copies quiet saves here; the backup sidecar archives this folder, never the live one.
 STAGING_DIR="$DATA_DIR/backup-staging"
-# A save copy before anything that can update the game: a new build can't be undone. False
-# stops the caller. A new world has nothing to copy; UPDATE_WITHOUT_BACKUP=true overrides.
+# A save copy before anything that can update the game, since a new build can't be undone.
 save_copy_before_update() {
   [ "$AUTO_UPDATE" = true ] && [ -d "$SAVE_DIR" ] && [ "${UPDATE_WITHOUT_BACKUP:-false}" != true ] || return 0
   "${SN2_BIN:-/opt/sn2/bin}/save-stage.sh" --now >>"$LOG_DIR/save-stage.log" 2>&1
@@ -149,26 +121,16 @@ BACKUP_STATUS="$DATA_DIR/backup-status.txt"
 LOG_DIR="$DATA_DIR/logs"
 RUN_DIR="$DATA_DIR/run"
 CONTROL_DIR="${SN2_CONTROL_DIR:-${CONTROL_DIR:-$DATA_DIR/control}}"
-# The mod calls the game's Host code only while this file exists (moonpool arm).
+# The mod calls the game's Host code only while this file exists. AUTO_HOST writes it on every
+# launch unless `moonpool server disarm` left HOST_DISARMED.
 HOST_ARMED_FILE="$CONTROL_DIR/HOST_ARMED"
-# AUTO_HOST=true (default): the game service creates HOST_ARMED by itself in
-# lobby mode, so nothing is needed after the Steam sign-in. `moonpool disarm`
-# leaves HOST_DISARMED, which holds auto-arming off until `moonpool arm`.
 AUTO_HOST="${AUTO_HOST:-true}"
-# ARM=1 forces arming on.
-[ "${ARM:-}" = 1 ] && AUTO_HOST=true
-# Extra DLL overrides on the game line, every launch mode. xaudio2_9=d: the
-# lifepod launch cinematic crashed the headless host inside Wine's xaudio2
-# (FAudioVoice_GetVoiceDetails) until it was disabled.
+# The lifepod launch cinematic crashes the game inside Wine's xaudio2 (FAudioVoice_GetVoiceDetails).
 GAME_DLL_EXTRA="${GAME_DLL_EXTRA:-xaudio2_9=d}"
-# join-watch uses this one parser and records a join marker. session_up compares
-# that marker with status.json, closing the mod's up-to-30-second status gap.
 line_shows_player_join() {
   [[ $1 =~ PostLogin|Join[[:space:]]succeeded|RegisterPlayer|OnSessionParticipant.*(join|add)|LobbyMemberStatus.*join|member[[:space:]]joined|HandleStartingNewPlayer ]]
 }
-# A session is up when the mod has hosted and players are in. A running game
-# with missing, unreadable, or older-than-one-status-cycle data is conservative:
-# someone may be online, so callers warn rather than dropping them silently.
+# Hosted with players in. Missing or stale data counts as up while the game runs, so callers warn.
 session_up() {
   local n status="$CONTROL_DIR/status.json" joined="$RUN_DIR/player-joined"
   jq -e '.hosted == true' "$CONTROL_DIR/readiness.json" >/dev/null 2>&1 || return 1
@@ -184,10 +146,8 @@ session_up() {
   fi
   return 1
 }
-# MOTD: one in-game greeting to each name in $2 (sorted, one per line) that is not in $1,
-# sent through the mod's notice file to those players only. Prints the list to remember:
-# $2, or $1 again while another notice is still pending, so the greeting goes out on the
-# next read instead of overwriting it. Logs who was greeted on stderr.
+# MOTD to each name in $2 that is not in $1. Prints the list to remember: $1 again while another
+# notice is pending, so the greeting waits instead of overwriting it.
 greet_joiners() {
   local prev=$1 cur=$2 joined notice="$CONTROL_DIR/notify-request.json"
   if [ -z "${MOTD:-}" ]; then printf '%s' "$cur"; return 0; fi
@@ -203,13 +163,10 @@ HOST_DISARMED_FILE="$CONTROL_DIR/HOST_DISARMED"
 CLIPBOARD_BRIDGE="${CLIPBOARD_BRIDGE:-true}"
 UE4SS_CACHE="$DATA_DIR/ue4ss"
 UE4SS_LOCAL="$DATA_DIR/ue4ss-local"
-# Layout sets the operator supplies for the pinned loader: one folder per game
-# build, each carrying exe.sha256 (the FULL sha256 of its executable). None ship.
+# Operator layout sets for the pinned loader: one folder per build, with exe.sha256. None ship.
 UE4SS_LAYOUTS="${UE4SS_LAYOUTS:-$DATA_DIR/ue4ss-layouts}"
-# Written by install-ue4ss.sh when no set matches this build (holds the sha).
 UE4SS_NO_LAYOUT_FILE="$RUN_DIR/ue4ss-no-layout"
-# The set whose exe.sha256 is exactly $1 (full sha256), or return 1.
-# The folder name is only a label; a set without exe.sha256 is never used.
+# The set whose exe.sha256 is exactly $1; the folder name is only a label.
 LAYOUT_FILES="MemberVariableLayout.ini VTableLayout.ini UE4SS-settings.ini"
 layout_set_for() {
   local d f
@@ -223,11 +180,8 @@ layout_set_for() {
   done
   return 1
 }
-# The loader channel in force. UE4SS_CHANNEL=auto (the default) is decided by
-# install-ue4ss.sh from the executable and kept in UE4SS_CHANNEL_FILE: pinned
-# when an operator's layout set is for this exact build, else upstream-experimental,
-# which reads UE 5.6 itself (it hosted the public branch). Before
-# any install has run, the same rule is applied here.
+# auto: pinned when an operator's layout set is for this exact build, else upstream-experimental,
+# which reads UE 5.6 itself. The install keeps its answer in UE4SS_CHANNEL_FILE.
 UE4SS_CHANNEL_FILE="$RUN_DIR/ue4ss-channel"
 ue4ss_channel() {
   local c="${UE4SS_CHANNEL:-auto}" h
@@ -241,21 +195,16 @@ GAME_LOG="$LOG_DIR/game.log"
 GAME_PIDFILE="$RUN_DIR/game.pid"
 STOP_FLAG="$RUN_DIR/stopped"
 MOD_SRC="${MOD_SRC:-/opt/sn2/mod}"
-# Steam keeps its remembered-login token in the Wine user profile, not in its
-# own config/ folder. It is kept here, outside the prefix, so a recreated
-# prefix or a rebuilt image keeps the sign-in.
+# Steam's remembered-login token, kept outside the prefix so a rebuilt one keeps the sign-in.
 STEAM_SESSION_DIR="$DATA_DIR/steam-session/local-appdata"
 
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# Why the last UE4SS install failed (its own last output line); absent = it did not.
 UE4SS_FAILED_FILE="$RUN_DIR/ue4ss-install-failed"
-# What only the loader provides. Without it the game still starts, signs in and
-# reaches the lobby, so Steam, the install and the viewer are unaffected.
+# What only the loader provides; without it the game still starts and reaches the lobby.
 UE4SS_SERVES="automatic hosting (the Host call), the moonpool queue (players, kick, save, slots), status.json and the Discord card, the player cap, and idle freeze"
 
-# Explicit addresses are stable and always win. A quick tunnel publishes its
-# random hostname on cloudflared's own management endpoint.
+# An explicit address wins; a quick tunnel's random hostname comes from cloudflared's endpoint.
 public_url() {
   local url=${SN2_PUBLIC_URL:-} host=''
   if [ -z "$url" ] && [ "${TUNNEL:-off}" = quick ]; then
@@ -266,15 +215,11 @@ public_url() {
   printf '%s' "${url%/}"
 }
 
-# Run the loader install ("$@"), passing its output through. On failure record
-# its last line in UE4SS_FAILED_FILE and return 1; the caller still launches
-# because a failed install must stop the launch instead.
+# Run the loader install; on failure keep its last line in UE4SS_FAILED_FILE. The output goes to
+# services.log too, where verify-fresh reads it.
 ue4ss_install_step() {
   local out rc
   out=$("$@" 2>&1); rc=$?
-  # Into services.log too: the layout line ("UE4SS layout: known-good set ...")
-  # went only to the console, so verify-fresh failed its layout stage on a
-  # host that had applied the set.
   if [ -n "$out" ]; then
     mkdir -p "$LOG_DIR" 2>/dev/null
     printf '%s\n' "$out" | tee -a "$LOG_DIR/services.log" 2>/dev/null || printf '%s\n' "$out"
@@ -299,21 +244,15 @@ ue4ss_hold_reason() {
   printf 'missing: %s\n' "$missing"
 }
 
-# How this launch uses the loader, from what is on disk ($1 = Win64 folder):
-#   loader          everything is in place: load UE4SS, arm as configured
-#   held <reason>   anything else: start the game without the loader
-# There is no runtime measurement: a build without a shipped layout set is
-# held because the measure path deadlocked.
+# "loader", or "held <reason>": the game starts without the loader.
 ue4ss_launch_mode() {
   local why
   if ! why=$(ue4ss_hold_reason "$1"); then echo loader; return 0; fi
   printf 'held %s\n' "$why"
 }
 
-# Stopped by moonpool server stop: the line to log now, or nothing. Due once per
-# container start and then once an hour; the flag lives in the data volume and
-# survives a recreate, where the service used to sit idle with no log line
-# to prevent a surviving stop flag from suppressing launch. $1 flag, $2 state file, $3 container start epoch.
+# The stop flag survives a recreate, so it is said once per container start and then hourly.
+# $1 flag, $2 state file, $3 container start epoch.
 stopped_notice() {
   local flag=$1 st=$2 start=$3 now last
   [ -f "$flag" ] || { rm -f "$st"; return 1; }
@@ -326,25 +265,12 @@ stopped_notice() {
     "$(date -u -d "@$(stat -c %Y "$flag")" '+%Y-%m-%d %H:%M UTC')"
 }
 
-# UE4SS may load into the game only when everything it needs for this engine
-# build is already in place. Without these, the first launch crashed in UE4SS.dll
-# about 12 s after "Engine is
-# initialized", every time. Prints what is missing; returns 1 if anything is.
+# Without these in place the game crashed in UE4SS.dll right after "Engine is initialized".
 UE4SS_SIGNATURES="FName_Constructor GNatives GUObjectHashTables StaticConstructObject"
 
-# Which UE4SS build to install (UE4SS_CHANNEL; auto picks one, ue4ss_channel):
-#   pinned                 experimental build 1188 (f885e8d2), with the operator's
-#                          own layout set for this exe (proven on the experimental
-#                          branch)
-#   upstream-experimental  build 1190 (f673aac0, release notes: "Added support for
-#                          UE Version 5.6", #977, and FUObjectItem/FUObjectArray/
-#                          TUObjectArray in MemberVariableLayout.ini): no layout
-#                          set; UE4SS's own scan is used
-#                          (proven on the public branch).
-# Both pins come from the GitHub API; experimental-latest moves, so
-# each pin is asset name + sha256. Prints "<asset> <sha256> <native56>", where
-# native56 = yes means the build supports UE 5.6 without an operator's set.
-# UE4SS_ASSET / UE4SS_RELEASE_SHA256 set by hand override the channel's pin.
+# pinned: build 1188 with the operator's layout set; upstream-experimental: build 1190, which
+# supports UE 5.6 itself. Prints "<asset> <sha256> <native56>"; UE4SS_ASSET and
+# UE4SS_RELEASE_SHA256 override the pin.
 ue4ss_channel_select() {
   local asset sha native
   case "${1:-pinned}" in
@@ -360,7 +286,6 @@ ue4ss_channel_select() {
   esac
   printf '%s %s %s\n' "${UE4SS_ASSET:-$asset}" "${UE4SS_RELEASE_SHA256:-$sha}" "$native"
 }
-# True when the channel in force needs an operator's layout set.
 ue4ss_needs_layout_set() {
   [ "$(ue4ss_channel_select "$(ue4ss_channel)" | cut -d' ' -f3)" = no ]
 }
@@ -380,10 +305,8 @@ ue4ss_missing() {
   printf '%s\n' "${miss# }"; return 1
 }
 
-# Backoff for a game that dies soon after launch. $1 = seconds it ran,
-# $2 = state file holding the current delay. A run of 60 s or more resets the
-# delay; a shorter one doubles it, 30 s -> 60 -> 120 ... capped at 600 s.
-# Prints the seconds to wait before the next launch (0 = no wait).
+# Seconds to wait before relaunching a game that ran $1 seconds: doubles from 30 to 600, a run of
+# 60 s or more resets it. $2 holds the current delay.
 crash_backoff() {
   local ran=$1 state=$2 cur
   if [ "$ran" -ge 60 ]; then rm -f "$state"; echo 0; return; fi
@@ -394,11 +317,7 @@ crash_backoff() {
   echo "$cur" >"$state"; echo "$cur"
 }
 
-# fetch_pinned URL DEST SHA256: a copy already at DEST (the operator's own, for a
-# container with no outbound access, or an earlier download) is used when its
-# SHA-256 matches; otherwise download, up to 3 tries with a pause, logging
-# curl's own exit code, message and HTTP status on each failure (
-# "UE4SS install failed; not launching" three times, never saying why).
+# fetch_pinned URL DEST SHA256: a matching copy at DEST is used; else three download tries.
 fetch_pinned() {
   local url=$1 dest=$2 sha=$3 try rc code err actual
   [ -n "$sha" ] || { log "fetch: no pinned SHA-256 for $(basename "$dest"); refusing"; return 1; }
@@ -427,8 +346,7 @@ fetch_pinned() {
 }
 
 game_pid() { pgrep -f "$GAME_EXE_NAME" 2>/dev/null | head -n1; }
-# Shared by launch-headless and its signal test. Once shutdown begins, repeated
-# TERM/INT cannot interrupt the player warning or forced-save path.
+# Once shutdown begins, another TERM or INT cannot interrupt the warning and the forced save.
 term_stop() {
   trap '' TERM INT
   "${RESTART_WARNING_SCRIPT:-/opt/sn2/bin/restart-warning.sh}" run 'container stopping' || true
@@ -438,8 +356,7 @@ term_stop() {
 }
 steam_running() { pgrep -fi 'steam\.exe' >/dev/null 2>&1; }
 
-# Log a line only when its text for KEY changes (per container start), so a
-# service the supervisor reruns every second does not repeat itself.
+# Log a line only when its text for KEY changes, so a service rerun every second stays quiet.
 say_on_change() {
   local key="$1" state="${SN2_STATE_DIR:-/tmp/sn2-state}"
   shift
@@ -449,29 +366,16 @@ say_on_change() {
   if declare -F say >/dev/null; then say "$*"; else log "$*"; fi
 }
 
-# The signed-in account's steamid64, from Steam's config/loginusers.vdf; else empty.
-# $1 overrides the Steam folder (moonpool's SN2_STEAM_DIR).
-# One value from a Steam VDF/ACF text file: vdf_get <file> <key>, else nothing.
-# Shared here because the launcher reads the app manifest's buildid before the protocol
-# module is in reach.
+# vdf_get <file> <key>: one value from a Steam VDF/ACF file, else nothing.
 SN2_STEAMFILE="$(dirname "${BASH_SOURCE[0]}")/steamfile.py"
 vdf_get() { python3 "$SN2_STEAMFILE" "$1" "$2"; }
+# The signed-in account's steamid64; $1 overrides the Steam folder.
 host_steamid() {
   grep -oE '"7656[0-9]{13}"' "${1:-$STEAM_DIR}/config/loginusers.vdf" 2>/dev/null | head -1 | tr -d '"' || true
 }
-# Steam's friend code (the account id) is steamid64 - 76561197960265728; else empty.
-friend_code() {
-  local sid; sid=$(host_steamid "${1:-}")
-  [ -z "$sid" ] || echo $((sid - 76561197960265728))
-}
 
-# Container start as epoch seconds (PID 1's start), the floor for log lines.
-# From the kernel's own record: boot time (/proc/stat btime) plus PID 1's start in clock
-# ticks (field 22 of /proc/1/stat, counted after the ")" that ends the command name).
-# The mtime of /proc/1 is NOT the start: procfs stamps an inode when it is created, so a
-# cache drop or memory pressure re-stamps it with the current time (a WSL cache
-# drop moved the timestamp past the Steam logon, which then read as stale, and the
-# game was never relaunched after the next restart).
+# Container start as epoch seconds: boot time plus PID 1's start ticks. Not the mtime of /proc/1,
+# which procfs re-stamps after a cache drop.
 container_start() {
   local stat_file="${SN2_PROC_STAT:-/proc/stat}" pid1="${SN2_PROC_PID1_STAT:-/proc/1/stat}"
   local btime ticks hz
@@ -485,17 +389,9 @@ container_start() {
   fi
 }
 
-# One value from a Steam .acf manifest, key first.
-acf_value() { vdf_get "$2" "$1"; }
-
-# Is the game installed, by Steam's own record rather than the executable?
-# Steam preallocates every file when a download starts, so the executable is on
-# disk long before the game is usable. The content log can report the update as
-# finished before the manifest reaches StateFlags 4 with the full SizeOnDisk.
-# The manifest's byte counters stayed 0 until the end, so the size comes from the
-# content log's "update started" line. Prints one of:
-#   absent | requested | installing <size> | installed
-# A game folder with no manifest at all (a copied install) counts as installed.
+# Installed by Steam's own record: it preallocates the executable when a download starts, and the
+# manifest's byte counters stay 0 until the end. Prints absent, requested, installing <size> or
+# installed; a game folder with no manifest (a copied install) is installed.
 game_install_state() {
   local manifest="${1:-$STEAM_DIR/steamapps/appmanifest_${GAME_APP_ID}.acf}"
   local clog="${2:-$STEAM_DIR/logs/content_log.txt}"
@@ -505,18 +401,17 @@ game_install_state() {
     if [ -f "$exe" ]; then echo installed; else echo absent; fi
     return 0
   fi
-  flags=$(acf_value StateFlags "$manifest")
+  flags=$(vdf_get "$manifest" StateFlags)
   last=$(grep -E "AppID $GAME_APP_ID (update started|scheduler finished)" "$clog" 2>/dev/null | tail -n1)
-  # Steam's done state, unless its log says an update for the game is still running.
   if [ "$flags" = 4 ] && [[ $last != *"update started"* ]]; then echo installed; return 0; fi
-  staged=$(acf_value BytesStaged "$manifest"); tostage=$(acf_value BytesToStage "$manifest")
+  staged=$(vdf_get "$manifest" BytesStaged); tostage=$(vdf_get "$manifest" BytesToStage)
   if [ "${tostage:-0}" -gt 0 ] 2>/dev/null && [ "$staged" = "$tostage" ] && [ -n "$flags" ] \
      && [[ $last != *"update started"* ]]; then
     echo installed; return 0
   fi
   [ -n "$flags" ] || [[ $last == *"update started"* ]] || { echo requested; return 0; }
   todl=$(sed -n 's/.*update started : download [0-9]*\/\([0-9]*\).*/\1/p' <<<"$last")
-  [ -n "$todl" ] || todl=$(acf_value BytesToDownload "$manifest")
+  [ -n "$todl" ] || todl=$(vdf_get "$manifest" BytesToDownload)
   if [ "${todl:-0}" -gt 0 ] 2>/dev/null; then
     size=$(awk -v b="$todl" 'BEGIN { printf "%.1f GB", b / 1e9 }')
   else
@@ -525,13 +420,11 @@ game_install_state() {
   echo "installing $size"
 }
 
-# Steam's last "Current download rate" line for the content log, or nothing.
 download_rate() {
   grep -o 'Current download rate: .*' "${1:-$STEAM_DIR/logs/content_log.txt}" 2>/dev/null | tail -n1
 }
 
-# While installing: one line per state change, plus Steam's download rate at most
-# once a minute (the manifest has no percentage until the end).
+# One line per install state change, plus Steam's download rate at most once a minute.
 install_progress() {
   local state="$1" clog="${2:-$STEAM_DIR/logs/content_log.txt}"
   local stamp="${SN2_STATE_DIR:-/tmp/sn2-state}/rate-logged" rate
@@ -544,24 +437,8 @@ install_progress() {
   fi
 }
 
-# Is the Windows Steam client signed in? What each client build writes:
-#  - Older clients wrote "MostRecent" "1" on the remembered account in
-#    config/loginusers.vdf; the first version of this check relied on it.
-#  - Client package 1792618285 (the "version" in package/steam_client_win64.manifest,
-#    read in a working container) writes no MostRecent at all.
-#    After a Remember-me sign-in the entry holds PersonaName, RememberPassword
-#    "1", AutoLogin "1" and timestamp only, and logs/connection_log.txt shows
-#    a "Logging On" RecvMsgClientLogOnResponse line ending in 'OK'.
-# Signed in = a remembered account (AutoLogin or RememberPassword "1") AND one of:
-#  MostRecent "1"; a LogOnResponse 'OK' in the client's own logs no older than
-#  this container; or the token file (local.vdf) present while the client runs
-#  and its newest connection state is "Logged On".
-# Log timestamps are the container's clock (UTC in these images).
-# Sets STEAM_SIGNIN_SIGNAL to the evidence that decided it.
-# The viewer's password: VNC_PASSWORD when set, else one made at first start and kept
-# at $DATA_DIR/viewer-password (mode 600). The viewer always has one because websockify
-# listens on every interface inside the container, so other containers on the same
-# network could reach it; the host port stays on loopback by default on top of this.
+# VNC_PASSWORD, else one made at first start (mode 600). websockify listens on every interface
+# inside the container, so the viewer always has a password.
 viewer_password() {
   local file="${VIEWER_PASSWORD_FILE:-$DATA_DIR/viewer-password}"
   if [ -n "${VNC_PASSWORD:-}" ]; then printf '%s' "$VNC_PASSWORD"; return 0; fi
@@ -583,6 +460,9 @@ steam_setup_signed() {
   return 0
 }
 
+# Signed in = a remembered account and one of: MostRecent "1" (older clients), a LogOnResponse
+# 'OK' since this container started, or the token file while a logged-on client runs.
+# Sets STEAM_SIGNIN_SIGNAL to the evidence that decided it.
 steam_signed_in() {
   local vdf="${1:-$STEAM_DIR/config/loginusers.vdf}" logs="${2:-$STEAM_DIR/logs}"
   local token="${3:-$STEAM_SESSION_DIR/local.vdf}" since="${4:-$(container_start)}"
@@ -591,9 +471,7 @@ steam_signed_in() {
   if ! grep -Eq '"(AutoLogin|RememberPassword)"[[:space:]]+"1"' "$vdf"; then
     STEAM_SIGNIN_SIGNAL="no remembered account"; return 1
   fi
-  # A remembered account is not a live session. Steam can accept a logon and
-  # later write RecvMsgClientLoggedOff (notably "Logged In Elsewhere"). The
-  # newest connection result wins, even when loginusers.vdf still says recent.
+  # The newest connection result wins: Steam can log off later ("Logged In Elsewhere").
   local newest
   newest=$(cat "$logs"/connection_log*.txt 2>/dev/null \
     | grep -E "RecvMsgClient(LogOnResponse|LoggedOff)" | LC_ALL=C sort | tail -n1)
@@ -612,10 +490,7 @@ steam_signed_in() {
   if [ -n "$last" ] && [[ ! "$last" < "$floor" ]]; then
     STEAM_SIGNIN_SIGNAL="LogOnResponse 'OK' at $last"; return 0
   fi
-  # The connection log lives on the data volume and outlives the client that wrote it: a
-  # "Logged On" left by the previous container's client is not this client's logon (the game
-  # can launch 20 s before the new client logs on and Steam
-  # API failed to initialize). Only a state written since this container started counts.
+  # The log outlives its client: a previous container's "Logged On" does not count.
   local line stamp
   line=$(cat "$logs"/connection_log*.txt 2>/dev/null \
     | sed -n 's/^\[\([0-9-]* [0-9:]*\)\] \[\([A-Za-z ]*\),.*/\1|\2/p' | tail -n1)
@@ -628,8 +503,6 @@ steam_signed_in() {
   return 1
 }
 
-# Ask the supervisor to replace the Windows Steam client after its own log says
-# it was logged off.
 restart_steam_client() {
   if [ -d /run/service/sn2-steam ]; then
     s6-svc -r /run/service/sn2-steam
@@ -648,8 +521,7 @@ restart_steam_after_logoff() {
   restart_steam_client
 }
 
-# Preserve the logs the game and UE4SS overwrite on their next start. One
-# directory is one launch, so pruning by directory keeps paired evidence.
+# Keep the logs the game and UE4SS overwrite on their next start, one folder per launch.
 archive_previous_logs() {
   local root="${1:-$DATA_DIR/log-history}" game_log="$2" mod_log="$3" stamp="$4" dir
   [ -f "$game_log" ] || [ -f "$mod_log" ] || return 0
@@ -668,8 +540,7 @@ archive_previous_logs() {
 ensure_layout() {
   mkdir -p "$LOG_DIR" "$RUN_DIR" "$UE4SS_CACHE" "$UE4SS_LOCAL" "$STAGING_DIR" \
     "$CONTROL_DIR/inbox" "$CONTROL_DIR/outbox" "$CONTROL_DIR/tmp" "$CONTROL_DIR/receipts"
-  # Run as root (panel entrypoint, moonpool via docker exec), the folder goes to the user the
-  # game runs as or the mod cannot read it.
+  # Run as root, the folder goes to the game's user or the mod cannot read it.
   if [ "$(id -u)" = 0 ] && [ -n "${GAME_USER:-}" ] && id "$GAME_USER" >/dev/null 2>&1; then
     chown -R "$GAME_USER:" "$CONTROL_DIR"
   fi
@@ -682,5 +553,4 @@ ensure_layout() {
   fi
 }
 
-# Windows path of a Linux path, through Wine's Z: drive.
 winpath() { printf 'Z:%s' "${1//\//\\}"; }

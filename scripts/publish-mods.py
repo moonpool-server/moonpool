@@ -71,10 +71,6 @@ def sha256(path):
     return h.hexdigest()
 
 
-def acf_value(path, name):
-    return steamfile.get(path, name)
-
-
 def read_plugins(path):
     if not path.is_file():
         return []
@@ -585,7 +581,7 @@ def publish(args):
     appmanifest = Path(args.appmanifest)
     manifest = {
         "schema": SCHEMA, "app_id": APP_ID,
-        "game": {"branch": acf_value(appmanifest, "BetaKey") or args.branch, "buildid": acf_value(appmanifest, "buildid")},
+        "game": {"branch": steamfile.get(appmanifest, "BetaKey") or args.branch, "buildid": steamfile.get(appmanifest, "buildid")},
         "server": {"id": config["server_id"], "name": args.server_name},
         "mods": mods,
     }
