@@ -84,7 +84,7 @@ def render(plugins: list, manifest: dict, address: str = "") -> str:
             f'Windows PowerShell, allow it.</p>'
             '<script>(function(){var b=document.getElementById("playmods"),n=document.getElementById("nothing");'
             'if(!b||!n)return;b.addEventListener("click",function(){setTimeout(function(){'
-            'if(document.visibilityState==="visible"&&document.hasFocus()){n.hidden=false;}},2500);});})();</script>') \
+            'if(document.visibilityState==="visible"&&document.hasFocus()){n.hidden=false;}},8000);});})();</script>') \
         if published and address else \
         '<div class="opt"><p class="fine">Mods this server asks for:</p>'
     tail = "" if published else "</div>"
