@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
 """moonpool: admin commands for a Subnautica 2 headless host.
 
-On the Docker host it drives the container with docker compose and forwards in-game
-commands into the container. Inside the container (SN2_IN_CONTAINER=1) it talks to the
-SN2SlotFreeHost mod through the file-drop queue in the control folder: write JSON to
-tmp/, rename into inbox/, wait for outbox/.
-
-Every run ends in finish(): one result (code, state, message, next action, data) printed
-as prose by default or, with --json anywhere on the line, as one JSON object on stdout
-and nothing else. The exit code follows the code (table in the help). A mutating command
-runs under one lock in the data volume and appends one receipt line to
-control/receipts.jsonl; read-only commands take no lock and leave no receipt.
+On the Docker host it drives the container with docker compose; inside it (SN2_IN_CONTAINER=1)
+it talks to the SN2SlotFreeHost mod through the file-drop queue in the control folder.
 """
-import getpass
 import json
 import os
 import re
@@ -47,7 +38,7 @@ NEXT_CHOICE = "Pass the argument named under data.argument; the valid choices ar
 USAGE = """Usage: moonpool [--instance <slug>] [--json] <command> [args]
 
 Who is in
-  status                       container state, the mod's readiness and the host receipt
+  status                       container state and the mod's readiness
   players                      who is connected (PlayerState names)
   players kick <name>          the game's own KickPlayer <name>, run as the host
   players invite <steamid64|profile link>
@@ -80,8 +71,7 @@ A player
 The server
   server start | stop [--now]  the container (on the Docker host, next to compose.yaml)
   server restart [--now]       stop the game, then recreate the container so .env
-                               is re-read (compose up -d --force-recreate); refused
-                               --force remains an alias for --now
+                               is re-read (compose up -d --force-recreate)
   server arm | disarm          let the mod call the game's Host code once ready, or hold
                                it off (AUTO_HOST=true arms by itself)
   server saves                 list the saves: name, last played (UTC), size
@@ -100,7 +90,6 @@ Looking inside
   logs [game|steam|services|join_watch] [-f]
                                tail a log from the volume (default: game)
   diag verify-fresh            read-only proof that a fresh install hosted by itself
-  diag receipt                 the last Host-call receipt
   diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
   diag viewer                  the viewer's address and password
   diag console <player> <line...>
@@ -114,14 +103,11 @@ Looking inside
 --json, before or after the command: one JSON object on stdout and nothing
 else: {schema_version, request_id, command, ok, state, code, message,
 next_action, data, started_at, completed_at, duration_ms}. The same exit
-codes apply without it. The older one-word spellings (kick, slots, host,
-player <name> ...) still work and print the current one.
+codes apply without it.
 Environment: SN2_SERVICE (compose service, default sn2), SN2_TIMEOUT (seconds
 to wait for the mod, default 15), SN2_CONTROL_DIR (inside the container),
-SN2_REQUEST_ID (32 lowercase hex; made here when unset), SN2_ACTOR and
-SN2_SOURCE (ssh, discord, local, automation) for the receipt a mutating
-command appends to control/receipts.jsonl; mutating commands serialize on
-control/moonpool.lock (SN2_LOCK_WAIT seconds, default 5, then refused).
+SN2_REQUEST_ID (32 lowercase hex; made here when unset). Mutating commands
+serialize on control/moonpool.lock (SN2_LOCK_WAIT seconds, default 5, then refused).
 Exit codes: 0 ok/accepted/pending, 64 invalid_argument, 69 unavailable or
 not_implemented, 70 protocol_error or internal_error, 75 timeout or stale,
 77 refused, 78 partial_refusal, 79 not_observed.
@@ -135,13 +121,12 @@ STATES = {"ok": ("verified", 0), "accepted": ("submitted", 0), "pending": ("pend
 WORLD_USAGE = "usage: moonpool world [time <HH:MM|frozen|normal> | weather <type>]"
 MAP_USAGE = "usage: moonpool map where <player> | bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>"
 MODS_USAGE = "usage: moonpool mods list | publish [plugins.yaml] | pin <name> <archive.zip> | enable <name> | disable <name>"
-SERVER_USAGE = ("usage: moonpool server start | stop [--now] | restart [--now|--force] | cancel | arm | disarm | saves | "
+SERVER_USAGE = ("usage: moonpool server start | stop [--now] | restart [--now] | cancel | arm | disarm | saves | "
                 "host [save] [--now] | slots <N> | backup | restore <backup> [save] | save")
 
 # ---- the run's state ---------------------------------------------------------
 
-R = {"json": False, "command": "unknown", "mutating": False, "args": {}, "protocol": {}, "human_done": False,
-     "request_id": "", "actor": "", "source": "", "instance": "", "word": "help", "hint": "", "words": []}
+R = {"json": False, "command": "unknown", "human_done": False, "request_id": "", "instance": "", "word": "help", "words": []}
 STARTED_AT = E.get("SN2_STARTED_AT") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 START_MS = int(E.get("SN2_START_MS") or time.time() * 1000)
 _cfg = None
@@ -213,38 +198,6 @@ def session_up():
 
 # ---- the result envelope ------------------------------------------------------
 
-def redact(value):
-    if isinstance(value, str):
-        value = re.sub(r'https?://[^ "]+', "[url]", value)
-        value = re.sub(r'/[^ "]+/[^ "]*', "[path]", value)
-        return re.sub(r"[A-Za-z0-9_-]{40,}", "[secret]", value)
-    if isinstance(value, list):
-        return [redact(v) for v in value]
-    if isinstance(value, dict):
-        return {k: redact(v) for k, v in value.items()}
-    return value
-
-
-def write_receipt(code, state, rc, message):
-    """One JSON line per mutating run, while the lock is still held. A receipt that cannot
-    be written does not change the result of work that already ran."""
-    path = Path(E.get("SN2_RECEIPTS") or f"{control_dir()}/receipts.jsonl")
-    row = {"schema_version": 1, "request_id": R["request_id"], "actor": R["actor"], "source": R["source"],
-           "command": R["command"], "arguments": redact(R["args"]), "started_at": STARTED_AT, "completed_at": utc_now(),
-           "duration_ms": int(time.time() * 1000) - START_MS, "exit_code": rc, "ok": rc == 0, "state": state, "code": code,
-           "protocol_result": redact(R["protocol"]), "postcondition": {}, "message": redact(message)}
-    try:
-        with path.open("a", encoding="utf-8") as f:
-            f.write(dumps(row) + "\n")
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        if len(lines) > 1000:
-            tmp = path.with_name(path.name + ".tmp")
-            tmp.write_text("".join(lines[-1000:]), encoding="utf-8")
-            os.replace(tmp, path)
-    except OSError:
-        pass
-
-
 def finish(code, message, next_action="", data=None):
     """Print the result and exit. DATA must be a JSON object; anything else is wrapped."""
     if code not in STATES:
@@ -252,8 +205,6 @@ def finish(code, message, next_action="", data=None):
     state, rc = STATES[code]
     if not next_action:
         next_action = {"timeout": NEXT_TIMEOUT, "stale": NEXT_STALE}.get(code, "")
-    if R["mutating"]:
-        write_receipt(code, state, rc, message)
     if R["json"]:
         data = data if isinstance(data, dict) else ({} if data is None else {"value": data})
         print(dumps({"schema_version": 1, "request_id": R["request_id"], "command": R["command"], "ok": rc == 0,
@@ -471,7 +422,6 @@ def queue_call(cmd, args):
         return ("protocol_error", f"the mod's answer is incompatible or malformed: {verdict}",
                 "Deploy matching copies of bin/moonpool and the SN2SlotFreeHost Lua files, then retry.",
                 {"protocol_error": verdict, "reply": text[:2000]})
-    R["protocol"] = {"ok": reply["ok"], "error": reply.get("error"), "data": reply["data"]}
     command = R["command"]
     if reply["ok"]:
         if reply["data"].get("queued") is True:
@@ -634,79 +584,49 @@ def do_host(args):
 
 # ---- routing ----------------------------------------------------------------------
 
-ALIASES = {**{w: ("server", w) for w in ("start", "stop", "restart", "cancel", "arm", "disarm", "saves", "host", "restore", "slots", "save")},
-           **{w: ("players", w) for w in ("kick", "invite", "friends")},
-           **{w: ("diag", w) for w in ("receipt", "friend-code", "screenshot", "verify-fresh")},
-           "player": ("diag", "console")}
-
-
-def arg(i, default=""):
-    return lambda a: a[i] if len(a) > i else default
-
-
-# word -> {sub: (dotted command, handler, mutates, receipt-argument builder)} or a leaf
-# (sub ""). A sub of "*" is the usage line. The older spellings in ALIASES come first.
+# word -> {sub: (dotted command, handler, takes the lock, takes no arguments)} or a leaf
+# (sub ""). A sub of "*" is the usage line.
 TABLE = {
-    "status": {"": ("status", "status", False, None)},
-    "players": {"": ("players", "players", False, None),
-                "kick": ("players.kick", "kick", True, lambda a: {"player": arg(0)(a)}),
-                "invite": ("players.invite", "invite", True, None),
-                "friends": ("players.friends", "friends", False, None),
+    "status": {"": ("status", "status", False)},
+    "players": {"": ("players", "players", False), "kick": ("players.kick", "kick", True),
+                "invite": ("players.invite", "invite", True), "friends": ("players.friends", "friends", False, True),
                 "*": "usage: moonpool players [kick <name> | invite <steamid64|profile link> | friends]"},
-    "ban": {"add": ("ban.add", "ban_add", True, lambda a: {"identifier": arg(0)(a), "reason": " ".join(a[1:])}),
-            "remove": ("ban.remove", "ban_remove", True, lambda a: {"identifier": arg(0)(a)}),
-            "list": ("ban.list", "ban_list", False, None),
+    "ban": {"add": ("ban.add", "ban_add", True), "remove": ("ban.remove", "ban_remove", True),
+            "list": ("ban.list", "ban_list", False, True),
             "*": "usage: moonpool ban add <name|steamid64> [reason] | remove <name|steamid64> | list"},
-    "world": {"": ("world", "world", False, None),
-              "time": ("world.time", "world_set", True, lambda a: {"setting": "time", "value": arg(0)(a)}, True),
-              "weather": ("world.weather", "world_set", True, lambda a: {"setting": "weather", "value": arg(0)(a)}, True),
-              "*": WORLD_USAGE},
-    "settings": {"": ("settings.apply", "settings", True, None)},
-    "map": {"where": ("map.where", "map_where", False, None), "bounds": ("map.bounds", "map_bounds", False, None), "*": MAP_USAGE},
-    "mods": {"list": ("mods.list", "mods_list", False, None), "publish": ("mods.publish", "mods_publish", True, None),
-             "pin": ("mods.pin", "mods_pin", True, lambda a: {"name": arg(0)(a), "archive": os.path.basename(arg(1)(a))}),
-             "enable": ("mods.enable", "mods_toggle", True, lambda a: {"name": arg(0)(a)}),
-             "disable": ("mods.disable", "mods_toggle", True, lambda a: {"name": arg(0)(a)}),
-             "*": MODS_USAGE},
-    "unlocks": {"": ("unlocks", "unlocks", True, lambda a: {"player": arg(0)(a)})},
-    "server": {**{s: (f"server.{s}", s, True, None) for s in ("start", "arm", "disarm", "backup", "save")},
-               **{s: (f"server.{s}", s, False, None) for s in ("stop", "cancel", "saves")},
-               "restart": ("server.restart", "restart", False, lambda a: {"force": arg(0)(a) == "--force"}),
-               "host": ("server.host", "host", False, lambda a: {"save": arg(0)(a)}),
-               "slots": ("server.slots", "slots", True, lambda a: {"slots": arg(0)(a)}),
-               "restore": ("server.restore", "restore", True, lambda a: {"backup": os.path.basename(arg(0)(a)), "save": arg(1)(a)}),
-               "*": SERVER_USAGE},
-    "logs": {"": ("logs", "logs", False, None)},
-    "notify": {"": ("notify", "notify", True, None)},
-    "diag": {"verify-fresh": ("diag.verify_fresh", "verify_fresh", False, None),
-             "receipt": ("diag.receipt", "receipt", False, None), "screenshot": ("diag.screenshot", "screenshot", False, None),
-             "friend-code": ("diag.friend_code", "friend_code", False, None),
-             "viewer": ("diag.viewer", "viewer", False, None),
-             "console": ("diag.console", "console", True, lambda a: {"player": arg(0)(a), "command": arg(1)(a), "line": " ".join(a[1:])}),
-             "*": "usage: moonpool diag verify-fresh | receipt | friend-code [--force] | viewer | screenshot <file.png> | console <player> <line...>"},
-    "welcome": {"": ("welcome", "welcome", False, None)},
-    "discord": {"setup": ("discord.setup", "discord_setup", True, None), "*": "usage: moonpool discord setup"},
-    # Plumbing between the host copy and the container copy, under the lock with no receipt of its own.
-    "record": {"": ("record", "record", False, None, False, True)},
-    **{w: {"": (w, w, False, None, False, True)} for w in ("settings-install", "stop-game", "start-game", "restart-warning")},
-    "session-up": {"": ("session-up", "session-up", False, None)},
-    **{w: {"": ("help", "help", False, None)} for w in ("help", "-h", "--help")},
+    "world": {"": ("world", "world", False), "time": ("world.time", "world_set", True),
+              "weather": ("world.weather", "world_set", True), "*": WORLD_USAGE},
+    "settings": {"": ("settings.apply", "settings", True)},
+    "map": {"where": ("map.where", "map_where", False), "bounds": ("map.bounds", "map_bounds", False), "*": MAP_USAGE},
+    "mods": {"list": ("mods.list", "mods_list", False, True), "publish": ("mods.publish", "mods_publish", True),
+             "pin": ("mods.pin", "mods_pin", True), "enable": ("mods.enable", "mods_toggle", True),
+             "disable": ("mods.disable", "mods_toggle", True), "*": MODS_USAGE},
+    "unlocks": {"": ("unlocks", "unlocks", True)},
+    "server": {**{s: (f"server.{s}", s, True, True) for s in ("start", "arm", "disarm", "backup", "save")},
+               **{s: (f"server.{s}", s, False, True) for s in ("cancel", "saves")},
+               "stop": ("server.stop", "stop", False), "restart": ("server.restart", "restart", False),
+               "host": ("server.host", "host", False), "slots": ("server.slots", "slots", True),
+               "restore": ("server.restore", "restore", True), "*": SERVER_USAGE},
+    "logs": {"": ("logs", "logs", False)},
+    "notify": {"": ("notify", "notify", True)},
+    "diag": {"verify-fresh": ("diag.verify_fresh", "verify_fresh", False, True),
+             "screenshot": ("diag.screenshot", "screenshot", False),
+             "friend-code": ("diag.friend_code", "friend_code", False),
+             "viewer": ("diag.viewer", "viewer", False, True), "console": ("diag.console", "console", True),
+             "*": "usage: moonpool diag verify-fresh | friend-code [--force] | viewer | screenshot <file.png> | console <player> <line...>"},
+    "welcome": {"": ("welcome", "welcome", False)},
+    "discord": {"setup": ("discord.setup", "discord_setup", True, True), "*": "usage: moonpool discord setup"},
+    # Plumbing between the host copy and the container copy.
+    **{w: {"": (w, w, True)} for w in ("stop-game", "start-game", "restart-warning")},
+    **{w: {"": ("help", "help", False)} for w in ("help", "-h", "--help")},
 }
 
 
 def route(argv):
-    """The words typed -> the canonical dotted command name, the handler, whether it mutates
-    (lock and receipt), the receipt's argument summary and the handler's arguments."""
-    r = {"cmd": "unknown", "op": "unknown", "mut": False, "lock": False, "args": {}, "hint": "", "usage": "", "argv": []}
+    """The words typed -> the dotted command name, the handler, whether it takes the lock, and its arguments."""
+    r = {"cmd": "unknown", "op": "unknown", "lock": False, "usage": "", "argv": []}
     words = list(argv) or ["help"]
-    R["word"] = words[0]
-    if words[0] in ALIASES:
-        group, sub = ALIASES[words[0]]
-        r["hint"] = {"player": "moonpool diag console <player> <line...>"}.get(words[0], f"moonpool {group} {sub}")
-        words = [group, sub, *words[1:]]
-    elif words[0] == "unlocks" and words[1:2] == ["replay"]:
-        r["hint"], words = "moonpool unlocks [player]", ["unlocks", *words[2:]]
-    R["words"] = words
+    R["word"], R["words"] = words[0], words
     w, a = words[0], words[1:]
     group = TABLE.get(w)
     if group is None:
@@ -719,10 +639,11 @@ def route(argv):
         return {**r, "op": "usage", "usage": group.get("*", ""), "argv": a[1:]}
     else:  # a leaf: every word after it is the handler's
         entry, rest = group[""], a
-    cmd, op, mut, builder, *flags = entry
-    keep_sub, lock = (flags + [False, False])[:2]
-    r.update(cmd=cmd, op=op, mut=mut, lock=lock, args=builder(rest) if builder else {},
-             argv=[sub, *rest] if keep_sub else rest)  # world time/weather: the handler sees the setting word too
+    cmd, op, lock, *noargs = entry
+    if noargs and rest:
+        return {**r, "cmd": cmd, "op": "usage", "usage": f"usage: moonpool {w} {sub}", "argv": rest}
+    # world time/weather: the handler sees the setting word too
+    r.update(cmd=cmd, op=op, lock=lock, argv=[sub, *rest] if op == "world_set" else rest)
     return r
 
 
@@ -733,9 +654,7 @@ def inner(r):
     n = len(a)
     if op == "usage":
         usage_error(r["usage"])
-    if op in ("players", "receipt"):
-        if n:
-            usage_error(f"usage: moonpool {r['cmd']} takes no argument")
+    if op == "players":
         queue_send(op)
     if op == "console":
         if not (n and a[0]):
@@ -806,7 +725,6 @@ def inner(r):
         f = c / "settings.yaml"
         if not f.is_file():
             unavailable(f"no settings.yaml in {c}")
-        R["args"] = {"keys": re.findall(r"^([A-Za-z0-9_]+):", f.read_text(encoding="utf-8"), re.M)}
         finish(*settings_verdict(queue_call("settings", [])))
     if op == "map_where":
         if not (n and a[0]):
@@ -869,8 +787,6 @@ def inner(r):
         install_file("".join(row + "\n" for row in kept), f)
         finish("ok", f"{a[0]} ban removed", "", {"removed": len(kept) != len(rows)})
     if op == "ban_list":
-        if n:
-            usage_error("usage: moonpool ban list")
         check_control_dir()
         bans = []
         for row in (c / "bans.txt").read_text(encoding="utf-8").split("\n") if (c / "bans.txt").is_file() else []:
@@ -889,8 +805,6 @@ def inner(r):
             usage_error("usage: moonpool server host [save] [--now]")
         do_host(a)
     if op == "cancel":
-        if n:
-            usage_error("usage: moonpool server cancel")
         run_helper("restart-warning.sh", "cancel", capture=False)
         finish("accepted", "restart countdown cancellation requested")
     if op == "notify":
@@ -903,8 +817,6 @@ def inner(r):
         os.replace(c / "notify-request.json.tmp", c / "notify-request.json")
         finish("accepted", "announcement queued for online players")
     if op == "backup":
-        if n:
-            usage_error("usage: moonpool server backup")
         rc, out = run_helper("save-stage.sh", "--now")
         if rc != 0:
             refuse(f"refused: the saves could not be staged: {out.rstrip().split(chr(10))[-1] if out.strip() else ''}")
@@ -916,14 +828,10 @@ def inner(r):
     if op == "restore":
         restore(a)
     if op == "arm":
-        if n:
-            usage_error("usage: moonpool server arm")
         (c / "HOST_DISARMED").unlink(missing_ok=True)
         (c / "HOST_ARMED").touch()
         finish("ok", "armed: the mod calls the game's Host code once, when ready", "", {"armed": True})
     if op == "disarm":
-        if n:
-            usage_error("usage: moonpool server disarm")
         (c / "HOST_ARMED").unlink(missing_ok=True)
         (c / "HOST_DISARMED").touch()
         finish("ok", "disarmed: the mod idles, and AUTO_HOST will not re-arm until: moonpool server arm", "", {"armed": False})
@@ -944,8 +852,6 @@ def inner(r):
             usage_error("usage: moonpool diag friend-code [--force]")
         queue_send("friend_code", a)
     if op == "viewer":
-        if n:
-            usage_error("usage: moonpool diag viewer")
         bind = E.get("VIEWER_BIND") or "127.0.0.1"
         port = E.get("NOVNC_PORT") or "8080"
         try:
@@ -979,21 +885,14 @@ def inner(r):
                 out.write(sid + "\n")
         finish("ok", f"{sid} is invited: their friend request is accepted within a minute", "", {"steamid": sid})
     if op == "save":
-        if n:
-            usage_error("usage: moonpool server save")
         queue_send("save")
     if op == "status":
         if R["json"]:
-            finish("ok", "readiness and the last host receipt, as the mod wrote them", "",
-                   {"readiness": read_json(c / "readiness.json"), "host_receipt": read_json(c / "host_receipt.json")})
+            finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json")})
         print("== readiness (written by the mod every poll)")
         print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
-        print("== last host receipt")
-        print((c / "host_receipt.json").read_text(encoding="utf-8").rstrip("\n") if (c / "host_receipt.json").is_file() else "none: HostSessionAsync has not been called")
         sys.exit(0)
     if op == "verify_fresh":
-        if n:
-            usage_error("usage: moonpool diag verify-fresh [--json]")
         if R["json"]:
             rc, out = run_helper("verify-fresh.sh", "--json")
             res = read_json_text(out)
@@ -1005,11 +904,6 @@ def inner(r):
             finish("unavailable", f"verify-fresh: {failed} failed", "Read the failed stages (moonpool diag verify-fresh) and the logs they name before going on.", res)
         rc, _ = run_helper("verify-fresh.sh", capture=False)
         sys.exit(rc)
-    if op == "settings-install":
-        if n != 1:
-            usage_error("usage: moonpool settings-install <file>")
-        install_settings(a[0])
-        finish("ok", "settings.yaml installed")
     if op == "welcome":
         if not (n == 0 or (n == 1 and a[0] == "--dry-run")):
             usage_error("usage: moonpool welcome [--dry-run]")
@@ -1022,30 +916,16 @@ def inner(r):
         rc, _ = run_helper("discord-notify.py", *a, "welcome", capture=False)
         sys.exit(rc)
     if op == "discord_setup":
-        if n:
-            usage_error("usage: moonpool discord setup")
         rc, _ = run_helper("discord-notify.py", "setup", capture=False)
         sys.exit(rc)
     if op == "logs":
         logs(a)
-    if op == "record":
-        if not (n >= 3 and a[1] in STATES):
-            usage_error("usage: moonpool record <command> <code> <message> [args-json]")
-        args = read_json_text(a[3]) if n > 3 else {}
-        R.update(command=a[0], mutating=True, args=args if isinstance(args, dict) else {})
-        state, rc = STATES[a[1]]
-        write_receipt(a[1], state, rc, a[2])
-        sys.exit(0)
     if op == "stop-game":
         do_stop_game()
         finish("accepted", "game stop requested")
     if op == "restart-warning":
         run_helper("restart-warning.sh", "run", " ".join(a) or "restart requested", capture=False)
         finish("accepted", "restart warning completed")
-    if op == "session-up":
-        if session_up():
-            finish("ok", "a session is up with players in", "", {"session_up": True})
-        finish("unavailable", "no session with players in", "", {"session_up": False})
     if op == "start-game":
         do_start_game()
         finish("accepted", "game start allowed; the supervisor launches it within 10s")
@@ -1091,8 +971,6 @@ def install_settings(path):
 
 
 def mods_list(a):
-    if a:
-        usage_error(MODS_USAGE)
     manifest = Path(cfg()["DATA_DIR"]) / "public" / "mods.json"
     pub = read_json(Path(run_dir()) / "mod-publish.json")
     pub = pub if isinstance(pub, dict) else {}
@@ -1145,7 +1023,6 @@ def world_set(a):
         key = "weather"
     check_control_dir()
     settings_set_key(key, value)
-    R["args"] = {"setting": setting, "key": key, "value": value}
     code, msg, nxt, data = settings_verdict(queue_call("settings", []))
     if code in ("accepted", "partial_refusal", "refused"):
         rows = [v for v in (data.get("values") or []) if isinstance(v, dict)]
@@ -1191,8 +1068,6 @@ def ban_add(a):
 
 
 def saves(a):
-    if a:
-        usage_error("usage: moonpool server saves")
     d = E.get("SN2_SAVE_DIR") or cfg().get("SAVE_DIR") or ""
     if not d or not Path(d).is_dir():
         unavailable(f"no save folder yet: {d}")
@@ -1217,12 +1092,7 @@ def restore(a):
     x = Path(tempfile.mkdtemp())
     try:
         with tarfile.open(a[0], "r:gz") as tar:
-            if hasattr(tarfile, "data_filter"):
-                tar.extractall(x, filter="data")
-            else:  # an older Python: only plain files and folders inside the folder
-                members = [m for m in tar.getmembers() if (m.isfile() or m.isdir())
-                           and not m.name.startswith("/") and ".." not in Path(m.name).parts]
-                tar.extractall(x, members=members)
+            tar.extractall(x, filter="data")
     except (OSError, tarfile.TarError, ValueError):
         usage_error(f"cannot read {a[0]}")
     stamped = sorted(d for d in x.rglob("*") if d.is_dir() and re.fullmatch(r"20\d{6}T\d{6}Z", d.name))
@@ -1259,8 +1129,6 @@ def restore(a):
 
 
 def friends(a):
-    if a:
-        usage_error("usage: moonpool players friends")
     sd = E.get("SN2_STEAM_DIR") or cfg().get("STEAM_DIR") or ""
     m = re.search(r'"(7656\d{13})"', Path(sd, "config", "loginusers.vdf").read_text(encoding="utf-8", errors="replace")) if Path(sd, "config", "loginusers.vdf").is_file() else None
     if not m:
@@ -1335,8 +1203,6 @@ def compose_base():
             return ["docker", "compose", *args], cwd
     except OSError:
         pass
-    if shutil.which("docker-compose"):
-        return ["docker-compose", *args], cwd
     die("docker compose not found")
 
 
@@ -1362,8 +1228,8 @@ def container_running():
 
 
 def exec_args():
-    return ["exec", "-T", "-e", f"SN2_REQUEST_ID={R['request_id']}", "-e", f"SN2_ACTOR={R['actor']}", "-e", f"SN2_SOURCE={R['source']}",
-            "-e", f"SN2_STARTED_AT={STARTED_AT}", "-e", f"SN2_START_MS={START_MS}", SERVICE, "moonpool"]
+    return ["exec", "-T", "-e", f"SN2_REQUEST_ID={R['request_id']}", "-e", f"SN2_STARTED_AT={STARTED_AT}",
+            "-e", f"SN2_START_MS={START_MS}", SERVICE, "moonpool"]
 
 
 def forward(words):
@@ -1381,11 +1247,6 @@ def forward_quiet(*words):
     return rc == 0
 
 
-def record(code, message):
-    """The receipt for a command the host copy ran itself, appended by the container copy."""
-    forward_quiet("record", R["command"], code, message, dumps(R["args"]))
-
-
 def run_compose(*args):
     rc, out = compose(*args, capture=R["json"])
     if rc != 0:
@@ -1396,12 +1257,9 @@ def outer(r):
     op, a = r["op"], r["argv"]
     n = len(a)
     if op == "start":
-        if n:
-            usage_error("usage: moonpool server start")
         run_compose("up", "-d", SERVICE)
         if not forward_quiet("start-game"):
             unavailable(f"the container did not come up (docker compose ps {SERVICE})")
-        record("accepted", "container started")
         finish("accepted", "container started; the game launches within 10s and hosts once armed (moonpool status)")
     if op == "stop":
         if not (n == 0 or (n == 1 and a[0] == "--now")):
@@ -1409,21 +1267,18 @@ def outer(r):
         if a[:1] != ["--now"] and not forward_quiet("restart-warning", "container stopping"):
             finish("pending", "stop countdown was cancelled or another countdown is running")
         forward_quiet("stop-game")
-        record("accepted", "stop requested")
         run_compose("stop", SERVICE)
         finish("accepted", "stop requested: the game was told to stop and compose stop returned")
     if op == "restart":
-        if not (n == 0 or (n == 1 and a[0] in ("--force", "--now"))):
-            usage_error("usage: moonpool server restart [--now|--force]")
+        if not (n == 0 or (n == 1 and a[0] == "--now")):
+            usage_error("usage: moonpool server restart [--now]")
         if not a and not forward_quiet("restart-warning", "container restarting"):
             finish("pending", "restart countdown was cancelled or another countdown is running")
         forward_quiet("stop-game")
         run_compose("up", "-d", "--force-recreate", SERVICE)
         if not forward_quiet("start-game"):
             unavailable(f"the container did not come up (docker compose ps {SERVICE})")
-        record("accepted", "container recreated")
-        finish("accepted", "container recreated; the game launches within 10s and hosts once armed (moonpool status)", "",
-               {"force": a[:1] == ["--force"]})
+        finish("accepted", "container recreated; the game launches within 10s and hosts once armed (moonpool status)")
     if op == "status":
         if not R["json"]:
             compose("ps", SERVICE)
@@ -1513,22 +1368,10 @@ def main(argv):
         if not Path(E["SN2_REPO_ROOT"], "instances", instance, ".env").is_file():
             usage_error(f"instance '{instance}' does not exist")
         R["instance"] = instance
-    try:
-        R["actor"] = E.get("SN2_ACTOR") or getpass.getuser()
-    except (KeyError, OSError):
-        R["actor"] = "unknown"
-    R["source"] = E.get("SN2_SOURCE") or ("ssh" if E.get("SSH_CONNECTION") else "local")
-    if R["source"] not in ("ssh", "discord", "local", "automation"):
-        usage_error(f"SN2_SOURCE must be ssh, discord, local or automation, not '{R['source']}'")
     r = route(rest)
-    R.update(command=r["cmd"], args=r["args"])
-    if not R["json"] and r["hint"]:  # an older spelling still works; the prose mode says the current one once
-        print(f"moonpool: use: {r['hint']}", file=sys.stderr)
+    R["command"] = r["cmd"]
     if in_container():
-        if r["mut"]:
-            R["mutating"] = True
-            take_lock()
-        elif r["lock"]:
+        if r["lock"]:
             take_lock()
         inner(r)
     else:
@@ -1536,8 +1379,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
+    sys.stdout.reconfigure(encoding="utf-8")
     main(sys.argv[1:])

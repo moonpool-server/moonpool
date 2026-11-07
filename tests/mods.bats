@@ -211,12 +211,11 @@ EOF
   [ "$(jq -r '.mods[0].folder, .mods[0].prefix' "$DATA_DIR/public/mods.json")" = $'B\nB' ]
 }
 
-@test "moonpool mods: publish is receipted, list reads the envelope, disable and enable republish" {
+@test "moonpool mods: publish answers in the envelope, list reads it, disable and enable republish" {
   local_mod_yaml
   run "$CTL" --json mods publish
   [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ "$(jq -r '.command, .state, .data.mods' <<<"$output")" = $'mods.publish\nverified\n1' ]
-  [ "$(jq -r .command "$SN2_CONTROL_DIR/receipts.jsonl")" = mods.publish ]
   run "$CTL" --json mods list
   [ "$status" -eq 0 ]
   [ "$(jq -r '.command, .data.mods[0].name, .data.mods[0].automatic, .data.ue4ss' <<<"$output")" = \

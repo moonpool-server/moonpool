@@ -62,10 +62,10 @@ fake_mod() {
   [[ $output == '{"v":1,"id":"abc123","cmd":"players","args":{},"ts":'* ]]
 }
 
-@test "protocol schemas validate real v1 request, response and receipt examples" {
+@test "protocol schemas validate real v1 request and response examples" {
   run python3 tests/validate_protocol_schemas.py
   [ "$status" -eq 0 ] || { echo "$output"; false; }
-  [[ $output == *"3 protocol examples validated"* ]]
+  [[ $output == *"2 protocol examples validated"* ]]
 }
 
 @test "Lua protocol checks stale requests, duplicate nonces, versions and UTF-8" {
@@ -114,8 +114,6 @@ fake_mod() {
 }
 
 @test "a refused command exits 77 and names the mod's reason" {
-  # A queued command (host is a local stop/start and never reaches
-  # the mod; it failed here only because the run directory did not follow DATA_DIR).
   fake_mod false
   run "$CTL" players
   wait
@@ -187,9 +185,9 @@ fake_mod() {
   [[ $output == *"expected 700"* ]]
 }
 
-@test "save queues a forced host save and returns its receipt" {
+@test "save queues a forced host save and returns the mod's answer" {
   fake_mod true '{"forced":true,"queued":true}'
-  run "$CTL" save
+  run "$CTL" server save
   wait
   [ "$status" -eq 0 ]
   grep -q '"cmd":"save"' "$SN2_CONTROL_DIR/receipts/request.json"
@@ -203,10 +201,10 @@ fake_mod() {
 }
 
 @test "arm creates HOST_ARMED and disarm removes it, without the mod" {
-  run "$CTL" arm
+  run "$CTL" server arm
   [ "$status" -eq 0 ]
   [ -f "$SN2_CONTROL_DIR/HOST_ARMED" ]
-  run "$CTL" disarm
+  run "$CTL" server disarm
   [ "$status" -eq 0 ]
   [ ! -e "$SN2_CONTROL_DIR/HOST_ARMED" ]
 }
@@ -249,14 +247,14 @@ make_backup() {
 
 @test "saves fails plainly when there is no save folder" {
   save_env
-  SN2_SAVE_DIR="$BATS_TEST_TMPDIR/none" run "$CTL" saves
+  SN2_SAVE_DIR="$BATS_TEST_TMPDIR/none" run "$CTL" server saves
   [ "$status" -eq 69 ]
   [[ $output == *"no save folder yet"* ]]
 }
 
 @test "host <save> writes SAVE_SELECT and restarts the game" {
   save_env
-  run "$CTL" host Slot2
+  run "$CTL" server host Slot2
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = "Slot2" ]
   # stop-game set the hold and start-game cleared it again
@@ -266,7 +264,7 @@ make_backup() {
 
 @test "host refuses a save name that could escape the folder" {
   save_env
-  run "$CTL" host '../evil'
+  run "$CTL" server host '../evil'
   [ "$status" -eq 64 ]
   [ ! -e "$SN2_CONTROL_DIR/SAVE_SELECT" ]
 }
@@ -275,7 +273,7 @@ make_backup() {
   save_env
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/bad.tar.gz" userdata/123/remote/x.vdf
-  run "$CTL" restore "$BATS_TEST_TMPDIR/bad.tar.gz"
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/bad.tar.gz"
   [ "$status" -eq 77 ]
   [[ $output == *"holds no save (.sav) file"* ]]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "old" ]
@@ -285,7 +283,7 @@ make_backup() {
 @test "restore refuses a named save the backup does not hold" {
   save_env
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
-  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot9
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot9
   [ "$status" -eq 77 ]
   [[ $output == *"has no Slot9.sav"* ]]
 }
@@ -294,7 +292,7 @@ make_backup() {
   save_env
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
-  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot1
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot1
   [ "$status" -eq 0 ]
   [ "$(cat "$STAGED/Slot1.sav")" = "old" ]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "new" ]
@@ -314,7 +312,7 @@ printf '%s\n' "$*" >"$BATS_TEST_TMPDIR/restart-warning.call"
 [ ! -e "$SN2_RUN_DIR/stopped" ]
 SH
   chmod +x "$SN2_BIN/restart-warning.sh"
-  run "$CTL" restore "$BATS_TEST_TMPDIR/reef-backup.tar.gz" Slot1
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/reef-backup.tar.gz" Slot1
   [ "$status" -eq 0 ]
   [ "$(cat "$BATS_TEST_TMPDIR/restart-warning.call")" = "run restoring reef-backup.tar.gz" ]
 }
@@ -331,7 +329,7 @@ EOF
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" \
     sn2-staging/20261103T120000Z/SaveGames/Slot1.sav \
     sn2-staging/20261103T130000Z/SaveGames/Slot2.sav
-  PATH="$tools:$PATH" run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
+  PATH="$tools:$PATH" run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 0 ]
   [ ! -e "$SN2_SAVE_DIR/Slot1.sav" ]
   [ "$(cat "$SN2_SAVE_DIR/Slot2.sav")" = "new" ]
@@ -342,7 +340,7 @@ EOF
   echo old-one >"$SN2_SAVE_DIR/Slot1.sav"
   echo old-extra >"$SN2_SAVE_DIR/Slot9.sav"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" sn2-staging/20261103T130000Z/SaveGames/Slot1.sav
-  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "new" ]
   [ ! -e "$SN2_SAVE_DIR/Slot9.sav" ]
@@ -357,7 +355,7 @@ EOF
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
   printf '#!/bin/sh\nexit 1\n' >"$SN2_BIN/save-stage.sh"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
-  run "$CTL" restore "$BATS_TEST_TMPDIR/b.tar.gz"
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 77 ]
   [[ $output == *"could not snapshot"* ]]
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "old" ]
@@ -377,7 +375,7 @@ steam_env() {
 
 @test "friends prints the friend code and each friend from Steam's files" {
   steam_env
-  run "$CTL" friends
+  run "$CTL" players friends
   [ "$status" -eq 0 ]
   [[ $output == *"host friend code: 1000"* ]]
   [[ $output == *"111  Alice"* ]]
@@ -386,7 +384,7 @@ steam_env() {
 
 @test "friends fails plainly before the sign-in" {
   export SN2_STEAM_DIR="$BATS_TEST_TMPDIR/nosteam"
-  run "$CTL" friends
+  run "$CTL" players friends
   [ "$status" -eq 69 ]
   [[ $output == *"sign in on the viewer page"* ]]
 }
@@ -423,9 +421,9 @@ steam_env() {
 }
 
 @test "invite adds the ID to the allowlist once" {
-  run "$CTL" invite 76561198000000000
+  run "$CTL" players invite 76561198000000000
   [ "$status" -eq 0 ]
-  run "$CTL" invite 76561198000000000
+  run "$CTL" players invite 76561198000000000
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_CONTROL_DIR/allowlist.txt")" = 76561198000000000 ]
   [ -z "$(ls "$SN2_CONTROL_DIR/inbox")" ]
@@ -472,34 +470,34 @@ policy_env() {
   run mp 'print(m.player_line(["Alice", "Heal; Quit"]))'
   [ "$status" -ne 0 ]
   [[ $output == *"one console command"* ]]
-  run "$CTL" player Alice
+  run "$CTL" diag console Alice
   [ "$status" -ne 0 ]
 }
 
 @test "a console line drops one queue file naming the player and the line" {
   fake_mod
-  run "$CTL" player "SN2 Host" Heal
+  run "$CTL" diag console "SN2 Host" Heal
   [ "$status" -eq 0 ]
   grep -q '"cmd":"player","args":{"player":"SN2 Host","command":"Heal"}' "$SN2_CONTROL_DIR/receipts/request.json"
 }
 
 @test "slots 8 drops one queue file with the number" {
   fake_mod
-  run "$CTL" slots 8
+  run "$CTL" server slots 8
   [ "$status" -eq 0 ]
   grep -q '"cmd":"slots","args":{"slots":8}' "$SN2_CONTROL_DIR/receipts/request.json"
 }
 
 @test "slots strips a leading zero and stays a JSON number" {
   fake_mod
-  run "$CTL" slots 08
+  run "$CTL" server slots 08
   [ "$status" -eq 0 ]
   grep -q '"args":{"slots":8}' "$SN2_CONTROL_DIR/receipts/request.json"
 }
 
 @test "slots refuses 0, 64, words and no argument, writing nothing" {
   for bad in 0 64 eight -3 ""; do
-    run "$CTL" slots $bad
+    run "$CTL" server slots $bad
     [ "$status" -ne 0 ]
     [[ "$output" == *"usage: moonpool server slots"* ]]
   done
@@ -508,32 +506,19 @@ policy_env() {
 
 @test "friend-code drops one queue file; --force rides along as a JSON boolean" {
   fake_mod
-  run "$CTL" friend-code
+  run "$CTL" diag friend-code
   [ "$status" -eq 0 ]
   grep -q '"cmd":"friend_code","args":{}' "$SN2_CONTROL_DIR/receipts/request.json"
   fake_mod
-  run "$CTL" friend-code --force
+  run "$CTL" diag friend-code --force
   [ "$status" -eq 0 ]
   grep -q '"cmd":"friend_code","args":{"force":true}' "$SN2_CONTROL_DIR/receipts/request.json"
-}
-
-@test "unlocks replay drops one queue file, for everyone or for one player" {
-  fake_mod
-  run "$CTL" unlocks replay
-  [ "$status" -eq 0 ]
-  grep -q '"cmd":"unlocks","args":{}' "$SN2_CONTROL_DIR/receipts/request.json"
-  fake_mod
-  run "$CTL" unlocks replay "Example Diver"
-  [ "$status" -eq 0 ]
-  grep -q '"cmd":"unlocks","args":{"player":"Example Diver"}' "$SN2_CONTROL_DIR/receipts/request.json"
 }
 
 @test "unlocks refuses more than one player, or an empty one, writing nothing" {
   run "$CTL" unlocks a b
   [ "$status" -eq 64 ]
   [[ "$output" == *"usage: moonpool unlocks [player]"* ]]
-  run "$CTL" unlocks replay a b
-  [ "$status" -eq 64 ]
   run "$CTL" unlocks ""
   [ "$status" -eq 64 ]
   [ -z "$(ls -A "$SN2_CONTROL_DIR/inbox")" ]
@@ -546,7 +531,7 @@ policy_env() {
 }
 
 @test "friend-code refuses other arguments, writing nothing" {
-  run "$CTL" friend-code now
+  run "$CTL" diag friend-code now
   [ "$status" -ne 0 ]
   [[ "$output" == *"usage: moonpool diag friend-code"* ]]
   [ -z "$(ls -A "$SN2_CONTROL_DIR/inbox")" ]
@@ -615,7 +600,7 @@ policy_env() {
 
 @test "kick runs KickPlayer as the host" {
   fake_mod
-  run "$CTL" kick Bob
+  run "$CTL" players kick Bob
   [ "$status" -eq 0 ]
   grep -q '"cmd":"kick","args":{"player":"Bob"}' "$SN2_CONTROL_DIR/receipts/request.json"
 }
@@ -639,7 +624,7 @@ policy_env() {
 
 @test "a refused player request fails moonpool" {
   fake_mod false
-  run "$CTL" player Nobody Heal
+  run "$CTL" diag console Nobody Heal
   [ "$status" -ne 0 ]
   [[ -f "$SN2_CONTROL_DIR/receipts/request.json" ]]
 }
@@ -867,7 +852,7 @@ EOF
 }
 
 @test "screenshot: needs exactly one file argument" {
-  run env SN2_IN_CONTAINER=1 "$BATS_TEST_DIRNAME/../bin/moonpool" screenshot
+  run env SN2_IN_CONTAINER=1 "$BATS_TEST_DIRNAME/../bin/moonpool" diag screenshot
   [ "$status" -ne 0 ]
   [[ $output == *"usage: moonpool diag screenshot <file.png>"* ]]
 }
@@ -1415,11 +1400,6 @@ seed_set() { # dir label sha
   [ "$output" = "1" ]
 }
 
-@test "launch: ARM=1 forces arming on even with AUTO_HOST=false" {
-  run env ARM=1 AUTO_HOST=false bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; echo \"\$AUTO_HOST\""
-  [ "$output" = "true" ]
-}
-
 @test "launch: the service writes HOST_ARMED on every launch, not only when absent" {
   run grep -n 'HOST_ARMED_FILE" \]; then' "$BATS_TEST_DIRNAME/../docker/sn2-service.sh"
   [ "$status" -ne 0 ]
@@ -1447,46 +1427,46 @@ session_files() {
   echo "{\"players\":$2}" >"$SN2_CONTROL_DIR/status.json"
 }
 
-@test "session-up: true only when hosted with a player other than the host" {
+session_up() { bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; CONTROL_DIR='$SN2_CONTROL_DIR' session_up"; }
+
+@test "session_up: true only when hosted with a player other than the host" {
   # The host is whoever HOST_NAME names; pin it so a caller's .env cannot leak in.
   export HOST_NAME="SN2 Host"
   session_files true '[{"name":"SN2 Host"},{"name":"Ada"}]'
-  run "$CTL" session-up
+  run session_up
   [ "$status" -eq 0 ]
   # Hosted (Host call ok, session created) with nobody joined yet: not up.
   session_files true '[{"name":"SN2 Host"}]'
-  run "$CTL" session-up
+  run session_up
   [ "$status" -ne 0 ]
   session_files false '[{"name":"Ada"}]'
-  run "$CTL" session-up
+  run session_up
   [ "$status" -ne 0 ]
   # A renamed host is still the host, not a player.
   export HOST_NAME="Reef Keeper"
   session_files true '[{"name":"Reef Keeper"}]'
-  run "$CTL" session-up
+  run session_up
   [ "$status" -ne 0 ]
   session_files true '[{"name":"Reef Keeper"},{"name":"Ada"}]'
-  run "$CTL" session-up
+  run session_up
   [ "$status" -eq 0 ]
 }
 
-@test "restart: warns a live session, while --force remains the immediate alias" {
+@test "restart: warns a live session, and --now skips the warning" {
   stub="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub"
-  # A fake docker: `compose exec ... moonpool session-up` says a session is up;
-  # every other call is recorded.
+  # A fake docker: every call is recorded and succeeds.
   cat >"$stub/docker" <<EOF
 #!/usr/bin/env bash
-case "\$*" in *session-up*) exit 0 ;; esac
 echo "\$*" >>"$BATS_TEST_TMPDIR/docker.calls"
 EOF
   chmod +x "$stub/docker"
-  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" restart
+  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" server restart
   [ "$status" -eq 0 ]
   grep -q -- 'restart-warning container restarting' "$BATS_TEST_TMPDIR/docker.calls"
   grep -q -- '--force-recreate' "$BATS_TEST_TMPDIR/docker.calls"
   rm "$BATS_TEST_TMPDIR/docker.calls"
-  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" restart --force
+  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" server restart --now
   grep -q -- '--force-recreate' "$BATS_TEST_TMPDIR/docker.calls"
   run grep -q -- 'restart-warning' "$BATS_TEST_TMPDIR/docker.calls"
   [ "$status" -ne 0 ]
@@ -1645,10 +1625,7 @@ stub_discord() {
   run "$CTL" settings apply
   [ "$status" -ne 0 ]
   [[ $output == *"no settings.yaml"* ]]
-  printf 'weather: clear\nmods: []\n' >"$BATS_TEST_TMPDIR/s.yaml"
-  run "$CTL" settings-install "$BATS_TEST_TMPDIR/s.yaml"
-  [ "$status" -eq 0 ]
-  [ "$(stat -c %a "$SN2_CONTROL_DIR/settings.yaml")" = 600 ]
+  printf 'weather: clear\nmods: []\n' >"$SN2_CONTROL_DIR/settings.yaml"
   fake_mod true
   run "$CTL" settings apply
   wait
@@ -1694,7 +1671,7 @@ verdict() {
 
 @test "json: a queued answer is submitted/accepted/0 and says the effect is not read back" {
   fake_mod true '{"queued":true}'
-  run "$CTL" --json player Ada Heal
+  run "$CTL" --json diag console Ada Heal
   wait
   envelope; verdict accepted submitted 0 true
   [ "$(field command)" = diag.console ]
@@ -1704,7 +1681,7 @@ verdict() {
 
 @test "json: the mod's refusal is refused/refused/77 with its error kept under data.protocol_error" {
   fake_mod false unknown_player
-  run "$CTL" --json kick Nobody
+  run "$CTL" --json players kick Nobody
   wait
   envelope; verdict refused refused 77 false
   [ "$(field command)" = players.kick ]
@@ -1712,7 +1689,7 @@ verdict() {
 }
 
 @test "json: a bad argument is refused/invalid_argument/64 and queues nothing" {
-  run "$CTL" --json slots 99
+  run "$CTL" --json server slots 99
   envelope; verdict invalid_argument refused 64 false
   [ "$(field command)" = server.slots ]
   [ -z "$(ls -A "$SN2_CONTROL_DIR/inbox")" ]
@@ -1747,12 +1724,12 @@ verdict() {
   [[ $(field message) == *"not the request id"* ]]
 }
 
-@test "json: an unknown command is invalid_argument/64 and save returns the mod receipt" {
+@test "json: an unknown command is invalid_argument/64 and save returns the mod's answer" {
   run "$CTL" --json frobnicate
   envelope; verdict invalid_argument refused 64 false
   [ "$(field command)" = unknown ]
   fake_mod true '{"forced":true,"queued":true}'
-  run "$CTL" --json save; wait
+  run "$CTL" --json server save; wait
   envelope; verdict accepted submitted 0 true
   [ "$(field command)" = server.save ]
   [ "$(field data.forced)" = true ]
@@ -1771,12 +1748,12 @@ verdict() {
 
 @test "json: the prose mode keeps its surface and exits by the same table" {
   fake_mod false
-  run "$CTL" kick Nobody
+  run "$CTL" players kick Nobody
   wait
   [ "$status" -eq 77 ]
   [[ $output == *'"ok":false'* ]]
   [[ $output == *"refused by the mod: no connected player has that name (unknown_player)"* ]]
-  run "$CTL" slots 99
+  run "$CTL" server slots 99
   [ "$status" -eq 64 ]
 }
 
@@ -1803,15 +1780,15 @@ EOF
   chmod +x "$stub/docker"
 }
 
-@test "json: the host copy makes one request id and forwards it, --json, actor and source into the container" {
+@test "json: the host copy makes one request id and forwards it and --json into the container" {
   docker_stub
   fake_mod true
-  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" SN2_ACTOR=ada SN2_SOURCE=automation "$CTL" players --json
+  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" players --json
   wait
   envelope; verdict ok verified 0 true
   rid=$(field request_id)
   grep -q "\"id\":\"$rid\"" "$SN2_CONTROL_DIR/receipts/request.json"
-  grep -Eq "compose exec -T -e SN2_REQUEST_ID=$rid -e SN2_ACTOR=ada -e SN2_SOURCE=automation -e SN2_STARTED_AT=[0-9TZ:-]+ -e SN2_START_MS=[0-9]+ sn2 moonpool --json players" "$BATS_TEST_TMPDIR/docker.calls"
+  grep -Eq "compose exec -T -e SN2_REQUEST_ID=$rid -e SN2_STARTED_AT=[0-9TZ:-]+ -e SN2_START_MS=[0-9]+ sn2 moonpool --json players" "$BATS_TEST_TMPDIR/docker.calls"
 }
 
 @test "json: a container that is not running is failed/unavailable/69 from the host copy" {
@@ -1823,93 +1800,18 @@ EOF
   [ "$status" -eq 69 ]
 }
 
-# ---- receipts and the one lock -----------------------------------------------
-# A mutating command appends one JSON line to control/receipts.jsonl and runs
-# under control/moonpool.lock; a read-only one does neither.
-receipts() { cat "$SN2_CONTROL_DIR/receipts.jsonl" 2>/dev/null; }
-rfield() { jq -r ".$1" <<<"$(receipts | sed -n "${2:-1}p")"; }
-valid_receipt() { # every field, each line
-  [ "$(receipts | wc -l)" -ge 1 ]
-  receipts | jq -e '.schema_version == 1 and (.request_id | test("^[0-9a-f]{32}$")) and (.actor | type) == "string"
-    and (.source | IN("ssh", "discord", "local", "automation")) and (.command | type) == "string"
-    and (.arguments | type) == "object" and (.started_at | type) == "string" and (.completed_at | type) == "string"
-    and (.duration_ms | type) == "number" and (.exit_code | type) == "number" and (.ok | type) == "boolean"
-    and (.state | type) == "string" and (.code | type) == "string" and (.protocol_result | type) == "object"
-    and (.postcondition | type) == "object" and (.message | type) == "string"' >/dev/null
-}
-
-@test "receipts: a mutating command appends one valid line with its summary; a read-only one appends nothing" {
-  fake_mod true '{"limit":9}'
-  run env SN2_ACTOR=ada SN2_SOURCE=ssh "$CTL" --json slots 8
-  wait
-  [ "$status" -eq 0 ]
-  valid_receipt
-  [ "$(receipts | wc -l)" -eq 1 ]
-  [ "$(rfield command)" = server.slots ]
-  [ "$(rfield arguments.slots)" = 8 ]
-  [ "$(rfield actor)" = ada ]; [ "$(rfield source)" = ssh ]
-  [ "$(rfield state)" = verified ]; [ "$(rfield code)" = ok ]; [ "$(rfield exit_code)" = 0 ]; [ "$(rfield ok)" = true ]
-  [ "$(rfield protocol_result.data.limit)" = 9 ]
-  [ "$(rfield request_id)" = "$(jq -r .request_id <<<"$output")" ]
-  fake_mod true
-  run "$CTL" players
-  wait
-  [ "$status" -eq 0 ]
-  [ "$(receipts | wc -l)" -eq 1 ]
-}
-
-@test "receipts: a refused and a failed mutating attempt are both recorded" {
-  fake_mod false unknown_player
-  run "$CTL" kick Nobody
-  wait
-  [ "$status" -eq 77 ]
-  run "$CTL" slots 99
-  [ "$status" -eq 64 ]
-  valid_receipt
-  [ "$(receipts | wc -l)" -eq 2 ]
-  [ "$(rfield code 1)" = refused ]; [ "$(rfield exit_code 1)" = 77 ]; [ "$(rfield protocol_result.error 1)" = unknown_player ]
-  [ "$(rfield arguments.player 1)" = Nobody ]
-  [ "$(rfield code 2)" = invalid_argument ]; [ "$(rfield exit_code 2)" = 64 ]
-  [ "$(rfield source 2)" = local ]  # the default off a keyboard with no SSH_CONNECTION
-  [ "$(rfield request_id 1)" != "$(rfield request_id 2)" ]
-}
-
-@test "receipts: paths and URLs are redacted and the arguments are a summary, never argv" {
-  save_env
-  mkdir -p "$BATS_TEST_TMPDIR/secret-folder"
-  tar -czf "$BATS_TEST_TMPDIR/secret-folder/nosave.tar.gz" -C "$BATS_TEST_TMPDIR" saves
-  run "$CTL" restore "$BATS_TEST_TMPDIR/secret-folder/nosave.tar.gz"
-  [ "$status" -eq 77 ]
-  valid_receipt
-  [ "$(rfield arguments.backup)" = nosave.tar.gz ]
-  [[ $(rfield message) == *"[path]"* ]]
-  [ "$(receipts | grep -c secret-folder)" -eq 0 ]
-  fake_mod true '{"queued":true}'
-  webhook="https://discord.com/api/"'webhooks/1/tokenvalue'
-  run "$CTL" player Ada Say "$webhook"
-  wait
-  [ "$status" -eq 0 ]
-  [ "$(rfield command 2)" = diag.console ]
-  [ "$(rfield arguments.command 2)" = Say ]
-  [ "$(rfield arguments.line 2)" = "Say [url]" ]
-  [ "$(receipts | grep -c tokenvalue)" -eq 0 ]
-}
-
-@test "lock: a second mutation while one runs is refused 77 with the retry action, and both are receipted" {
+# ---- the one lock -------------------------------------------------------------
+# A mutating command runs under control/moonpool.lock; a read-only one does not.
+@test "lock: a second mutation while one runs is refused 77 with the retry action" {
   FAKE_DELAY=2 fake_mod true
-  "$CTL" --json slots 8 >"$BATS_TEST_TMPDIR/first.json" &
+  "$CTL" --json server slots 8 >"$BATS_TEST_TMPDIR/first.json" &
   sleep 0.5
-  SN2_LOCK_WAIT=1 run "$CTL" --json arm
+  SN2_LOCK_WAIT=1 run "$CTL" --json server arm
   envelope; verdict refused refused 77 false
   [ "$(field next_action)" = "Retry after the current operation completes." ]
   [ ! -e "$SN2_CONTROL_DIR/HOST_ARMED" ]
   wait
   jq -e '.ok == true and .command == "server.slots"' "$BATS_TEST_TMPDIR/first.json" >/dev/null
-  valid_receipt
-  [ "$(receipts | wc -l)" -eq 2 ]
-  [ "$(receipts | jq -r .request_id | sort -u | wc -l)" -eq 2 ]
-  receipts | jq -e 'select(.command == "server.arm") | .code == "refused" and .exit_code == 77' >/dev/null
-  receipts | jq -e 'select(.command == "server.slots") | .code == "ok"' >/dev/null
 }
 
 @test "lock: concurrent mutations serialize, each under its own request id" {
@@ -1917,8 +1819,8 @@ valid_receipt() { # every field, each line
   # the first is answered (the fakes' own log; wall time is not evidence here).
   FAKE_DELAY=1 fake_mod true
   FAKE_DELAY=1 fake_mod true
-  "$CTL" --json slots 8 >"$BATS_TEST_TMPDIR/a.json" &
-  "$CTL" --json slots 7 >"$BATS_TEST_TMPDIR/b.json" &
+  "$CTL" --json server slots 8 >"$BATS_TEST_TMPDIR/a.json" &
+  "$CTL" --json server slots 7 >"$BATS_TEST_TMPDIR/b.json" &
   wait
   log="$SN2_CONTROL_DIR/fake.log"
   [ "$(grep -c ' claim ' "$log")" -eq 2 ] && [ "$(grep -c ' answer ' "$log")" -eq 2 ]
@@ -1928,52 +1830,39 @@ valid_receipt() { # every field, each line
   jq -e '.ok == true' "$BATS_TEST_TMPDIR/a.json" >/dev/null
   jq -e '.ok == true' "$BATS_TEST_TMPDIR/b.json" >/dev/null
   [ "$(jq -r .request_id "$BATS_TEST_TMPDIR/a.json")" != "$(jq -r .request_id "$BATS_TEST_TMPDIR/b.json")" ]
-  valid_receipt
-  [ "$(receipts | wc -l)" -eq 2 ]
-  [ "$(receipts | jq -r .request_id | sort -u | wc -l)" -eq 2 ]
 }
 
 @test "lock: SN2_LOCK_HELD=1 counts only with the held lock inherited on fd 9; a bare claim is refused" {
   # The caller holds the lock on fd 9 and hands it down: not taken twice.
   exec 9>>"$SN2_CONTROL_DIR/moonpool.lock"
   flock 9
-  SN2_LOCK_HELD=1 run "$CTL" --json arm
+  SN2_LOCK_HELD=1 run "$CTL" --json server arm
   envelope; verdict ok verified 0 true
   [ -e "$SN2_CONTROL_DIR/HOST_ARMED" ]
   # Still held here: a plain mutation waits its bounded time and is refused.
-  SN2_LOCK_WAIT=1 run "$CTL" --json disarm
+  SN2_LOCK_WAIT=1 run "$CTL" --json server disarm
   envelope; verdict refused refused 77 false
   [ "$(field data.protocol_error)" = lock_held ]
   exec 9>&-
   # Another process holds it and this one only claims to: refused, no bypass.
   (flock -x "$SN2_CONTROL_DIR/moonpool.lock" sleep 3) &
   sleep 0.3
-  SN2_LOCK_HELD=1 run "$CTL" --json disarm
+  SN2_LOCK_HELD=1 run "$CTL" --json server disarm
   envelope; verdict refused refused 77 false
   [ "$(field data.protocol_error)" = lock_not_held ]
   wait
   [ -e "$SN2_CONTROL_DIR/HOST_ARMED" ]
-  [ "$(receipts | wc -l)" -eq 3 ]
 }
 
-@test "lock: the container-side steps of a host command (stop-game, start-game, record) wait for the lock" {
+@test "lock: the container-side steps of a host command (stop-game, start-game) wait for the lock" {
   (flock -x "$SN2_CONTROL_DIR/moonpool.lock" sleep 4) &
   sleep 0.3
-  SN2_LOCK_WAIT=1 run "$CTL" --json record server.restart accepted "x"
-  [ "$status" -eq 77 ]
-  [ ! -s "$SN2_CONTROL_DIR/receipts.jsonl" ]
   SN2_LOCK_WAIT=1 run env SN2_RUN_DIR="$BATS_TEST_TMPDIR/run" "$CTL" --json stop-game
   envelope; verdict refused refused 77 false
   [ ! -e "$BATS_TEST_TMPDIR/run/stopped" ]
-  wait
-  run "$CTL" --json record server.restart accepted "x"
-  [ "$status" -eq 0 ]
-  [ "$(receipts | wc -l)" -eq 1 ]
-  # session-up is a read; it never waits
-  (flock -x "$SN2_CONTROL_DIR/moonpool.lock" sleep 2) &
-  sleep 0.3
-  SN2_LOCK_WAIT=1 run "$CTL" --json session-up
-  envelope; [ "$(field code)" = unavailable ]
+  # a read never waits
+  SN2_LOCK_WAIT=1 run "$CTL" --json server saves
+  envelope; [ "$(field code)" != refused ]
   wait
 }
 
@@ -1991,9 +1880,6 @@ valid_receipt() { # every field, each line
   [ "$(stat -c %a "$SN2_CONTROL_DIR/settings.yaml")" = 600 ]
   [ ! -e "/tmp/sn2-settings-$rid.yaml" ]
   grep -q '"cmd":"settings"' "$(req)"
-  [ "$(rfield arguments.keys[0])" = weather ]
-  # no settings-install call on its own: the install rides the locked apply
-  [ "$(grep -c settings-install "$BATS_TEST_TMPDIR/docker.calls")" -eq 0 ]
 }
 
 @test "server restore from the host: a stray argument or a bad save name is 64 before any upload" {
@@ -2009,8 +1895,7 @@ valid_receipt() { # every field, each line
 
 @test "arity: a mutating verb with a stray argument is 64 before any side effect" {
   players_status
-  printf 'weather: DA_StormA\n' >"$BATS_TEST_TMPDIR/s.yaml"
-  "$CTL" settings-install "$BATS_TEST_TMPDIR/s.yaml" >/dev/null
+  printf 'weather: DA_StormA\n' >"$SN2_CONTROL_DIR/settings.yaml"
   run "$CTL" --json world time 08:00 extra
   envelope; verdict invalid_argument refused 64 false
   [ "$(cat "$SN2_CONTROL_DIR/settings.yaml")" = "weather: DA_StormA" ]
@@ -2020,25 +1905,12 @@ valid_receipt() { # every field, each line
   run "$CTL" --json players extra
   envelope; verdict invalid_argument refused 64 false
   [ -z "$(ls -A "$SN2_CONTROL_DIR/inbox")" ]
-  [ "$(receipts | wc -l)" -eq 2 ]  # the two mutating attempts, receipted; players is read-only
-}
-
-@test "receipts: the host copy's restart is recorded through the container with the host's actor and source" {
-  docker_stub
-  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" SN2_RUN_DIR="$BATS_TEST_TMPDIR/run" SN2_ACTOR=ops SN2_SOURCE=automation "$CTL" --json restart --force
-  envelope; verdict accepted submitted 0 true
-  valid_receipt
-  [ "$(rfield command)" = server.restart ]
-  [ "$(rfield actor)" = ops ]; [ "$(rfield source)" = automation ]
-  [ "$(rfield arguments.force)" = true ]
-  [ "$(rfield request_id)" = "$(field request_id)" ]
-  [ "$(rfield started_at)" = "$(field started_at)" ]
 }
 
 # ---- the error map: a stable mod error, the code, and the exact next action ----
 golden() { # ERROR CODE EXIT NEXT_ACTION, through a kick as the host
   fake_mod false "$1"
-  run "$CTL" --json kick Someone
+  run "$CTL" --json players kick Someone
   wait
   envelope
   [ "$status" -eq "$3" ]
@@ -2079,14 +1951,13 @@ golden() { # ERROR CODE EXIT NEXT_ACTION, through a kick as the host
 }
 
 @test "error map: a timeout names the logs and warns against a blind resubmit" {
-  SN2_TIMEOUT=1 run "$CTL" --json kick Someone
+  SN2_TIMEOUT=1 run "$CTL" --json players kick Someone
   envelope; verdict timeout failed 75 false
   [ "$(field next_action)" = "Inspect the logs (moonpool logs game, moonpool status) before sending again; do not resubmit a mutating command blindly." ]
 }
 
 settings_answer() { # every row the mod reports, as its status block
-  printf 'weather: %s\nmods: []\n' "$1" >"$BATS_TEST_TMPDIR/s.yaml"
-  "$CTL" settings-install "$BATS_TEST_TMPDIR/s.yaml" >/dev/null
+  printf 'weather: %s\nmods: []\n' "$1" >"$SN2_CONTROL_DIR/settings.yaml"
   fake_mod true "$2"
   run "$CTL" --json settings apply
   wait
@@ -2108,13 +1979,9 @@ settings_answer() { # every row the mod reports, as its status block
   settings_answer clear '{"values":[{"key":"weather","value":"clear","applied":true}],"mods":[]}'
   verdict accepted submitted 0 true
   [[ $(field message) == *"not read back"* ]]
-  [ "$(rfield command)" = settings.apply ]
-  [ "$(rfield arguments.keys[0])" = weather ]
 }
 
-# ---- the command surface: nouns, their verbs, and the older spellings ---------
-# Each current verb drops the same queue request its older spelling did; the
-# older spelling still works and says the current one once, in prose only.
+# ---- the command surface: nouns and their verbs -------------------------------
 req() { echo "$SN2_CONTROL_DIR/receipts/request.json"; }
 players_status() { # a status.json with two players (one with a body) and the loaded weather types
   cat >"$SN2_CONTROL_DIR/status.json" <<'EOF'
@@ -2130,7 +1997,6 @@ EOF
   fake_mod; run "$CTL" --json diag console Ada Oxygen 30; wait
   envelope; [ "$(field command)" = diag.console ]
   grep -q '"player":"Ada","command":"Oxygen 30"' "$(req)"
-  [ "$(rfield arguments.line "$(receipts | wc -l)")" = "Oxygen 30" ]  # the last receipt
 }
 
 @test "map bounds turn two spots on a picture into its edges, and two spots in a line are refused" {
@@ -2162,7 +2028,7 @@ EOF
   [ -z "$(ls -A "$SN2_CONTROL_DIR/inbox")" ]
 }
 
-@test "verbs: unlocks [player] queues what unlocks replay did; players invite lists the ID" {
+@test "verbs: unlocks [player] queues the replay; players invite lists the ID" {
   fake_mod; run "$CTL" unlocks; wait; [ "$status" -eq 0 ]
   grep -q '"cmd":"unlocks","args":{}' "$(req)"
   fake_mod; run "$CTL" unlocks "Example Diver"; wait; [ "$status" -eq 0 ]
@@ -2221,8 +2087,7 @@ EOF
 
 @test "verbs: world weather and time rewrite one key in the control folder's settings.yaml, keep the rest, and apply" {
   players_status
-  printf '# kept\ntime_of_day: "03:00"\nweather: DA_StormA\nmods:\n  - name: Example\n    url: https://example.org/m\n' >"$BATS_TEST_TMPDIR/s.yaml"
-  "$CTL" settings-install "$BATS_TEST_TMPDIR/s.yaml" >/dev/null
+  printf '# kept\ntime_of_day: "03:00"\nweather: DA_StormA\nmods:\n  - name: Example\n    url: https://example.org/m\n' >"$SN2_CONTROL_DIR/settings.yaml"
   fake_mod true '{"values":[{"key":"time_of_day","value":"03:00","applied":true},{"key":"weather","value":"clear","applied":true}],"mods":[]}'
   run "$CTL" --json world weather clear
   wait
@@ -2242,7 +2107,6 @@ EOF
   envelope; verdict accepted submitted 0 true
   grep -q '^daylight: frozen$' "$SN2_CONTROL_DIR/settings.yaml"
   [ "$(grep -c '^time_of_day:' "$SN2_CONTROL_DIR/settings.yaml")" -eq 1 ]
-  [ "$(rfield command 3)" = world.time ]; [ "$(rfield arguments.key 3)" = daylight ]
 }
 
 @test "verbs: world weather with no settings.yaml creates one; the mod's refusal of that key is refused/77" {
@@ -2272,34 +2136,27 @@ EOF
   envelope; verdict invalid_argument refused 64 false
 }
 
-@test "verbs: diag receipt queues what receipt did; an unknown diag is refused" {
-  fake_mod; run "$CTL" diag receipt; wait; [ "$status" -eq 0 ]; grep -q '"cmd":"receipt"' "$(req)"
+@test "verbs: an unknown diag is refused, and so is the removed diag receipt" {
+  run "$CTL" --json diag receipt
+  envelope; verdict invalid_argument refused 64 false
   run "$CTL" --json diag frobnicate
   envelope; verdict invalid_argument refused 64 false; [ "$(field command)" = diag ]
 }
 
-@test "aliases: the older spellings run the same command and say the current one once, in prose only" {
-  fake_mod; run "$CTL" kick Bob; wait
-  [ "$status" -eq 0 ]
-  [[ $output == *"moonpool: use: moonpool players kick"* ]]
-  grep -q '"cmd":"kick","args":{"player":"Bob"}' "$(req)"
-  fake_mod; run "$CTL" --json kick Bob; wait
-  envelope; [ "$(field command)" = players.kick ]
-  run "$CTL" --json unlocks replay Ada
-  envelope; verdict timeout failed 75 false  # no mod: but the words resolved and the request went out
-  [ "$(field command)" = unlocks ]
-  run "$CTL" saves
-  [[ $output == *"moonpool: use: moonpool server saves"* ]]
-  run "$CTL" help
+@test "the older one-word spellings are gone: each is an unknown command, and nothing is queued" {
+  for old in kick slots host player saves; do
+    run "$CTL" --json "$old" Bob
+    envelope; verdict invalid_argument refused 64 false
+  done
+  [ -z "$(ls -A "$SN2_CONTROL_DIR/inbox")" ]
 }
 
-@test "aliases: the host copy forwards the current spelling, so the hint is printed once" {
+@test "the host copy forwards the words as typed" {
   docker_stub
   fake_mod
-  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" kick Bob
+  run env -u SN2_IN_CONTAINER PATH="$stub:$PATH" "$CTL" players kick Bob
   wait
   [ "$status" -eq 0 ]
-  [ "$(grep -c 'moonpool: use:' <<<"$output")" -eq 1 ]
   grep -q "sn2 moonpool players kick Bob" "$BATS_TEST_TMPDIR/docker.calls"
 }
 

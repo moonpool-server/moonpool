@@ -8,12 +8,12 @@
   "properties": {
     "v": {"const": 1},
     "id": {"type": "string", "pattern": "^[0-9a-f]{16,64}$"},
-    "cmd": {"type": "string", "enum": ["status", "players", "host", "receipt", "player", "bring", "save", "slots", "friend_code", "unlocks", "settings"]},
+    "cmd": {"type": "string", "enum": ["status", "players", "player", "bring", "save", "slots", "friend_code", "unlocks", "settings"]},
     "args": {"type": "object"},
     "ts": {"type": "number"}
   },
   "allOf": [
-    {"if": {"properties": {"cmd": {"enum": ["status", "players", "host", "receipt", "save", "settings"]}}}, "then": {"properties": {"args": {"maxProperties": 0}}}},
+    {"if": {"properties": {"cmd": {"enum": ["status", "players", "save", "settings"]}}}, "then": {"properties": {"args": {"maxProperties": 0}}}},
     {"if": {"properties": {"cmd": {"const": "player"}}}, "then": {"properties": {"args": {"additionalProperties": false, "required": ["player", "command"], "properties": {"player": {"$ref": "#/$defs/text"}, "command": {"allOf": [{"$ref": "#/$defs/text"}, {"pattern": "^[^\\u0000-\\u001f;|`]+$"}]}}}}}},
     {"if": {"properties": {"cmd": {"const": "bring"}}}, "then": {"properties": {"args": {"additionalProperties": false, "required": ["player", "to"], "properties": {"player": {"$ref": "#/$defs/text"}, "to": {"$ref": "#/$defs/text"}}}}}},
     {"if": {"properties": {"cmd": {"const": "slots"}}}, "then": {"properties": {"args": {"additionalProperties": false, "required": ["slots"], "properties": {"slots": {"type": "number"}}}}}},

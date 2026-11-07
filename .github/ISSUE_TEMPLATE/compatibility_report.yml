@@ -43,7 +43,7 @@ body:
     id: diagnostics
     attributes:
       label: moonpool diagnostics
-      description: Paste redacted `bin/moonpool --json status` and `bin/moonpool diag receipt`. No tokens.
+      description: Paste redacted `bin/moonpool --json status` and `bin/moonpool diag verify-fresh`. No tokens.
       render: shell
     validations:
       required: true
