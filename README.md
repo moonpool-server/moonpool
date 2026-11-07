@@ -89,6 +89,8 @@ Your join page then offers Play with mods
 
 Players install the launcher once, [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which the join page links. It shows them what your server wants, asks before installing anything and asks again when that changes. From then on it keeps them on the exact files you published
 
+The mods are on only while the game the launcher starts is running, so a normal Steam launch has none of them. Xbox and Game Pass players join without mods
+
 Mods run with the player's Windows rights and nobody here reviews them, so only say yes to a host you trust. A saved yes stays until the list changes and a new key at the same address counts as a new server
 
 The launcher comes only from this repo's releases. Setup and every update check its signature and the private key isn't on GitHub. It has no Windows code signing so Windows may warn about it. The setup file itself isn't signed: it comes from GitHub over TLS with a build attestation you can check with `gh attestation verify moonpool-setup.cmd -R moonpool-server/moonpool`, and everything it downloads is held to the release key. To check a copy against its release

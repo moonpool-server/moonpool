@@ -28,10 +28,15 @@ param(
   # Optional mods to leave out (remembered per server), and ones to take back.
   [string[]]$Skip = @(),
   [string[]]$Keep = @(),
-  # Let the server's copy replace a mod or loader already installed another way.
+  # Let the server's copy replace a mod or loader already installed another way. Yours is
+  # replaced, not kept: nothing puts it back later.
   [switch]$Adopt,
+  # Turn off every file that makes Moonpool's mods load, then exit (the mods-off shortcut).
+  [switch]$DisableMoonpoolMods,
   # For tests: no Desktop or Start menu shortcuts.
   [switch]$NoShortcuts,
+  # For tests: how long the game may take to appear after the launch.
+  [int]$StartWait = 180,
   # For tests: replace the running-game check, the launch and the pages opened.
   [scriptblock]$IsGameRunning,
   [scriptblock]$Launch,
@@ -51,6 +56,8 @@ $DefaultAppId = '1962700'
 $TrioExtensions = @('.pak', '.ucas', '.utoc')
 $LoaderConfig = @('ue4ss\UE4SS-settings.ini', 'ue4ss\Mods\mods.txt', 'ue4ss\Mods\mods.json')
 $script:Work = $null
+$script:ModsOn = $false
+$script:Lock = $null
 # The release job stamps its run number here; an update must be a higher one, so no rollback.
 $LauncherBuild = 0
 # The project's release key. Its private half is not on GitHub, so control of the account or a
@@ -207,7 +214,8 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
         $kind = if ($p[-1] -eq 'native code') { ', native code' } else { '' }
         "  - $label from $($p[-2])$kind"
       }) -join "`n") +
-      "`n`nThese run with your Windows account's rights, so only say yes to a host you trust.`n`nServer: $where`n`nInstall?"
+      "`n`nThese run with your Windows account's rights, so only say yes to a host you trust. " +
+      "They are on only until the game this starts closes, and Moonpool never turns off your own mods.`n`nServer: $where`n`nInstall?"
     $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
       $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
     if ($where -and $known) { $text = "WARNING: this address had a different server key before. It may not be the same server.`n`n" + $text }
@@ -219,6 +227,7 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
 }
 
 function Test-GameRunning {
+  if ($IsGameRunning) { return [bool](& $IsGameRunning) }
   foreach ($n in $GameProcessNames) {
     if (Get-Process -Name $n -ErrorAction SilentlyContinue) { return $true }
   }
@@ -389,13 +398,17 @@ function Install-ServerShortcuts($Config, [string]$ServerId) {
   if ($NoShortcuts) { $folders = @() }
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
-    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder "Subnautica 2 ($server).lnk"))
-    $run = Get-HiddenRun
-    $shortcut.TargetPath = $run.Exe
-    $shortcut.Arguments = "$($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Server $ServerId"
-    $shortcut.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-    $shortcut.WorkingDirectory = $KitHome
-    $shortcut.Save()
+    $links = @{ "Subnautica 2 ($server)" = "-Server $ServerId" }
+    if ($folder -eq $folders[0]) { $links['Subnautica 2 (Moonpool mods off)'] = '-DisableMoonpoolMods' }
+    foreach ($name in $links.Keys) {
+      $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder "$name.lnk"))
+      $run = Get-HiddenRun
+      $shortcut.TargetPath = $run.Exe
+      $shortcut.Arguments = "$($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" $($links[$name])"
+      $shortcut.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+      $shortcut.WorkingDirectory = $KitHome
+      $shortcut.Save()
+    }
   }
   if ($folders.Count -gt 0) { Say "installed shortcuts for Subnautica 2 ($server)" }
   if ($firstRun) {
@@ -448,6 +461,40 @@ function Write-Ledger([string]$Path, $Ledger) {
     $mods[$k] = [pscustomobject]@{ version = [string]$Ledger.mods[$k].version; archive = [string]$Ledger.mods[$k].archive; identity = [string]$Ledger.mods[$k].identity; files = $proof }
   }
   Write-Json $Path ([ordered]@{ files = $files; mods = $mods })
+}
+
+# What makes Moonpool's mods load: its own loader proxy, its mods' enabled.txt and their pak trios.
+# Off is a rename beside the file, and only a file that still matches what this launcher placed is
+# switched, so a player's own loader and mods are never touched. Returns what stayed in use.
+function Switch-MoonpoolMods([bool]$On) {
+  $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
+  $left = @()
+  foreach ($path in @($ledger.files.Keys)) {
+    if (@('dwmapi.dll', 'enabled.txt') -notcontains (Split-Path -Leaf $path) -and $TrioExtensions -notcontains [IO.Path]::GetExtension($path)) { continue }
+    $sha = $ledger.files[$path].sha256
+    $from = $path; if ($On) { $from = "$path.moonpool-off" }
+    if (-not (Test-Path -LiteralPath $from) -or (Get-Sha256 $from) -ne $sha) { continue }
+    $from = (Get-Item -LiteralPath $from).FullName
+    $to = "$from.moonpool-off"; if ($On) { $to = $from.Substring(0, $from.Length - '.moonpool-off'.Length) }
+    if ((Test-Path -LiteralPath $to) -and (Get-Sha256 $to) -ne $sha) { continue }
+    $left += [pscustomobject]@{ From = $from; To = $to }
+  }
+  # A game that just closed, Defender or a crash reporter can hold a file for a few seconds.
+  for ($try = 0; $left.Count -gt 0 -and $try -lt 10; $try++) {
+    if ($try) { Start-Sleep -Seconds 2 }
+    $left = @($left | Where-Object {
+      try { if (Test-Path -LiteralPath $_.To) { Remove-Item -LiteralPath $_.To -Force }; Move-Item -LiteralPath $_.From -Destination $_.To; $false }
+      catch { $true } })
+  }
+  return @($left | ForEach-Object { $_.From })
+}
+
+# One launcher at a time for this Windows user, from turning the mods on until they are off again.
+function Enter-Lock {
+  $lock = New-Object Threading.Mutex($false, 'Local\moonpool-launcher')
+  try { $held = $lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $held = $true }
+  if (-not $held) { Fail 'another Moonpool launcher is running, and it stays until Subnautica 2 closes; nothing changed' 2 }
+  $script:Lock = $lock
 }
 
 # ---- the manifest ------------------------------------------------------------------
@@ -696,17 +743,8 @@ function Expand-ModArchive($Mod, [string]$Archive, [string]$Stage) {
   return $files
 }
 
-# The loader itself, when the manifest says any mod needs it: the server's own pinned
-# build, only on a game executable the server lists.
-function Get-LoaderFiles($Spec, [string]$Game, [string]$Stage) {
-  $win64 = Join-Path $Game 'Subnautica2\Binaries\Win64'
-  $exe = Get-ChildItem -LiteralPath $win64 -Filter 'Subnautica2-Win64-*.exe' -File | Select-Object -First 1
-  $allowed = @((Get-Prop $Spec 'allowed_builds' @()) | ForEach-Object { ([string]$_).ToLowerInvariant() })
-  $digest = ''
-  if ($exe) { $digest = Get-Sha256 $exe.FullName }
-  if (-not $digest -or $allowed -notcontains $digest) {
-    Fail "the server's mods need the UE4SS loader, which the server has not listed for this game build ($($digest.Substring(0, [Math]::Min(12, $digest.Length)))); ask the admin to allow it, nothing changed, game not started"
-  }
+# The loader itself, when the manifest says any mod needs it: the server's own pinned build.
+function Get-LoaderFiles($Spec, [string]$Stage) {
   $zip = Join-Path $Stage 'ue4ss.zip'
   try { Save-Url (Resolve-Url $ManifestUrl ([string]$Spec.url)) $zip }
   catch { Fail "could not download the UE4SS loader: $($_.Exception.Message); nothing changed, game not started" }
@@ -789,6 +827,17 @@ function Invoke-Join {
     if ($Link -notmatch '^moonpool:(.+)$' -or -not (Test-ServerAddress $Matches[1])) { Fail "not a server address this launcher accepts (https, or http on a private network): $Link" }
     $script:Server = ($Link -replace '^moonpool:', '')
   }
+  if ($DisableMoonpoolMods) {
+    Enter-Lock
+    $left = @(Switch-MoonpoolMods $false)
+    if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods off, still in use: " + ($left -join ', ') + '; close Subnautica 2 and try again') }
+    Say "Moonpool's mods are off; Subnautica 2 starts without them until you next press Play with mods"
+    if ([Environment]::UserInteractive -and -not $env:SN2_JOIN_NO_DIALOG) {
+      Add-Type -AssemblyName System.Windows.Forms
+      [void][Windows.Forms.MessageBox]::Show("Moonpool's mods are off. Subnautica 2 starts without them until you next press Play with mods.", 'Subnautica 2 mods')
+    }
+    return
+  }
   if ($Install -or (-not $Server -and -not $ManifestUrl)) {
     Install-Launcher
     Say "installed. Go back to the server's join page and press Play with mods."
@@ -796,6 +845,12 @@ function Invoke-Join {
   }
   Open-Window
   if (Update-Launcher) { return }
+  Enter-Lock
+  if (Test-GameRunning) { Fail 'Subnautica 2 is running; close it and start this again (nothing was changed)' 2 }
+  # On here, so the ledger finds every file where it was placed, and off again when this run ends,
+  # which also clears what a launcher that died left on.
+  $script:ModsOn = $true
+  [void](Switch-MoonpoolMods $true)
   $cfg = $null; $serverId = ''
   if ($Server -match '^[0-9a-f]{16}$') {
     $cfg = Read-Json (Join-Path $KitHome "$Server\moonpool.json") $null
@@ -811,10 +866,6 @@ function Invoke-Join {
     $script:ServerId = $serverId
     $script:ManifestUrl = "$($cfg.address)/mods.json"
   }
-
-  $running = $false
-  if ($IsGameRunning) { $running = & $IsGameRunning } else { $running = Test-GameRunning }
-  if ($running) { Fail 'Subnautica 2 is running; close it and start this again (nothing was changed)' 2 }
 
   $manifest = Get-Manifest $cfg
   if ([int](Get-Prop $manifest 'schema' 0) -ne 3) { Fail 'the server mod list has an unknown schema; this launcher needs an update' }
@@ -835,6 +886,13 @@ function Invoke-Join {
   if ($wanted | Where-Object { $_.Kind -eq 'ue4ss' }) {
     $loaderSpec = Get-Prop $manifest 'ue4ss' $null
     if (-not $loaderSpec) { Fail 'the server lists UE4SS mods but no loader; the server-side list is incomplete' }
+    # Every session, because a Steam update changes the game under a loader already in place.
+    $exe = Get-ChildItem -LiteralPath (Join-Path $game 'Subnautica2\Binaries\Win64') -Filter 'Subnautica2-Win64-*.exe' -File | Select-Object -First 1
+    $digest = ''
+    if ($exe) { $digest = Get-Sha256 $exe.FullName }
+    if (-not $digest -or @((Get-Prop $loaderSpec 'allowed_builds' @()) | ForEach-Object { ([string]$_).ToLowerInvariant() }) -notcontains $digest) {
+      Fail "the server's mods need the UE4SS loader, which the server has not listed for this game build ($($digest.Substring(0, [Math]::Min(12, $digest.Length)))); ask the admin to allow it, nothing changed, game not started"
+    }
   }
   $win64 = Join-Path $game 'Subnautica2\Binaries\Win64'
   # Every field that decides what runs is compared, so changing any of them asks again.
@@ -930,7 +988,7 @@ function Invoke-Join {
       $staleKeys.Add("$serverId/UE4SS")
       $script:UiStep = $script:UiSteps
       Set-Status "Downloading the mod loader ($script:UiStep of $script:UiSteps)" ([int](100 * ($script:UiStep - 1) / $script:UiSteps))
-      $loaderFiles = Get-LoaderFiles $loaderSpec $game $script:Work
+      $loaderFiles = Get-LoaderFiles $loaderSpec $script:Work
       $before = $plan.Count
       Add-ToPlan 'UE4SS' $win64 $loaderFiles
       if ($plan.Count -gt $before) { $changes.Add("installing the UE4SS loader ($([string](Get-Prop $loaderSpec 'asset' 'pinned')))") }
@@ -938,7 +996,7 @@ function Invoke-Join {
   }
   if ($conflicts.Count -gt 0) {
     Fail ("this PC already has files the server wants to replace, installed another way: " + ($conflicts -join ', ') +
-      "; run again with -Adopt to let the server's versions take over, or remove them yourself; nothing changed, game not started")
+      "; run again with -Adopt to replace them with the server's versions (yours are not kept), or remove them yourself; nothing changed, game not started")
   }
 
   # Everything managed locally that this server does not want goes: another server's
@@ -1009,7 +1067,23 @@ function Invoke-Join {
   $script:UiInstalling = $false
   Set-Status 'Starting Subnautica 2 through Steam' 100
   if ($Launch) { & $Launch $url } else { Start-Process $url }
-  for ($wait = 0; $script:Ui -and $wait -lt 20; $wait++) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
+  # Steam gives back no process, so the game is watched for by name.
+  $deadline = [DateTime]::UtcNow.AddSeconds($StartWait)
+  while (-not (Test-GameRunning)) {
+    if ([DateTime]::UtcNow -gt $deadline) {
+      [void](Switch-MoonpoolMods $false); $script:ModsOn = $false
+      Fail "Subnautica 2 did not start in time, so Moonpool turned its mods off again; if it starts now it runs without them"
+    }
+    if ($script:Ui) { [Windows.Forms.Application]::DoEvents() }
+    Start-Sleep -Milliseconds 500
+  }
+  Close-Window
+  Say "Subnautica 2 is running; Moonpool's mods turn off when it closes"
+  while (Test-GameRunning) { Start-Sleep -Seconds 2 }
+  $script:ModsOn = $false
+  $left = @(Switch-MoonpoolMods $false)
+  if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods off, still in use: " + ($left -join ', ') + '; run the Subnautica 2 (Moonpool mods off) shortcut') }
+  Say "Subnautica 2 closed; Moonpool's mods are off"
 }
 
 try {
@@ -1021,7 +1095,7 @@ try {
   $script:UiCancelled = $false
   Write-Host "moonpool: $($_.Exception.Message)"
   # A link or shortcut has no console left open to read this in.
-  if (($Link -or $Server) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
+  if (($Link -or $Server -or $DisableMoonpoolMods) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     Add-Type -AssemblyName System.Windows.Forms
     if ($script:Ui) { [void][Windows.Forms.MessageBox]::Show($script:Ui.Form, $_.Exception.Message, 'Subnautica 2 mods') }
     else { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Subnautica 2 mods') }
@@ -1029,6 +1103,8 @@ try {
   exit $code
 } finally {
   Close-Window
+  if ($script:ModsOn) { [void](Switch-MoonpoolMods $false) }
+  if ($script:Lock) { $script:Lock.ReleaseMutex() }
   if ($script:Work -and (Test-Path -LiteralPath $script:Work)) {
     Remove-Item -LiteralPath $script:Work -Recurse -Force -ErrorAction SilentlyContinue
   }
