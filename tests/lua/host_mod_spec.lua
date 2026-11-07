@@ -66,10 +66,6 @@ end
 check(_G.SN2_PICK_SAVE('MyWorld') == 'MyWorld', 'an explicit save name wins')
 do
   local src = assert(io.open(dir .. 'recipe.lua')):read('a')
-  -- The direct sky clock stays opt-in until it is proven live; the console fallback is the
-  -- path the host ran stable on.
-  check(src:find("local SKY_CLOCK = os.getenv('SN2_SKY_CLOCK') == 'true'", 1, true) ~= nil,
-    'the direct sky clock is off unless SN2_SKY_CLOCK=true')
   -- If the ability system is ever read again, it goes through the engine library, never a
   -- name looked up on the pawn (that walk trips a mis-laid-out array on the Blueprint pawn class).
   check(src:find('pawn:GetASC()', 1, true) == nil, 'no ASC is read by pawn:GetASC()')
@@ -156,21 +152,8 @@ do
     'the inbox file check uses a filter Wine honours (/a:-d, no -l)')
 end
 
--- An enabled_commands list equal to one the example config ever shipped is
--- not the operator's choice and gives way to the default; any other list is
--- the operator's own and is kept. The example ships no list now.
+-- The example config leaves enabled_commands to the mod's default.
 do
-  local is_example = assert(_G.SN2_IS_EXAMPLE_LIST, 'recipe exposes is_example_list')
-  check(is_example({ 'status', 'players', 'host', 'receipt', 'player' }),
-    'the first example list (five commands) is an example list')
-  check(is_example({ 'status', 'players', 'host', 'receipt', 'player', 'bring', 'slots', 'unlocks', 'waypoint',
-    'settings' }), 'the last example list (ten commands) is an example list')
-  check(not is_example({ 'status', 'players', 'host', 'receipt', 'player', 'bring', 'slots', 'friend_code',
-    'unlocks', 'waypoint', 'settings' }), 'the full default list is kept')
-  check(not is_example({ 'status', 'host' }), "a list with commands left out is the operator's")
-  check(not is_example({ 'players', 'status', 'host', 'receipt', 'player' }), "another order is the operator's")
-  check(not is_example({}), "an empty list is the operator's (everything refused)")
-  check(not is_example(nil), 'no list is no list')
   local example = assert(io.open(dir .. '../config.example.json')):read('a')
   check(not example:find('enabled_commands', 1, true), 'the example config carries no enabled_commands list')
 end

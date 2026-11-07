@@ -1,33 +1,10 @@
--- Shared unlocks on a pruned host.
---
--- A scan unlocks the base
--- piece's story goal on the HOST ("LogScanner: <part> has completed scan",
--- then "LogStoryGoals: Unlocked story goal DA_BasePiece_<X>..."), but with the
--- host's PlayerState pruned from PlayerArray the clients' Habitat Builder never
--- gets the recipe. Goal-level unlocks did not fill the builder. Proven live
--- The command class's `Unlock <name>`, run through
--- KismetSystemLibrary:ExecuteConsoleCommand as the PLAYER's controller, with
--- the name forms below (from the game's own asset index), made the Battery
--- Terminal appear in a client's builder. The game never acknowledges which
--- form took, so every form is sent.
---
--- Four sets (the fourth, the habitat builder bundle, is described at M.BUNDLE);
--- three proven behaviors:
---   * the starter set: the host's DA_BasicBasebuilding_StoryGoal is granted to
---     the host player only, so its pieces go to every player on every join,
---     whether or not the goal shows;
---   * base pieces: each host-side DA_BasePiece_<X> unlock (FORMS below);
---   * scanned tools: each host-side DA_Tools_<X>_StoryGoal unlock (beacon,
---     flare, flashlight, air bladder, wakemaker, sonic resonator, deployable
---     locker, fins / improved fins).
--- One player's lines go to the game as ONE batch, game.send(player, lines):
--- one file of 176 Unlock calls takes about 4 s where one call per file took 30 s each.
---
--- Pure logic: the game is reached only through the callbacks the caller
--- passes, so tests/lua/unlock_replay_spec.lua drives it on a fake game.
+-- Shared unlocks on a pruned host. With the host's PlayerState pruned, what the host unlocks never
+-- reaches a client, so each unlock is sent to every player as the command class's `Unlock <name>`,
+-- run as that player. The game never says which name form took, so every form is sent.
+-- Pure logic: the game is reached only through the callbacks the caller passes.
 local M = {}
 
--- Proven forms per piece, sent every time.
+-- The forms per piece, sent every time.
 M.FORMS = {
   BatteryTerminal = { 'DA_BasicBatteryTerminal_ItemType', 'BasicBatteryTerminal',
     'DA_BasicBatteryTerminalConstructData', 'BasicBatteryTerminal_ItemType',
@@ -56,10 +33,7 @@ M.FORMS = {
     'DA_BasePiece_SolarPanel_ScanData', 'SolarPanel' },
 }
 
--- The starter set (DA_BasicBasebuilding_StoryGoal), sent to every player on
--- every join. Corridor, Window and Hatch reuse their base-piece forms; Room,
--- Foundation, Ladder, PowerStorage and Glass send the bare name and the scan
--- data, plus every DA_ form a names-only lookup finds.
+-- The game grants the starter set to the host player only, so it goes to every player on every join.
 M.STARTER = { 'SolarPanel', 'Room', 'Corridor', 'Window', 'Foundation', 'Ladder', 'Hatch',
   'PowerStorage', 'Glass' }
 
@@ -72,14 +46,7 @@ M.EXTRA = {
     'DA_SolarPanel_Medium_ConstructData' },
 }
 
--- The habitat builder bundle. Unlocking the Habitat Builder blueprint grants
--- these at once (wiki.subnautica.com/sn2); on a pruned host the grant never
--- reaches a client, so the bundle goes to every player once the host has
--- unlocked BUNDLE_GOAL, on that unlock and on every join. Sent by hand on the
--- with 0 errors. Every name below was
--- checked against the game's asset index (Subnautica2-Windows.utoc) on
--- replayed, including the goal DA_Tools_HabitatBuilder_StoryGoal and the
--- builder tool's own DA_Builder_ItemType / DA_BuilderToolRecipe.
+-- Unlocking the Habitat Builder grants all of these at once, so they go out together.
 M.BUNDLE_GOAL = 'Tools_HabitatBuilder'
 M.BUNDLE = {
   { 'HabitatBuilder', { 'DA_Builder_ItemType', 'DA_BuilderToolRecipe' } },
@@ -101,7 +68,6 @@ M.BUNDLE = {
   { 'Radio', { 'DA_Radio_ItemType', 'DA_RadioRecipe', 'DA_RadioConstructData' } },
 }
 
--- Every form in the bundle, in order, each once.
 function M.bundle_forms()
   local out, seen = {}, {}
   for _, entry in ipairs(M.BUNDLE) do
@@ -112,8 +78,7 @@ function M.bundle_forms()
   return out
 end
 
--- Candidates sent only when a names-only lookup finds an asset of that name
--- (the "plus any ... by name" forms of the receipt, and the variants above).
+-- Candidates sent only when an asset of that name exists.
 function M.candidates(piece)
   local out = { 'DA_' .. piece .. '_ItemType', 'DA_' .. piece .. 'ConstructData',
     'DA_' .. piece .. '_ConstructData', 'DA_' .. piece .. 'Recipe', 'DA_' .. piece .. '_Recipe' }
@@ -121,22 +86,18 @@ function M.candidates(piece)
   return out
 end
 
--- A tool's key in the set and in status.json is Tools_<X>, as in its goal name.
 local TOOL = '^Tools_(.+)$'
 function M.set_of(key)
   if key == M.BUNDLE_GOAL then return 'bundle' end
   return key:match(TOOL) and 'tools' or 'pieces'
 end
 
--- What the log calls a key.
 function M.label(key)
   if key == M.BUNDLE_GOAL then return 'habitat builder bundle' end
   return key
 end
 
--- The key a goal or scan-data name belongs to, or nil for anything else:
--- DA_BasePiece_<X>... gives <X> (ScannerStationSR/LR mean ScannerStation),
--- DA_Tools_<X>_StoryGoal gives Tools_<X>.
+-- DA_BasePiece_<X>... gives <X>, DA_Tools_<X>_StoryGoal gives Tools_<X>, anything else nil.
 function M.piece_of(goal)
   if type(goal) ~= 'string' then return nil end
   local short = goal:match('([%w_]+)$') or goal
@@ -155,11 +116,7 @@ function M.piece_of(goal)
   return rest
 end
 
--- Every form to send for a key, no duplicates, in order. A tool sends
--- DA_<X>_ItemType, DA_<X>Recipe and DA_<X>_ScanData always, then
--- DA_<X>_Recipe, DA_Tools_<X>_ScanData and the bare name when they exist by
--- name. A base or starter piece sends its proven list (or the bare name and
--- scan data), then the candidates the lookup finds.
+-- Every form to send for a key, each once, in order.
 function M.forms(key, exists)
   local out, seen = {}, {}
   local function add(n) if not seen[n] then seen[n] = true; out[#out + 1] = n end end
@@ -195,8 +152,7 @@ function M.forms(key, exists)
   return out
 end
 
--- State: the keys unlocked on the host for one save, in unlock order, and the
--- players already replayed to this session.
+-- The keys unlocked on the host for one save, and the players already replayed to.
 function M.new(save, pieces, scans)
   local st = { save = save, pieces = {}, have = {}, known = {}, scans = {}, scanned = {} }
   for _, p in ipairs(pieces or {}) do
@@ -208,8 +164,7 @@ function M.new(save, pieces, scans)
   return st
 end
 
--- Seed from the previous status.json only when it was written for the same
--- save; another save's recipes are never granted.
+-- Another save's recipes are never granted.
 function M.seed(save, prev)
   if type(prev) == 'table' and type(prev.unlocks) == 'table' and prev.unlocks.save == save then
     return M.new(save, prev.unlocks.pieces, prev.unlocks.scans)
@@ -227,8 +182,7 @@ function M.line(st, l)
   return piece
 end
 
--- The Unlock lines for a list of keys, each form once across the list.
--- Returns the lines and, per key, how many new lines it added.
+-- The Unlock lines for a list of keys, and per key how many new lines it added.
 function M.lines(keys, exists)
   local out, seen, per = {}, {}, {}
   for i, key in ipairs(keys) do
@@ -244,11 +198,7 @@ function M.lines(keys, exists)
   return out, per
 end
 
--- One batch to one player; an empty batch is not sent.
--- PACING. A burst of Unlock lines through one controller froze that client's
--- toolbar on its current slot until a relog (80 to 326
--- lines, 20 ms apart). Lines go out M.interval_ms apart (UNLOCK_INTERVAL_MS,
--- default 50, clamped 10..2000); game.send receives the interval and spaces them.
+-- A burst of Unlock lines froze the client's toolbar until a relog, so lines go out spaced.
 M.DEFAULT_INTERVAL_MS = 50
 function M.interval_ms(v)
   local n = tonumber(v)
@@ -259,30 +209,20 @@ function M.interval_ms(v)
 end
 M.interval = M.DEFAULT_INTERVAL_MS
 
--- When each line of a batch goes out, in ms after the batch starts.
 function M.schedule(lines, interval)
   local out = {}
   for i, line in ipairs(lines) do out[i] = { at = (i - 1) * interval, line = line } end
   return out
 end
 
--- After a batch, one toolbar re-sync line if the game has one. The command
--- class's names (services_functions.txt) hold Equip, EquipAll,
--- Equipment, ExpandInventory and ExpandToolbar: each changes what the player
--- carries or the toolbar's size, none only re-syncs it, so none is sent. Left
--- empty on purpose.
-M.TOOLBAR_RESYNC = nil
-
 local function send(game, player, lines)
   if #lines > 0 then
-    if M.TOOLBAR_RESYNC then lines[#lines + 1] = M.TOOLBAR_RESYNC end
     game.send(player, lines, M.interval)
   end
   return #lines
 end
 
--- Everything to one player in ONE batch: the starter set, then every base
--- piece and tool the host has unlocked. One log line with the counts.
+-- Everything to one player in one batch: the starter set, then all the host has unlocked.
 function M.replay(st, game, player)
   local keys, sets = {}, {}
   for _, k in ipairs(M.STARTER) do keys[#keys + 1] = k; sets[#keys] = 'starter' end
@@ -300,8 +240,6 @@ function M.replay(st, game, player)
   return n
 end
 
--- A new host-side unlock: its forms to every connected non-host player, one
--- batch each.
 function M.broadcast(game, piece, names, host)
   local sent = {}
   local lines = M.lines({ piece }, game.exists)
@@ -315,19 +253,10 @@ function M.broadcast(game, piece, names, host)
   return sent
 end
 
--- WHEN. The batch should land while the joiner is still loading or in the
--- lifepod cinematic, before input is enabled. The mod reaches no PostLogin or
--- possession hook by name (main.lua hooks only Actor:ReceiveBeginPlay and
--- HostSessionAsync), and "input enabled" is not a property it can read, so it
--- uses the fallback: the first poll that sees the joiner's body (game.has_body)
--- starts a clock, and the batch goes out M.DELAY_MS later, once the HUD is up.
--- Whether that is before the player has control is unproven until a real
--- joiner on the clean re-proof host.
+-- The batch goes out this long after the first poll that sees the joiner's body.
 M.DELAY_MS = 2000
 
--- One batch per joiner per mod session: a rejoin does not replay again (a
--- second burst is what froze the toolbar); moonpool unlocks replay still does.
--- game.now() is the clock in ms; without game.has_body every name has a body.
+-- One batch per joiner per mod session: a second burst on a rejoin froze the toolbar.
 function M.joins(st, game, names, host)
   local joined = {}
   st.body_at = st.body_at or {}
@@ -337,7 +266,6 @@ function M.joins(st, game, names, host)
   for _, name in ipairs(names) do
     if name ~= host and not st.known[name] then
       local body = (game.has_body == nil) or game.has_body(name)
-      -- Said once per name, so the log shows which hop a silent joiner stops at.
       if not st.seen[name] and game.log then
         st.seen[name] = true
         game.log('unlocks: ' .. name .. ' has a controller; body ' .. (body and 'yes' or 'not yet'))
@@ -358,29 +286,13 @@ function M.joins(st, game, names, host)
   return joined
 end
 
--- SCANS. The host logs every finished scan as
---   LogScanner: <display name> has completed scan
--- and for furniture, posters, lights and tools that scan grants the recipe
--- straight to the scanning player, with no story goal; on a pruned host the
--- grant never reaches a client. Replayed by hand
--- (x7: 22 scans, 163 names, 326 calls, 0 errors). No scanner
--- completion function is reachable by name from the host mod, so the log line
--- is the trigger (the same tail the story-goal unlocks use).
---
--- The display name maps to its *_ScanData asset(s) through each loaded scan
--- data object's Name text (game.scan_assets, built in main.lua by one
--- read-only ForEachUObject pass). From each asset name the forms are derived:
--- the ScanData itself, then for every base spelling (with and without the
--- BasePiece_/Tools_/Poster_/Salvage_ prefix, a trailing _A or _01 dropped,
--- underscores removed, and every two-part word split in both orders, as in
--- DiningChair_ScanData vs ChairDining_Recipe) the siblings _ItemType, Recipe
--- and ConstructData that exist by name, and an UnlockStoryGoal for an
--- existing <base>_StoryGoal. A scan with no ItemType/Recipe/ConstructData
--- sibling (creatures, flora, raw resources) sends nothing.
+-- Scans: a finished scan grants its recipe to the scanning player only, with no story goal, and
+-- only the game log says it happened. A display name maps to its *_ScanData assets; from each,
+-- the item, recipe and construct-data siblings that exist are sent. A scan with no item sibling
+-- (creatures, flora, raw resources) sends nothing.
 M.SCAN_LINE = 'LogScanner: (.-) has completed scan'
 M.SCAN_PREFIXES = { 'BasePiece_', 'Tools_', 'Poster_', 'Salvage_' }
--- Bases whose item name the asset name does not spell; each pair read off
--- recorded per-scan name sets.
+-- Bases whose item name the asset name does not spell.
 M.SCAN_ALIAS = {
   BatteryTerminal = { 'BasicBatteryTerminal' },
   CeilingLightSmall = { 'CeilingLight_Rect_A' },
@@ -392,7 +304,6 @@ M.SCAN_ALIAS = {
 }
 local SIBLINGS = { '_ItemType', 'ItemType', '_Recipe', 'Recipe', '_ConstructData', 'ConstructData' }
 
--- The display name of a finished scan, or nil.
 function M.scan_of(l)
   if type(l) ~= 'string' then return nil end
   local name = l:match(M.SCAN_LINE)
@@ -425,8 +336,7 @@ function M.scan_bases(asset)
     add(r)
     local flat = r:gsub('_', '')
     add(flat)
-    -- The variants the game names beside the item: an upgraded V2, a carried
-    -- copy, a wall-mounted one (Beacon/BeaconCarryable, Biolab/WallBiolab).
+    -- An upgraded, a carried and a wall-mounted variant.
     add(flat .. 'V2'); add(flat .. 'Carryable'); add('Wall' .. flat)
     local words = {}
     for w in flat:gmatch('%u[%l%d]*') do words[#words + 1] = w end
@@ -441,8 +351,7 @@ function M.scan_bases(asset)
   return out
 end
 
--- The console lines for one ScanData asset: nothing unless an item sibling
--- exists. exists(name) returns the game's own spelling (or true).
+-- exists(name) returns the game's own spelling (or true).
 function M.scan_lines(asset, exists)
   local function found(n)
     if not exists then return nil end
@@ -470,8 +379,7 @@ function M.scan_lines(asset, exists)
   return out
 end
 
--- Every line for one display name, across all its ScanData assets, cached in
--- the state (the lookups run once per display name per session).
+-- Cached, so the lookups run once per display name per session.
 function M.scan_forms(st, game, display)
   st.scan_cache = st.scan_cache or {}
   if st.scan_cache[display] then return st.scan_cache[display] end
@@ -491,7 +399,6 @@ function M.scan_forms(st, game, display)
   return out
 end
 
--- One host log line. Returns the display name when it is a NEW finished scan.
 function M.scan(st, l)
   local name = M.scan_of(l)
   st.scans = st.scans or {}
@@ -502,9 +409,6 @@ function M.scan(st, l)
   return name
 end
 
--- A new finished scan: its lines to every connected non-host player, one
--- batch each. A scan that sends nothing is logged once, so a wrong display
--- name or a missing index shows.
 function M.scan_broadcast(st, game, display, names, host)
   local lines = M.scan_forms(st, game, display)
   if #lines == 0 then
@@ -522,7 +426,6 @@ function M.scan_broadcast(st, game, display, names, host)
   return sent
 end
 
--- The scan lines a joiner needs, each line once, not repeating `already`.
 function M.scan_replay_lines(st, game, already)
   local out, seen = {}, {}
   for _, l in ipairs(already or {}) do seen[l] = true end
@@ -534,7 +437,6 @@ function M.scan_replay_lines(st, game, already)
   return out
 end
 
--- What status.json keeps.
 function M.snapshot(st)
   return { save = st.save, pieces = st.pieces, scans = st.scans or {} }
 end

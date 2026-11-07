@@ -83,8 +83,6 @@ local ctl = os.tmpname(); os.remove(ctl); os.execute('mkdir -p "' .. ctl .. '"')
 local env = {
   SN2_PLAYER_SLOTS = '8', SN2_HOST_NAME = 'SN2 Host', SN2_CONTROL_WIN = ctl,
   SN2_HOST_PRUNE = 'true', SN2_ARM_SETTLE_SECS = '4',
-  -- The direct sky clock is off by default; these checks exercise it.
-  SN2_SKY_CLOCK = 'true',
 }
 local real_getenv = os.getenv
 os.getenv = function(k) if env[k] ~= nil then return env[k] end return real_getenv(k) end
@@ -107,7 +105,7 @@ do
   _G.FindAllOf = function(c) if c == 'PlayerController' then return { host } end return saved_all(c) end
   local save_ok, save_data, save_err = _G.SN2_HANDLERS.save({})
   check(save_ok == true, 'save handler accepts the host save request: ' .. tostring(save_err))
-  check(save_data and save_data.forced == true, 'save receipt says that the save was forced')
+  check(save_data and save_data.forced == true, 'the save answer says that the save was forced')
   check(save_calls == 1 and forced == true, 'save handler forces one async save on the host controller')
   _G.FindAllOf = saved_all
 end
@@ -177,15 +175,9 @@ if h and h.slots then
     'slots reports the world limit read back')
   found.BP_ClientLobbyGameMode_C = function() return lobby end
 end
-if h and h.receipt then
-  local okr, data = h.receipt()
-  check(okr and type(data) == 'table' and data.hosted == true, 'receipt returns a structured receipt with hosted=true')
-end
 
--- A player state that answers nothing to GetPlayerName (the live build on
--- is still named from its own PlayerNamePrivate, the way status.lua
--- and main.lua already read it: players are listed by name and a per-player
--- command finds the controller instead of answering unknown_player.
+-- A player state that answers nothing to GetPlayerName (the live build) is still named from its
+-- own PlayerNamePrivate: players are listed by name and a per-player command finds its controller.
 if h and h.players and h.player then
   local joiner_pc = obj({ PlayerState = joiner, Pawn = obj({}) })
   _G.FindAllOf = function(c)
@@ -293,9 +285,8 @@ do
   _G.FindAllOf = function() return nil end
 end
 
--- moonpool settings: the card's applied rows are the calls that ran. With no
--- sky actor and host controller the clock key is refused by that reason; the
--- weather call needs no controller, only a loaded type of that name.
+-- moonpool settings: the card's applied rows are the calls that ran. With no host controller
+-- the clock key is refused by that reason; the weather call needs only a loaded type of that name.
 do
   local yf = assert(io.open(ctl .. '\\settings.yaml', 'w'))
   yf:write('time_of_day: "08:00"\nweather: rain\nmods: []\n'); yf:close()
@@ -308,8 +299,8 @@ do
   end
   local by = rows()
   local tod_reason = by.time_of_day and by.time_of_day.reason
-  check(by.time_of_day and by.time_of_day.applied == false and tod_reason == 'UWESkyActor not found',
-    'a missing sky actor and fallback controller are refused (got ' .. tostring(tod_reason) .. ')')
+  check(by.time_of_day and by.time_of_day.applied == false and tod_reason == 'host controller not found',
+    'a clock key with no host controller is refused (got ' .. tostring(tod_reason) .. ')')
   local wx_reason = by.weather and by.weather.reason
   check(by.weather and by.weather.applied == false and wx_reason == 'no weather sync component',
     'weather with no sync component is refused by that reason (got ' .. tostring(wx_reason) .. ')')
@@ -373,14 +364,14 @@ do
     'requested lists every configured key in its compared form')
   check(#a.submitted == 1 and a.submitted[1].key == 'weather' and a.submitted[1].value == 'DA_Clear',
     'submitted lists the call that ran')
-  check(#a.refused == 1 and a.refused[1].key == 'time_of_day' and a.refused[1].reason == 'UWESkyActor not found',
+  check(#a.refused == 1 and a.refused[1].key == 'time_of_day' and a.refused[1].reason == 'host controller not found',
     'refused lists the key and why')
   check(a.observed.weather == 'DA_Clear' and a.observed.time_of_day == nil,
     'observed is the readback now, a missing one absent (got ' .. tostring(a.observed.weather) .. ')')
   check(a.settings.weather.submitted == true and a.settings.weather.verified_at == json.null
     and a.settings.weather.observed == 'DA_Clear', 'the answer shows the value and marks nothing')
   check(a.settings.time_of_day.submitted == false and a.settings.time_of_day.observed == json.null
-    and a.settings.time_of_day.reason == 'UWESkyActor not found', 'a refused key: not submitted, no readback')
+    and a.settings.time_of_day.reason == 'host controller not found', 'a refused key: not submitted, no readback')
   check(#a.values == 2, 'the older rows still ride along')
   -- The next status write records when the value showed.
   require('status').invalidate()
@@ -406,43 +397,6 @@ do
   _G.FindAllOf = function() return nil end
   os.remove(ctl .. '\\settings.yaml')
   os.remove(ctl .. '\\status.json')
-end
-
--- The join replay's lookups come from one FindAllOf('DataAsset') and are answered
--- from a table, never by walking every object: a ForEachUObject scan index plus a
--- FindObject per candidate name froze the game thread for 47-67 s on one join and
--- preceded a UE4SS crash.
-do
-  local g = _G.SN2_UNLOCK_GAME
-  check(type(g) == 'table' and type(g.exists) == 'function' and type(g.scan_assets) == 'function',
-    'recipe exposes the unlock game adapter')
-  if g then
-    local walks, asked = 0, 0
-    local saved_each, saved_find, saved_all = _G.ForEachUObject, _G.FindObject, _G.FindAllOf
-    _G.ForEachUObject = function() walks = walks + 1 end
-    _G.FindObject = function() walks = walks + 1 end
-    local function asset(short, display)
-      return obj({ GetFName = function() return fstr(short) end, Name = display and fstr(display) or nil })
-    end
-    _G.FindAllOf = function(c)
-      if c == 'DataAsset' then
-        asked = asked + 1
-        return { asset('DA_FlashLight_ItemType'), asset('DA_Tools_Scanner_ScanData', 'Scanner'),
-                 asset('DA_Scanner_ItemType') }
-      end
-      return saved_all and saved_all(c) or nil
-    end
-    _G.SN2_ASSET_INDEX_RESET()
-    check(g.exists('DA_Flashlight_ItemType') == 'DA_FlashLight_ItemType',
-      "exists answers in the game's own spelling, case-blind")
-    check(g.exists('DA_Nothing_ItemType') == false, 'a name nothing carries is false')
-    local scans = g.scan_assets('Scanner')
-    check(scans[1] == 'DA_Tools_Scanner_ScanData', 'a scan display name maps to its ScanData asset')
-    for i = 1, 50 do g.exists('DA_Probe' .. i .. '_Recipe') end
-    check(walks == 0, 'no lookup walks every object (got ' .. walks .. ' walks)')
-    check(asked == 1, 'one FindAllOf serves every lookup (got ' .. asked .. ')')
-    _G.ForEachUObject, _G.FindObject, _G.FindAllOf = saved_each, saved_find, saved_all
-  end
 end
 
 -- The join replay's lookups come from one FindAllOf('DataAsset') and are answered

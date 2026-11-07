@@ -78,11 +78,4 @@ function M.update(state, players, store)
   end
 end
 
-function M.clear(state, store)
-  for k, signal in pairs(state.signals) do
-    store:remove(signal.handle)
-    state.signals[k] = nil
-  end
-end
-
 return M

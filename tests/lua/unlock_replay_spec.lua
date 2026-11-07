@@ -356,7 +356,6 @@ end
 eq(unlocks_seen > 0, true, 'the batch has lines')
 eq(gaps_ok, true, 'lines are 50 ms apart, not a burst')
 eq(last_unlock_t < control_t, true, 'the whole batch lands before control is given')
-eq(ur.TOOLBAR_RESYNC, nil, 'no toolbar re-sync command exists by name, none sent')
 -- No body yet: nothing goes out, however long the joiner loads.
 local gn2_logs = {}
 local gn2 = { now = function() return 60000 end, has_body = function() return false end,

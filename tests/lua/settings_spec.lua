@@ -35,10 +35,7 @@ check(cfg ~= nil, 'parse: ' .. tostring(err))
 check(cfg.time_of_day == '08:30', 'quoted value kept: ' .. tostring(cfg.time_of_day))
 check(cfg.daylight == 'long', 'trailing comment dropped: ' .. tostring(cfg.daylight))
 check(cfg.weather == 'clear', 'weather read')
-check(#cfg.mods == 2, 'two mods, got ' .. #cfg.mods)
-check(cfg.mods[1].name == 'AutoSwim' and cfg.mods[1].version == '1.2', 'mod name and version')
-check(cfg.mods[1].url == 'https://www.nexusmods.com/subnautica2/mods/1', 'mod url')
-check(cfg.mods[1].path == nil, 'a nested files list stays out of the mod item')
+check(cfg.mods == nil and cfg.name == nil, 'an older mods: list is skipped whole')
 
 -- Without a verified command every value is refused, none applied.
 local p = settings.plan(cfg, {})
@@ -47,7 +44,6 @@ check(#p.refused == 3, 'three refusals, got ' .. #p.refused)
 for _, r in ipairs(p.refused) do
   check(r.reason == 'no verified command', r.key .. ' refused as no verified command, got ' .. r.reason)
 end
-check(p.mods[1].url ~= nil and p.mods[2].url == nil, 'only an https link is kept')
 
 -- The verified commands: time_of_day as HH:MM through SetTimeOfDay, daylight as
 -- frozen or normal, weather as the type's asset name; the file's "long" is out
@@ -180,7 +176,8 @@ check(settings.observe(nt, { daylight = 'frozen' }, 'n2').daylight.drifted == fa
 local bad, e = settings.parse('weather clear\n')
 check(bad == nil and e:match('line 1'), 'malformed line named')
 local none = settings.parse('')
-check(none and #none.mods == 0, 'empty file is no settings')
+check(none and next(none) == nil, 'empty file is no settings')
+check(settings.parse('  weather: clear\n') == nil, 'an indented key outside mods: is refused')
 
 print(ran .. ' checks, ' .. failures .. ' failures')
 os.exit(failures == 0 and 0 or 1)

@@ -49,9 +49,5 @@ eq(count('add'), 0, 'host account never receives or causes a signal')
 voice.update(s, { { name = 'Alice' }, p('Bob', 150), { name = '?', x = 0, y = 0, z = 0 } }, store)
 eq(count('add'), 0, 'players without positions and unnamed states are ignored')
 
-voice.update(s, { p('Alice', 0), p('Bob', 150) }, store)
-calls = {}; voice.clear(s, store)
-eq(count('remove'), 2, 'clear removes every live signal')
-
 if failures > 0 then print(failures .. ' failed'); os.exit(1) end
 print('all passed')

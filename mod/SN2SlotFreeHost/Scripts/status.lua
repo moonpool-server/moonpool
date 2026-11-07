@@ -1,20 +1,6 @@
--- SN2SlotFreeHost status writer: status.json for the Discord card.
---
--- One rule for everything here: never
--- search the whole object list on a timer, it stalls the world. Players are kept
--- as paths, never objects (a freed address is reused and IsValid passes the new
--- occupant because this crashes UE4SS.dll), bases and lifepods as positions;
--- all are searched again after a map load, a new or vanished PlayerState, or CACHE_MAX_S.
---
--- Class names this reads, observed in the live game:
---   bases    "UWESculpturalBaseActor", one per built base, holding its cells; a level
---            actor (RF_WasLoaded / bNetStartup) or an empty one is not a player's.
---            "BP_BaseModule_*" pieces too: not a level actor or else absent at the first
---            search after the map loaded, and never within POD_SKIP_UU of a lifepod
---            (the start area holds a ruin).
---   lifepods "BP_StaticLifepod_Underwater_C" (the pod players start in, about
---            584 m down) and "BP_StaticLifepod_Surface_C"
---   players  "PlayerState", position from the pawn's RootComponent
+-- status.json for the Discord card. Searching the whole object list on a timer stalls the world,
+-- so lookups are cached. Players are kept as paths, never objects: a freed address is reused, IsValid
+-- passes the new occupant and UE4SS.dll crashes. A base near a lifepod is the start area's ruin.
 
 local M = {}
 
@@ -85,10 +71,7 @@ local function cluster(points)
   return out
 end
 
--- A level actor was loaded with the map package (RF_WasLoaded, or the
--- engine's bNetStartup); a player's build, placed now or restored from a
--- save, is spawned at run time and has neither. nil = could not tell, and
--- then the world-start set decides.
+-- A level actor came with the map (RF_WasLoaded or bNetStartup); a player's build has neither.
 local function level_actor(a)
   local yes, known = false, false
   pcall(function()
@@ -170,8 +153,7 @@ local function player_entry(ps, to_str)
   local name, ping, pos
   pcall(function() name = to_str(ps:GetPlayerName()) end)
   if not name or name == '' then pcall(function() name = ps.PlayerNamePrivate:ToString() end) end
-  -- Ping in ms: APlayerState::GetPingInMilliseconds() (Engine.hpp in a UE4SS dump of the client),
-  -- else CompressedPing * 4. ExactPing is not a reflected property in this engine version.
+  -- ExactPing is not a reflected property in this engine version.
   pcall(function()
     local v = ps:GetPingInMilliseconds()
     if type(v) == 'number' and v == v then ping = math.floor(v + 0.5) end
@@ -201,8 +183,7 @@ local function players_now(map_name)
   return found
 end
 
--- The players as `moonpool players` lists them. live_players adds each live PlayerState
--- (.player) and its path, for in-game policy such as range signals; never in status.json.
+-- live_players adds each live PlayerState and its path, for in-game policy; never in status.json.
 function M.players(to_str, map_name, with_object)
   local list = {}
   for _, f in ipairs(players_now(map_name)) do
@@ -231,13 +212,8 @@ function M.build(info, to_str)
     bases = cache.bases or {},
     lifepods = cache.pods or {},
     day = nil, -- the in-game day is not read: no cheap source found yet
-    -- The world clock as HH:MM and as a fraction of the day, off the sky actor
-    -- (recipe.lua reads it); nil when there is none. The readback for the
-    -- time_of_day setting.
     time_of_day = info.time_of_day,
     day_fraction = info.day_fraction,
-    -- The current weather's asset name and the loaded weather type names
-    -- (recipe.lua reads them); the readback for the weather setting.
     weather = info.weather,
     weather_types = info.weather_types,
     cache_age_s = os.time() - cache.found_at,

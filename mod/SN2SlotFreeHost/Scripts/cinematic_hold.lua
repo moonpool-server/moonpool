@@ -1,25 +1,13 @@
--- cinematic_hold.lua: hold new joins while the lifepod launch cinematic plays.
--- What nothing else provides: the game has no join handler the mod can reach
--- by name (no PreLogin/ApproveLogin/lobby join UFunction in the reflected
--- names, services_functions.txt), and its global-tag functions take either a
--- tag struct (HasGlobalTag) or act on the one global set (RemoveGlobalTag
--- TagName), so removing the tag "for everyone but the launcher" is not
--- possible by name. What IS reachable and already proven is the session
--- limit write (set_limits / moonpool slots). So while the tag is set the limit
--- is lowered to the players already in, and the game's own "session full"
--- refusal turns a joiner away; when the tag clears the limit goes back.
--- The tag is read from the game's own log lines:
---   "Adding global tag Gamestate.LifepodAscending"
---   "Removing global tag Gamestate.LifepodAscending"
--- Pure Lua, no game calls: recipe.lua feeds it lines and the clock and acts on
--- what it returns. Original code, MIT.
+-- cinematic_hold.lua: hold new joins while the lifepod launch cinematic plays. The game has no
+-- join handler the mod can reach, so while the log's Gamestate.LifepodAscending tag is set the
+-- session limit is the players already in, and the game's own "session full" turns a joiner away.
+-- Pure Lua, no game calls. Original code, MIT.
 local M = {}
 
 M.TAG = 'Gamestate.LifepodAscending'
 M.ADD = 'Adding global tag ' .. M.TAG
 M.REMOVE = 'Removing global tag ' .. M.TAG
--- The ascent took 58 s; a missed "Removing" line must not keep the
--- server closed, so the hold lets go by itself after this long.
+-- The ascent takes about a minute; a missed "Removing" line must not keep the server closed.
 M.MAX_HOLD_S = 180
 M.NOTICE = 'a launch cinematic is playing, join in about a minute'
 
@@ -30,9 +18,7 @@ end
 
 local function plain_find(s, needle) return s:find(needle, 1, true) ~= nil end
 
--- One game-log line. Returns a list of actions:
---   { 'close', reason }   lower the limit to the players in now
---   { 'open', reason }    put the configured limit back
+-- One game-log line: a list of { 'close' | 'open', reason } actions.
 function M.line(s, line, now)
   local acts = {}
   if plain_find(line, M.ADD) and not s.held then
@@ -45,7 +31,6 @@ function M.line(s, line, now)
   return acts
 end
 
--- The clock, once per poll: the safety release.
 function M.tick(s, now)
   if s.held and now - s.since >= s.max_hold_s then
     s.held, s.since = false, nil
@@ -54,16 +39,14 @@ function M.tick(s, now)
   return {}
 end
 
--- The limit to write while held: nobody new fits, nobody in is dropped.
--- in_session counts the host's own player too (it holds a slot).
+-- Nobody new fits and nobody in is dropped; in_session counts the host's own player.
 function M.hold_limit(in_session)
   local n = tonumber(in_session) or 1
   if n < 1 then n = 1 end
   return math.floor(n)
 end
 
--- New text appended to a log since the last read, split into lines; keeps a
--- partial last line for the next call. pos is a byte offset.
+-- New log text split into lines; a partial last line waits for the next call.
 function M.split_new(buf, chunk)
   buf = (buf or '') .. (chunk or '')
   local lines = {}
