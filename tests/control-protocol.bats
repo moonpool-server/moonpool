@@ -269,6 +269,44 @@ make_backup() {
   [ ! -e "$SN2_CONTROL_DIR/SAVE_SELECT" ]
 }
 
+# A player's world as a zip, and the game's later word on loading it in a fake log.
+world_zip() { (cd "$BATS_TEST_TMPDIR" && mkdir -p w && echo world >w/savegame_2.sav && echo bak >w/savegame_2_0.bak && python3 -m zipfile -c "$1" w/savegame_2.sav w/savegame_2_0.bak); }
+game_says() { export SN2_UE_LOG="$BATS_TEST_TMPDIR/game.log"; (sleep 1; printf 'LogSaveSystem: Loading save slot: %s
+LogGameMode: Save system initialize with result: (%s)
+' "$1" "$2" >>"$SN2_UE_LOG") & }
+
+@test "import puts a player's world in, hosts it, and keeps it when the game loads it" {
+  save_env
+  echo old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  world_zip "$BATS_TEST_TMPDIR/w.zip"
+  game_says savegame_2 LoadGameSucceeded
+  run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = world ] && [ -f "$SN2_SAVE_DIR/savegame_2_0.bak" ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = savegame_2 ] && [ "$(cat "$STAGED/Slot1.sav")" = old ]
+}
+
+@test "import takes back out a world the game cannot load and hosts the previous one again" {
+  save_env
+  echo old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  world_zip "$BATS_TEST_TMPDIR/w.zip"
+  game_says Reef LoadGameFailed
+  run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip" Reef
+  [ "$status" -eq 77 ]
+  [[ $output == *"could not load Reef (LoadGameFailed)"* ]]
+  [ ! -e "$SN2_SAVE_DIR/Reef.sav" ] && [ ! -e "$SN2_SAVE_DIR/Reef_0.bak" ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = Slot1 ] && [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = old ]
+}
+
+@test "import refuses a name the server already has and changes nothing" {
+  save_env
+  echo old >"$SN2_SAVE_DIR/savegame_2.sav"
+  world_zip "$BATS_TEST_TMPDIR/w.zip"
+  run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
+  [ "$status" -eq 77 ] && [[ $output == *"already has a world called savegame_2"* ]]
+  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = old ]
+}
+
 @test "restore refuses a backup without a .sav and changes nothing" {
   save_env
   echo old >"$SN2_SAVE_DIR/Slot1.sav"
