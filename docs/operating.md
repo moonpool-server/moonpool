@@ -160,6 +160,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 - No session: `bin/moonpool diag receipt` then `bin/moonpool logs game`
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`
+- A player is told the session is no longer available while the world shows open: the host lost its link to Epic's lobby service. Moonpool re-hosts once nobody is aboard (`LOBBY_DROP_REHOST`), and `bin/moonpool logs join_watch` says when. With players in, `bin/moonpool server host` does it now with a countdown
 - The game won't install: `bin/moonpool diag screenshot shot.png`
 
 Known gaps: `Warp` is refused by this build so there's no way to move a player. The hold during the launch cinematic hasn't been proven

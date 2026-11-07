@@ -12,7 +12,7 @@ set -u
 # carries only warnings, so joins never reached it (common.sh, ue_log_for_exe).
 GAME_LOG="${JOIN_WATCH_LOG:-$UE_LOG}"
 OUT="$LOG_DIR/join_watch.log"
-PAT='PostLogin|Login request|Join succeeded|Join request|NotifyAcceptingConnection|NotifyAcceptedConnection|AddClientConnection|UNetConnection|NetConnection.*(Open|Close|Cleanup)|registered players|NumOpenPrivateConnections|NumPrivateConnections|RegisterPlayer|UnregisterPlayer|OnSessionParticipant|OnCreateSessionComplete|LobbyId=Lobby\[0x|SessionId: Lobby\[0x|LobbyMemberStatus|member (joined|left)|PeerConnectionEstablished|Connection established|NetworkType=|ConnectionType=|IncomingConnection|connection request|Logout|PlayerState|HandleStartingNewPlayer|Kicked|rejected|Server full|MaxPlayers|autosave_completed'
+PAT='LogEOSLobby: Connection Closed.*Clean: false|PostLogin|Login request|Join succeeded|Join request|NotifyAcceptingConnection|NotifyAcceptedConnection|AddClientConnection|UNetConnection|NetConnection.*(Open|Close|Cleanup)|registered players|NumOpenPrivateConnections|NumPrivateConnections|RegisterPlayer|UnregisterPlayer|OnSessionParticipant|OnCreateSessionComplete|LobbyId=Lobby\[0x|SessionId: Lobby\[0x|LobbyMemberStatus|member (joined|left)|PeerConnectionEstablished|Connection established|NetworkType=|ConnectionType=|IncomingConnection|connection request|Logout|PlayerState|HandleStartingNewPlayer|Kicked|rejected|Server full|MaxPlayers|autosave_completed'
 
 mkdir -p "$LOG_DIR"
 stamp() { date -u +%FT%TZ; }
@@ -163,6 +163,22 @@ heartbeat() {
       esac
     fi
     cnt=$(printf '%s' "$cur" | grep -c . || true)
+    if [ -f "$RUN_DIR/lobby-dropped" ] && [ -n "$pid" ] && [ -z "$restart_warning_pid" ]; then
+      case $(lobby_drop_action "$cnt" "$(file_age "$RUN_DIR/lobby-rehosted")") in
+        rehost)
+          rm -f "$RUN_DIR/lobby-dropped"; : >"$RUN_DIR/lobby-rehosted"
+          echo "[$(stamp)] lobby: Epic's lobby link dropped and nobody is aboard; re-hosting so new joins work" >>"$OUT"
+          SN2_SOURCE=automation "${MOONPOOL:-moonpool}" server host --now >>"$OUT" 2>&1 &
+          ;;
+        wait)
+          [ -f "$RUN_DIR/lobby-drop-noted" ] || {
+            echo "[$(stamp)] lobby: Epic's lobby link dropped with $cnt aboard; new joins may fail, re-hosting once it is empty" >>"$OUT"
+            : >"$RUN_DIR/lobby-drop-noted"; }
+          ;;
+        off) rm -f "$RUN_DIR/lobby-dropped" ;;
+      esac
+    fi
+    [ -f "$RUN_DIR/lobby-dropped" ] || rm -f "$RUN_DIR/lobby-drop-noted"
     container_usage
     echo "$(stamp),$cpu,$mem,$cnt" >>"$METRICS"
     CONTROL_DIR="$CONTROL_DIR" MAP_PUBLIC_URL="$(public_url)" python3 "$(dirname "$0")/map-chart.py" >>"$OUT" 2>&1 || true
@@ -183,6 +199,10 @@ tail -n 0 -F "$GAME_LOG" 2>/dev/null | grep -a --line-buffered -E "$PAT" |
   while IFS= read -r line; do
     echo "[$(stamp)] ${line%$'\r'}" >>"$OUT"
     line_shows_player_join "$line" && : >"$RUN_DIR/player-joined"
+    # The host's link to Epic's lobby service dropped. It reconnects by itself, but the
+    # Steam side of the lobby can lose its join details: the world shows open and a new
+    # player is told the session is no longer available. The heartbeat re-hosts when empty.
+    case $line in *"LogEOSLobby: Connection Closed"*"Clean: false"*) [ -f "$RUN_DIR/mod-session.json" ] && : >"$RUN_DIR/lobby-dropped" ;; esac
     # An autosave just finished: stage a copy for offen to archive.
     case $line in *autosave_completed*) "$(dirname "$0")/save-stage.sh" --now || true ;; esac
     if [[ $line =~ $LOBBY_RE ]]; then

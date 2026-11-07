@@ -163,6 +163,17 @@ AUTO_HOST="${AUTO_HOST:-true}"
 GAME_DLL_EXTRA="${GAME_DLL_EXTRA:-xaudio2_9=d}"
 # join-watch uses this one parser and records a join marker. session_up compares
 # that marker with status.json, closing the mod's up-to-30-second status gap.
+# What to do after the host's Epic lobby link dropped: re-host while nobody is aboard,
+# wait while someone is, and not again within 20 minutes of the last one, so a link
+# that keeps dropping cannot loop the world. LOBBY_DROP_REHOST=false turns it off.
+lobby_drop_action() { # <players aboard> <seconds since the last re-host, or empty>
+  [ "${LOBBY_DROP_REHOST:-true}" = true ] || { echo off; return; }
+  if [ "${1:-0}" -gt 0 ]; then echo wait
+  elif [ -n "${2:-}" ] && [ "$2" -lt 1200 ]; then echo wait
+  else echo rehost; fi
+}
+file_age() { [ -e "$1" ] && echo $(( $(date +%s) - $(stat -c %Y "$1") )) || true; }
+
 line_shows_player_join() {
   [[ $1 =~ PostLogin|Join[[:space:]]succeeded|RegisterPlayer|OnSessionParticipant.*(join|add)|LobbyMemberStatus.*join|member[[:space:]]joined|HandleStartingNewPlayer ]]
 }
