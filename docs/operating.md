@@ -157,9 +157,26 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 ## When something's wrong
 
 - Not sure the host is right: `bin/moonpool diag verify-fresh` checks each stage from Steam to the hosted save
-- No session: `bin/moonpool diag receipt` then `bin/moonpool logs game`
+- No session: `bin/moonpool status` then `bin/moonpool logs game`
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`
 - The game won't install: `bin/moonpool diag screenshot shot.png`
 
 Known gaps: `Warp` is refused by this build so there's no way to move a player. The hold during the launch cinematic hasn't been proven
+
+## Diagnostic switches
+
+These stay out of `.env.example` because the defaults are what works. Set one in `.env` only to rule something out, then recreate the host
+
+| Setting | Default | What it does |
+|---|---|---|
+| `GAME_APP_ID` | `1962700` | Steam app id of Subnautica 2 |
+| `NULLRHI_ARGS` | `-nullrhi -unattended -log` | Engine arguments; `-nullrhi` is added back if missing (no GPU) |
+| `UE4SS_AT_START` | `true` | UE4SS loads at process start through its `dwmapi.dll` proxy |
+| `UE4SS_TAG` | `experimental-latest` | The upstream release tag the pinned loader is fetched from |
+| `NATIVE_MSVC` | `1` | Microsoft's C++ runtime for the game process only |
+| `HOST_PRUNE` | `true` | Takes the host account out of the player list |
+| `HIDE_HOST_BODY` | `true` | Hides the host account's body in the world |
+| `CLIPBOARD_BRIDGE` | `true` | Copy and paste through the viewer's clipboard panel |
+| `S6_SERVICES_GRACETIME` | `210000` | Milliseconds the services get to stop: warning plus save wait plus 30 s |
+| `S6_KILL_GRACETIME` | `5000` | Milliseconds before leftover processes are killed |
