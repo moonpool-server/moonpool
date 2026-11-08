@@ -37,16 +37,12 @@ services:
     # Everything inside runs as one unprivileged user and needs no Linux capabilities.
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    # Optional: every setting has a default (friends preset, 4 real-player slots),
-    # so `docker compose up` works with no .env at all.
-    # Behavior switches (documented in .env.example, docs/operating.md) are carried
-    # through env_file: .env, NOT pinned in environment: below, because resolve_preset only sets an
-    # unset var and a compose default would override the friends/stock preset. The full set:
-    #   AUTO_ACCEPT_FRIENDS HIDE_HOST_BODY IDLE_FREEZE_MINUTES IDLE_STOP_HOURS LIFEPOD_JOIN_HOLD
-    #   PLAYER_SLOTS PRESET RESTART_CRON STORY_GOALS UNLOCK_REPLAY HOST_PRUNE VOICE_WARN VOICE_RANGE_M
-    # Each world's container reads its own env file: an instance sets SN2_ENV_FILE to
-    # instances/<slug>/.env (moonpool-instance add does), or it would inherit the default
-    # world's .env, Discord webhook included (a second world posted its own card).
+    # Works with no .env. These behavior switches reach the container through the env file;
+    # only PRESET and RESTART_CRON get a default below, because a default would beat the
+    # preset: AUTO_ACCEPT_FRIENDS HIDE_HOST_BODY IDLE_FREEZE_MINUTES IDLE_STOP_HOURS
+    #   LIFEPOD_JOIN_HOLD PLAYER_SLOTS PRESET RESTART_CRON STORY_GOALS UNLOCK_REPLAY
+    #   HOST_PRUNE VOICE_WARN VOICE_RANGE_M
+    # A second world reads instances/<slug>/.env through SN2_ENV_FILE (moonpool-instance add).
     env_file:
       - path: ${SN2_ENV_FILE:-.env}
         required: false
@@ -57,7 +53,6 @@ services:
       UE4SS_CHANNEL: "${UE4SS_CHANNEL:-auto}"  # auto | pinned (your own layouts) | upstream-experimental
       SAVE_NAME: "${SAVE_NAME:-}"  # empty = newest save, else a new world
       UNLOCK_INTERVAL_MS: "${UNLOCK_INTERVAL_MS:-50}"  # ms between replayed Unlock lines
-      AUTO_ACCEPT_FRIENDS: "${AUTO_ACCEPT_FRIENDS:-0}"  # 1 = Moonpool uses the host's Steam web session
       ALLOWLIST_ONLY: "${ALLOWLIST_ONLY:-true}"  # false = accept anyone who asks
       HOST_NAME: "${HOST_NAME:-SN2 Host}"  # the Steam persona players see
       ADMINS: "${ADMINS:-}"  # EOS player ids, space separated (see .env.example); empty disables in-game admin
@@ -69,10 +64,7 @@ services:
       RESTART_CRON: "${RESTART_CRON:-}"  # empty = no scheduled restart
       RESTART_WARNING_SECONDS: "${RESTART_WARNING_SECONDS:-120}"
       RESTART_SAVE_WAIT_SECONDS: "${RESTART_SAVE_WAIT_SECONDS:-60}"
-      # s6-overlay 3.2.3.2 defaults both to 3000 ms. Keep PID 1 alive for the
-      # default warning (120 s), forced-save wait (60 s), and 30 s service margin.
-      # Docker then has another 30 s (STOP_GRACE_PERIOD=240s) to finish teardown.
-      # https://github.com/just-containers/s6-overlay/blob/v3.2.3.2/README.md#customizing-s6-overlay-behaviour
+      # Room for the 120 s warning, the 60 s save wait and 30 s margin; Docker allows 30 s more.
       S6_SERVICES_GRACETIME: "${S6_SERVICES_GRACETIME:-210000}"
       S6_KILL_GRACETIME: "${S6_KILL_GRACETIME:-5000}"
       SHOW_PLAYER_NAMES: "${SHOW_PLAYER_NAMES:-true}"  # false = "Player 1", "a player" on Discord
@@ -84,10 +76,7 @@ services:
       DISCORD_ALERT_ROLE_ID: "${DISCORD_ALERT_ROLE_ID:-}"
       # CURSEFORGE_API_KEY comes from .env only; it is a secret.
       # DISCORD_WEBHOOK_URL comes from .env only; it is a secret.
-    # Healthy = Windows Steam runs and, once the game is installed, so does the game
-    # process. It never says a world is hosted; `bin/moonpool status` does. Docker only
-    # marks health; the pieces inside are restarted by their supervisor and the
-    # container by unless-stopped when it exits.
+    # Healthy means Steam and the game process run, not that a world is hosted (moonpool status).
     healthcheck:
       test: ["CMD", "/opt/sn2/bin/healthcheck.sh"]
       interval: 60s
