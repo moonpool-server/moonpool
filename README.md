@@ -89,7 +89,7 @@ Your join page then offers Play with mods
 
 Players install the launcher once, [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) from this repo's releases, which the join page links. It shows them what your server wants, asks before installing anything and asks again when that changes. From then on it keeps them on the exact files you published
 
-The mods are on only while the game the launcher starts is running, so a normal Steam launch has none of them. Xbox and Game Pass players join without mods
+The mods are on only while the game the launcher starts is running, so a normal Steam launch has none of them. If the launcher is killed mid-game they stay on until its next run or the Subnautica 2 (without Moonpool mods) shortcut. Xbox and Game Pass players join without mods
 
 Mods run with the player's Windows rights and nobody here reviews them, so only say yes to a host you trust. A saved yes stays until the list changes and a new key at the same address counts as a new server
 

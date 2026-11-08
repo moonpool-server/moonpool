@@ -74,6 +74,7 @@ services:
       TUNNEL: "${TUNNEL:-off}"
       CLIENT_BUILDS: "${CLIENT_BUILDS:-}"
       DISCORD_ALERT_ROLE_ID: "${DISCORD_ALERT_ROLE_ID:-}"
+      TUNNEL_TOKEN: ""  # the tunnel's secret, never the game's
       # CURSEFORGE_API_KEY comes from .env only; it is a secret.
       # DISCORD_WEBHOOK_URL comes from .env only; it is a secret.
     # Healthy means Steam and the game process run, not that a world is hosted (moonpool status).

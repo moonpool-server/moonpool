@@ -316,6 +316,14 @@ try {
   Check ($b -match 'another Moonpool launcher is running' -and $b -match 'exit 2') "the second one names the first and exits 2 (got: $($b.Trim()))"
   Check ($r.Code -eq 0 -and (Was-On $r) -and (All-Off $ws)) 'the first finishes its session as usual'
 
+  Write-Host 'a loader the player put where Moonpool switched its own off is theirs, never replaced'
+  $own = Join-Path $ws.Win64 'dwmapi.dll'; $parked = "$own.moonpool-off"
+  Set-Content -LiteralPath $own -Value 'the player''s own loader' -NoNewline
+  $before = Sha $parked
+  $r = Invoke-Join $ws
+  Check ($r.Code -ne 0 -and $r.Out -match 'already has files' -and -not $r.Launched -and (Text $own) -eq 'the player''s own loader' -and (Sha $parked) -eq $before) "refused, both files as they were (got $($r.Code)): $($r.Out.Trim())"
+  Remove-Item -LiteralPath $own
+
   Write-Host 'a game build the server has not listed is refused every session, even with the loader in place'
   Set-Content -LiteralPath $ws.Exe -Value 'the game after a Steam update' -NoNewline
   $r = Invoke-Join $ws

@@ -22,7 +22,7 @@ Lost the machine? Deauthorize devices in Steam and change the password. `docker 
 
 There's no port to forward. Invite each player with `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request, you accept it in the viewer (`AUTO_ACCEPT_FRIENDS=1` has Moonpool accept invited players within a minute, using the host's Steam web session), and they hit Join Game or use the join page. `ALLOWLIST_ONLY=false` lets in anyone who asks. Anyone already friends with the account can join either way until you remove them with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
 
-`moonpool ban add` blocks someone for good and `players kick` only removes them for now
+`moonpool ban add` blocks someone for good and `players kick` only removes them for now. A Steam ID is also taken off the host's friends list only with `AUTO_ACCEPT_FRIENDS=1`; otherwise remove them in the viewer
 
 ## Xbox and Game Pass players
 

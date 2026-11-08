@@ -466,7 +466,7 @@ steam_env() {
   chmod +x "$stub/friend-accept.py"
   run env SN2_BIN="$stub" "$CTL" ban add 76561198000000022 "do not readmit"
   [ "$status" -eq 0 ]
-  [[ $output == *"in the viewer"* ]]
+  [[ $output == *"can still join until you remove them in the viewer"* ]]
   [ ! -e "$BATS_TEST_TMPDIR/called" ]
 }
 
