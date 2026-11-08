@@ -79,8 +79,6 @@ services:
       TUNNEL: "${TUNNEL:-off}"
       CLIENT_BUILDS: "${CLIENT_BUILDS:-}"
       DISCORD_ALERT_ROLE_ID: "${DISCORD_ALERT_ROLE_ID:-}"
-      DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
-      DISCORD_CHANNEL_ID: "${DISCORD_CHANNEL_ID:-}"
       # CURSEFORGE_API_KEY comes from .env only; it is a secret.
       # DISCORD_WEBHOOK_URL comes from .env only; it is a secret.
     # Healthy = Windows Steam runs and, once the game is installed, so does the game

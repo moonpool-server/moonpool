@@ -281,20 +281,3 @@ echo 4242
   [ "$status" -eq 0 ]
   [ "$(cat "$DATA_DIR/discord/alerts.ids")" = alert-1 ]
 }
-
-@test "channel setup is idempotent in intent and creates the alert role" {
-  fake_discord
-  run env DISCORD_BOT_TOKEN=secret DISCORD_CHANNEL_ID=22 DISCORD_API_URL="http://127.0.0.1:$(cat "$FAKE/port")" \
-    python3 "$ROOT/scripts/discord-notify.py" setup
-  [ "$status" -eq 0 ]
-  [[ $output == *'changed channel permissions'* && $output == *'created opt-in alert role: 33'* ]]
-  grep -q '^PUT .*/channels/22/permissions/11$' "$DISCORD_CALLS"
-  grep -q '^PATCH .*/channels/22$' "$DISCORD_CALLS"
-  run ! grep -q '/messages' "$DISCORD_CALLS"
-  chmod 700 "$CONTROL_DIR"
-  run env SN2_IN_CONTAINER=1 SN2_COMMON="$ROOT/scripts/common.sh" SN2_BIN="$ROOT/scripts" \
-    SN2_CONTROL_DIR="$CONTROL_DIR" DISCORD_BOT_TOKEN=secret DISCORD_CHANNEL_ID=22 \
-    DISCORD_API_URL="http://127.0.0.1:$(cat "$FAKE/port")" "$ROOT/bin/moonpool" discord setup
-  [ "$status" -eq 0 ]
-  [[ $output == *'changed channel permissions'* ]]
-}

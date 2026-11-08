@@ -133,6 +133,14 @@ Or a greeting in `hooks/on-event`:
 
 A UE4SS mod the host should run goes in `ue4ss-local/Mods/<name>/` in the data volume with an empty `enabled.txt` beside its `Scripts` folder. Recreate the host to load it. To remove one delete it from there and from `ue4ss/Mods` in the game folder. Most mods we read act on the local player, so on a host they do nothing for players and belong in `plugins.yaml` instead. A mod that also changes something on players' PCs belongs in `plugins.yaml` too. Mods are other people's code running with the host's rights and Steam session so only use ones you trust
 
+## Discord card
+
+1. Make a channel for the server. In its permissions, let `@everyone` read and add reactions but not send messages.
+2. In the channel's settings, Integrations › Webhooks › New Webhook, then copy its URL. Treat it as a password: anyone holding it can post there.
+3. Put it in `.env` as `DISCORD_WEBHOOK_URL=` and run `docker compose up -d`. The card appears within a minute and is edited in place from then on.
+
+For mentions on important alerts, make a role people can opt into and set `DISCORD_ALERT_ROLE_ID` to its id.
+
 ## Map
 
 `WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It charts where players have been from the positions the game reports, colored by depth, with bases and lifepods. It shows no names and anything new appears 15 minutes later (`MAP_DELAY_MINUTES`), but anyone with the link can see bases and explored areas
