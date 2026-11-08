@@ -39,17 +39,11 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/peer/"):
                 peer = ROOT / "peer" / path[6:]
                 return self.answer(200, peer.read_text(encoding="utf-8")) if peer.is_file() else self.answer(404, "")
-            if path.endswith("/channels/22"):
-                return self.answer(200, '{"id":"22","guild_id":"11","topic":"","permission_overwrites":[]}')
-            if path.endswith("/guilds/11/roles"):
-                return self.answer(200, "[]")
             return self.answer(200, "{}")
         if self.command == "DELETE":
             return self.answer(500 if (ROOT / "delete-fails").exists() else 204, "")
         if self.command == "PATCH" and (ROOT / "patch-404").exists():
             return self.answer(404, "{}")
-        if self.command == "POST" and path.endswith("/guilds/11/roles"):
-            return self.answer(200, '{"id":"33","name":"Server alerts"}')
         if '"content"' in body and '"components"' not in body:
             n = int((ROOT / "alerts").read_text() or 0) + 1 if (ROOT / "alerts").exists() else 1
             (ROOT / "alerts").write_text(str(n))

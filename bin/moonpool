@@ -104,7 +104,6 @@ Looking inside
                                Off unless enabled_commands in sn2headless.json has player
   diag screenshot <file.png>   what the viewer shows
   welcome [--dry-run]          post the Discord "how to join" card, or edit it in place
-  discord setup                make its channel read-only and create the opt-in alert role
 
 --json, before or after the command: one JSON object on stdout and nothing
 else: {schema_version, request_id, command, ok, state, code, message,
@@ -622,7 +621,6 @@ TABLE = {
              "viewer": ("diag.viewer", "viewer", False, True), "console": ("diag.console", "console", True),
              "*": "usage: moonpool diag verify-fresh | friend-code [--force] | viewer | screenshot <file.png> | console <player> <line...>"},
     "welcome": {"": ("welcome", "welcome", False)},
-    "discord": {"setup": ("discord.setup", "discord_setup", True, True), "*": "usage: moonpool discord setup"},
     # Plumbing between the host copy and the container copy.
     **{w: {"": (w, w, True)} for w in ("stop-game", "start-game", "restart-warning")},
     **{w: {"": ("help", "help", False)} for w in ("help", "-h", "--help")},
@@ -925,9 +923,6 @@ def inner(r):
             finish("accepted", f"welcome card {'(dry run) ' if n else ''}sent to discord-notify.py; Discord's answer is in its log", "",
                    {"dry_run": n == 1, "output": out})
         rc, _ = run_helper("discord-notify.py", *a, "welcome", capture=False)
-        sys.exit(rc)
-    if op == "discord_setup":
-        rc, _ = run_helper("discord-notify.py", "setup", capture=False)
         sys.exit(rc)
     if op == "logs":
         logs(a)

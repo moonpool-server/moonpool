@@ -194,63 +194,6 @@ def read_json_text(text):
         return None
 
 
-def bot_api(method, path, body=None):
-    r = requests.request(method, (E.get("DISCORD_API_URL") or "https://discord.com/api/v10") + path, data=body,
-                         headers={"Authorization": "Bot " + E.get("DISCORD_BOT_TOKEN", ""), "Content-Type": "application/json"},
-                         timeout=15)
-    r.raise_for_status()
-    return read_json_text(r.text) if r.text else {}
-
-
-def setup_channel():
-    channel_id = E.get("DISCORD_CHANNEL_ID") or ""
-    if not E.get("DISCORD_BOT_TOKEN"):
-        print("DISCORD_BOT_TOKEN is required for automated setup", file=sys.stderr)
-        return 64
-    if not channel_id:
-        print("DISCORD_CHANNEL_ID is required for automated setup", file=sys.stderr)
-        return 64
-    try:
-        channel = bot_api("GET", f"/channels/{channel_id}") or {}
-        guild = str(channel.get("guild_id") or "")
-        if not guild:
-            print("Discord did not return a guild for that channel", file=sys.stderr)
-            return 69
-        current = next((o for o in channel.get("permission_overwrites") or [] if str(o.get("id")) == guild and o.get("type") == 0), {})
-        allow, deny = int(current.get("allow") or 0) | 66624, int(current.get("deny") or 0) | 377957124096
-        if int(current.get("allow") or 0) != allow or int(current.get("deny") or 0) != deny:
-            bot_api("PUT", f"/channels/{channel_id}/permissions/{guild}", dumps({"type": 0, "allow": str(allow), "deny": str(deny)}))
-            print("changed channel permissions: members can read and react, but cannot send messages or create threads")
-        else:
-            print("channel permissions already set")
-        topic = f"{E.get('WORLD_NAME') or 'Subnautica 2 server'} status and join information · unofficial host"
-        if (channel.get("topic") or "") != topic:
-            bot_api("PATCH", f"/channels/{channel_id}", dumps({"topic": topic}))
-            print("changed channel topic")
-        else:
-            print("channel topic already set")
-        role_id = E.get("DISCORD_ALERT_ROLE_ID") or ""
-        if role_id:
-            print(f"using configured alert role: {role_id}")
-            return 0
-        role = next((r for r in bot_api("GET", f"/guilds/{guild}/roles") or [] if r.get("name") == "Server alerts"), None)
-        if role:
-            role_id = str(role["id"])
-            print(f"alert role already exists: {role_id}")
-        else:
-            made = bot_api("POST", f"/guilds/{guild}/roles", '{"name":"Server alerts","mentionable":true}') or {}
-            role_id = str(made.get("id") or "")
-            if not role_id:
-                print("Discord created no alert role", file=sys.stderr)
-                return 69
-            print(f"created opt-in alert role: {role_id}")
-        print(f"set DISCORD_ALERT_ROLE_ID={role_id} in .env to mention it on important alerts")
-        return 0
-    except requests.RequestException as err:
-        print(f"Discord did not answer: {err}", file=sys.stderr)
-        return 69
-
-
 def manifest():
     paths = [STEAM / "steamapps" / f"appmanifest_{APP}.acf"]
     try:
@@ -643,8 +586,6 @@ def main(argv):
     STATE.mkdir(parents=True, exist_ok=True)
     LOG.mkdir(parents=True, exist_ok=True)
     cmd = argv[0] if argv else ""
-    if cmd == "setup":
-        return setup_channel()
     if cmd in ("status", "welcome", "heartbeat", "flush-due", "sweep"):
         if cmd not in ("status", "welcome"):
             note(f"{cmd}: card refresh only")
@@ -676,7 +617,7 @@ def main(argv):
             return 0
         send("PATCH", "", dumps({"avatar": "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()}))
         return 0
-    print("usage: discord-notify.py setup | [--dry-run] status | welcome | event <restart|update|outage|up|down|crash|join|leave|backup_failed> [detail] | heartbeat", file=sys.stderr)
+    print("usage: discord-notify.py [--dry-run] status | welcome | event <restart|update|outage|up|down|crash|join|leave|backup_failed> [detail] | heartbeat", file=sys.stderr)
     return 64
 
 
