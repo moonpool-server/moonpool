@@ -88,7 +88,8 @@ ENV SN2_IN_CONTAINER=1 \
 HEALTHCHECK --interval=60s --timeout=10s --start-period=300s \
     CMD ["/opt/sn2/bin/healthcheck.sh"]
 # /init (s6-overlay) supervises every service. The command only shows the services log.
-ENTRYPOINT ["/init"]
+# The tunnel token is for the tunnel container; the game, Steam and mods never see it.
+ENTRYPOINT ["/usr/bin/env", "-u", "TUNNEL_TOKEN", "/init"]
 CMD ["/bin/bash", "-c", "mkdir -p \"$DATA_DIR/logs\" && touch \"$DATA_DIR/logs/services.log\" && exec tail -n +1 -F \"$DATA_DIR/logs/services.log\""]
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,9 @@ services:
     hostname: "${SN2_CONTAINER_NAME:-moonpool}"
     restart: unless-stopped
     stop_grace_period: "${STOP_GRACE_PERIOD:-240s}"
+    # Everything inside runs as one unprivileged user and needs no Linux capabilities.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     # Optional: every setting has a default (friends preset, 4 real-player slots),
     # so `docker compose up` works with no .env at all.
     # Behavior switches (documented in .env.example, docs/operating.md) are carried
