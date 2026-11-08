@@ -132,12 +132,12 @@ heartbeat() {
     fi
     [ $((n % 2)) -eq 0 ] || continue
     # Every minute: accept pending friend requests from invited players (AUTO_ACCEPT_FRIENDS=1).
-    if [ "${AUTO_ACCEPT_FRIENDS:-1}" = 1 ]; then
+    if [ "${AUTO_ACCEPT_FRIENDS:-0}" = 1 ]; then
       STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" 2>&1 |
         grep -v '^friend accept skipped' | sed "s/^/[$(stamp)] /" >>"$OUT" || true
     fi
     # For a build whose log masks the lobby id, Steam's own answer: once, then every 5 minutes.
-    if [ -n "$pid" ] && jq -e '.hosted == true' "$CONTROL_DIR/readiness.json" >/dev/null 2>&1 &&
+    if [ "${AUTO_ACCEPT_FRIENDS:-0}" = 1 ] && [ -n "$pid" ] && jq -e '.hosted == true' "$CONTROL_DIR/readiness.json" >/dev/null 2>&1 &&
       { [ ! -s "$RUN_DIR/mod-session.json" ] || [ $((n % 10)) -eq 0 ]; }; then
       lobby=$(STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" \
         --lobby "$(host_steamid)" 2>/dev/null || true)

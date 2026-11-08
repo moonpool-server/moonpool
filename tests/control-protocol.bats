@@ -454,10 +454,20 @@ steam_env() {
   stub="$BATS_TEST_TMPDIR/bin"; mkdir -p "$stub"
   printf '#!/bin/sh\nprintf "%%s\\n" "$*" >"%s/remove.args"\n' "$BATS_TEST_TMPDIR" >"$stub/friend-accept.py"
   chmod +x "$stub/friend-accept.py"
-  run env SN2_BIN="$stub" "$CTL" ban add 76561198000000022 "do not readmit"
+  run env SN2_BIN="$stub" AUTO_ACCEPT_FRIENDS=1 "$CTL" ban add 76561198000000022 "do not readmit"
   [ "$status" -eq 0 ]
   grep -Fxq -- '--remove 76561198000000022' "$BATS_TEST_TMPDIR/remove.args"
   grep -Fxq $'76561198000000022\tdo not readmit' "$SN2_CONTROL_DIR/bans.txt"
+}
+
+@test "ban add without AUTO_ACCEPT_FRIENDS never touches the Steam web session" {
+  stub="$BATS_TEST_TMPDIR/bin"; mkdir -p "$stub"
+  printf '#!/bin/sh\ntouch "%s/called"\n' "$BATS_TEST_TMPDIR" >"$stub/friend-accept.py"
+  chmod +x "$stub/friend-accept.py"
+  run env SN2_BIN="$stub" "$CTL" ban add 76561198000000022 "do not readmit"
+  [ "$status" -eq 0 ]
+  [[ $output == *"in the viewer"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/called" ]
 }
 
 @test "invite adds the ID to the allowlist once" {
@@ -1564,8 +1574,10 @@ stub_discord() {
   [[ $how == *"How to join"* && $how == *"Press **Join**"* && $how == *"Join Game"* ]]
   [[ $how == *"Xbox / PC Game Pass"* && $how == *"background audio"* ]]
   [[ $how == *"not affiliated with Unknown Worlds, KRAFTON or Valve"* ]]
-  # Only an account that really accepts anyone says so.
-  [[ $how == *"an admin has to invite you first"* ]]
+  # Without the switch nobody is accepted automatically; with it, only invited players unless anyone may ask.
+  [[ $how == *"the host accepts it by hand"* ]]
+  body=$(AUTO_ACCEPT_FRIENDS=1 SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
+  [[ $(jq -r '.components[-1].content' <<<"$body") == *"an admin has to invite you first"* ]]
   body=$(ALLOWLIST_ONLY=false AUTO_ACCEPT_FRIENDS=1 SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
   [[ $(jq -r '.components[-1].content' <<<"$body") == *"it accepts within a minute"* ]]
 }

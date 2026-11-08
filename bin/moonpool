@@ -1063,7 +1063,7 @@ def ban_add(a):
     rows = [row for row in rows if row and row.split("\t")[0].lower() != ident.lower()]
     rows.append(f"{ident}\t{reason}")
     install_file("".join(row + "\n" for row in rows), f)
-    if re.fullmatch(r"7656[0-9]{13}", ident):
+    if re.fullmatch(r"7656[0-9]{13}", ident) and E.get("AUTO_ACCEPT_FRIENDS", "0") == "1":
         session = Path(E.get("STEAM_SESSION_DIR") or cfg()["STEAM_SESSION_DIR"] or f"{cfg()['DATA_DIR']}/steam-session/local-appdata")
         try:
             helper = f"{bin_dir()}/friend-accept.py"
@@ -1074,7 +1074,8 @@ def ban_add(a):
             rc, out = 127, str(err)
         if rc != 0:
             finish("refused", f"{ident} is banned, but Steam friend removal could not complete: {out[:160]}. The minute watcher will retry while the ID stays banned.")
-    finish("ok", f"{ident} is banned; matching friend requests are refused and a matching in-game name is removed", "",
+    kept = "" if E.get("AUTO_ACCEPT_FRIENDS", "0") == "1" else "; remove them from the host's Steam friends in the viewer"
+    finish("ok", f"{ident} is banned; matching friend requests are refused and a matching in-game name is removed{kept}", "",
            {"identifier": ident, "reason": reason})
 
 

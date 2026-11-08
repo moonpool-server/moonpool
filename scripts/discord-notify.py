@@ -57,6 +57,7 @@ TEXT = {
     "steam_add": "• Add the world's host as a friend with its code above; {accepts}",
     "accepts_auto": "it accepts within a minute",
     "accepts_invite": "an admin has to invite you first",
+    "accepts_manual": "the host accepts it by hand",
     "steam_join": "• Press **Join**, or **Friends** › right-click the host › **Join Game**",
     "xbox_title": "**Xbox / PC Game Pass**",
     "xbox_beta": "• Join the Subnautica 2 preview in **Xbox Insider Hub**",
@@ -463,8 +464,10 @@ def how_to_join():
     branch = branch_name()
     beta = branch not in ("", "public")
     T = card_text()
-    accepts = T["accepts_auto"] if E.get("AUTO_ACCEPT_FRIENDS", "1") == "1" and E.get("ALLOWLIST_ONLY", "true") == "false" \
-        else T["accepts_invite"]
+    if E.get("AUTO_ACCEPT_FRIENDS", "0") != "1":
+        accepts = T["accepts_manual"]
+    else:
+        accepts = T["accepts_auto"] if E.get("ALLOWLIST_ONLY", "true") == "false" else T["accepts_invite"]
     lines = [T["how_to_join"], T["steam_title"]]
     if beta:
         lines.append(T["steam_beta"].format(branch=branch))

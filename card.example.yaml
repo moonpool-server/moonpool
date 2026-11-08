@@ -21,6 +21,7 @@ steam_beta: "• Right-click **Subnautica 2** › **Properties** › **Betas** �
 steam_add: "• Add the world's host as a friend with its code above; {accepts}"
 accepts_auto: "it accepts within a minute"
 accepts_invite: "an admin has to invite you first"
+accepts_manual: "the host accepts it by hand"
 steam_join: "• Press **Join**, or **Friends** › right-click the host › **Join Game**"
 xbox_title: "**Xbox / PC Game Pass**"
 xbox_beta: "• Join the Subnautica 2 preview in **Xbox Insider Hub**"

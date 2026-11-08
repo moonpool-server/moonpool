@@ -54,7 +54,7 @@ services:
       UE4SS_CHANNEL: "${UE4SS_CHANNEL:-auto}"  # auto | pinned (your own layouts) | upstream-experimental
       SAVE_NAME: "${SAVE_NAME:-}"  # empty = newest save, else a new world
       UNLOCK_INTERVAL_MS: "${UNLOCK_INTERVAL_MS:-50}"  # ms between replayed Unlock lines
-      AUTO_ACCEPT_FRIENDS: "${AUTO_ACCEPT_FRIENDS:-1}"  # 0 = accept requests by hand
+      AUTO_ACCEPT_FRIENDS: "${AUTO_ACCEPT_FRIENDS:-0}"  # 1 = Moonpool uses the host's Steam web session
       ALLOWLIST_ONLY: "${ALLOWLIST_ONLY:-true}"  # false = accept anyone who asks
       HOST_NAME: "${HOST_NAME:-SN2 Host}"  # the Steam persona players see
       ADMINS: "${ADMINS:-}"  # EOS player ids, space separated (see .env.example); empty disables in-game admin
