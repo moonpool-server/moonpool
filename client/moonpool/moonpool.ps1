@@ -468,7 +468,7 @@ function Write-Ledger([string]$Path, $Ledger) {
 # switched, so a player's own loader and mods are never touched. Returns what stayed in use.
 function Switch-MoonpoolMods([bool]$On) {
   $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
-  $left = @()
+  $left = @(); $stuck = @()
   foreach ($path in @($ledger.files.Keys)) {
     if (@('dwmapi.dll', 'enabled.txt') -notcontains (Split-Path -Leaf $path) -and $TrioExtensions -notcontains [IO.Path]::GetExtension($path)) { continue }
     $sha = $ledger.files[$path].sha256
@@ -476,7 +476,7 @@ function Switch-MoonpoolMods([bool]$On) {
     if (-not (Test-Path -LiteralPath $from) -or (Get-Sha256 $from) -ne $sha) { continue }
     $from = (Get-Item -LiteralPath $from).FullName
     $to = "$from.moonpool-off"; if ($On) { $to = $from.Substring(0, $from.Length - '.moonpool-off'.Length) }
-    if ((Test-Path -LiteralPath $to) -and (Get-Sha256 $to) -ne $sha) { continue }
+    if ((Test-Path -LiteralPath $to) -and (Get-Sha256 $to) -ne $sha) { if (-not $On) { $stuck += $from }; continue }
     $left += [pscustomobject]@{ From = $from; To = $to }
   }
   # A game that just closed, Defender or a crash reporter can hold a file for a few seconds.
@@ -486,7 +486,7 @@ function Switch-MoonpoolMods([bool]$On) {
       try { if (Test-Path -LiteralPath $_.To) { Remove-Item -LiteralPath $_.To -Force }; Move-Item -LiteralPath $_.From -Destination $_.To; $false }
       catch { $true } })
   }
-  return @($left | ForEach-Object { $_.From })
+  return @($stuck) + @($left | ForEach-Object { $_.From })
 }
 
 # One launcher at a time for this Windows user in any session, from turning the mods on until they are off again.
@@ -1082,8 +1082,8 @@ function Invoke-Join {
   Close-Window
   Say "Subnautica 2 is running; Moonpool's mods turn off when it closes"
   while (Test-GameRunning) { Start-Sleep -Seconds 2 }
-  $script:ModsOn = $false
   $left = @(Switch-MoonpoolMods $false)
+  $script:ModsOn = $false
   if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods off, still in use: " + ($left -join ', ') + '; run the Subnautica 2 (without Moonpool mods) shortcut') }
   Say "Subnautica 2 closed; Moonpool's mods are off"
 }
