@@ -36,7 +36,7 @@ docker compose logs -f sn2
 docker compose ps
 ```
 
-It's ready when `bin/moonpool status` says it's hosting. `docker compose ps` saying healthy means Steam and the game process are up, not that a world is hosted. Invite each friend with `bin/moonpool players invite <their steamid64 or profile link>`. They send the hosting account a Steam friend request and it's accepted within a minute: Moonpool reads the Steam client's own web session out of the data volume and answers as the host account, and `AUTO_ACCEPT_FRIENDS=0` turns that off so you accept in the viewer. Then they hit Join Game or use the page at `http://<server>:8081/join`
+It's ready when `bin/moonpool status` says it's hosting. `docker compose ps` saying healthy means Steam and the game process are up, not that a world is hosted. Invite each friend with `bin/moonpool players invite <their steamid64 or profile link>`. They send the hosting account a Steam friend request and you accept it in the viewer. Set `AUTO_ACCEPT_FRIENDS=1` to have Moonpool accept invited players within a minute: it then uses the Steam client's own web session from the data volume and talks to Steam as the host account. Then they hit Join Game or use the page at `http://<server>:8081/join`
 
 Anyone already friends with the hosting account can join too, so use a fresh account or remove them. Want anyone who finds the account to get in? Set `ALLOWLIST_ONLY=false`
 
