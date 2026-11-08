@@ -1069,8 +1069,10 @@ def ban_add(a):
             rc, out = 127, str(err)
         if rc != 0:
             finish("refused", f"{ident} is banned, but Steam friend removal could not complete: {out[:160]}. The minute watcher will retry while the ID stays banned.")
-    kept = "" if E.get("AUTO_ACCEPT_FRIENDS", "0") == "1" else "; remove them from the host's Steam friends in the viewer"
-    finish("ok", f"{ident} is banned; matching friend requests are refused and a matching in-game name is removed{kept}", "",
+    said = f"{ident} is banned; matching friend requests are refused and a matching in-game name is removed"
+    if re.fullmatch(r"7656[0-9]{13}", ident) and E.get("AUTO_ACCEPT_FRIENDS", "0") != "1":
+        said = f"{ident} is on the ban list, but stays the host's Steam friend and can still join until you remove them in the viewer"
+    finish("ok", said, "",
            {"identifier": ident, "reason": reason})
 
 

@@ -489,9 +489,10 @@ function Switch-MoonpoolMods([bool]$On) {
   return @($left | ForEach-Object { $_.From })
 }
 
-# One launcher at a time for this Windows user, from turning the mods on until they are off again.
+# One launcher at a time for this Windows user in any session, from turning the mods on until they are off again.
 function Enter-Lock {
-  $lock = New-Object Threading.Mutex($false, 'Local\moonpool-launcher')
+  $name = 'Global\moonpool-launcher-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  $lock = New-Object Threading.Mutex($false, $name)
   try { $held = $lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $held = $true }
   if (-not $held) { Fail 'another Moonpool launcher is running, and it stays until Subnautica 2 closes; nothing changed' 2 }
   $script:Lock = $lock
@@ -848,7 +849,8 @@ function Invoke-Join {
   # On here, so the ledger finds every file where it was placed, and off again when this run ends,
   # which also clears what a launcher that died left on.
   $script:ModsOn = $true
-  [void](Switch-MoonpoolMods $true)
+  $left = @(Switch-MoonpoolMods $true)
+  if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods on, in use: " + ($left -join ', ') + '; nothing was started') }
   $cfg = $null; $serverId = ''
   if ($Server -match '^[0-9a-f]{16}$') {
     $cfg = Read-Json (Join-Path $KitHome "$Server\moonpool.json") $null
@@ -938,8 +940,9 @@ function Invoke-Join {
       $target = Join-Path $Base $f.Rel
       $key = $target.ToLowerInvariant()
       $exists = Test-Path -LiteralPath $target
-      $ours = $ledger.files.ContainsKey($key)
-      $same = $exists -and ((Get-Sha256 $target) -eq $f.Sha256)
+      $now = if ($exists) { Get-Sha256 $target } else { '' }
+      $ours = $ledger.files.ContainsKey($key) -and (-not $exists -or $now -eq $ledger.files[$key].sha256)
+      $same = $exists -and ($now -eq $f.Sha256)
       # The loader's settings are the player's once they exist: never replaced, never
       # part of what proves the loader current.
       $isConfig = ($ModName -eq 'UE4SS' -and $LoaderConfig -contains $f.Rel)
@@ -1069,7 +1072,8 @@ function Invoke-Join {
   $deadline = [DateTime]::UtcNow.AddSeconds($StartWait)
   while (-not (Test-GameRunning)) {
     if ([DateTime]::UtcNow -gt $deadline) {
-      [void](Switch-MoonpoolMods $false); $script:ModsOn = $false
+      $left = @(Switch-MoonpoolMods $false); $script:ModsOn = $false
+      if ($left.Count -gt 0) { Fail ("Subnautica 2 did not start in time and these stayed on: " + ($left -join ', ') + "; run the Subnautica 2 (without Moonpool mods) shortcut") }
       Fail "Subnautica 2 did not start in time, so Moonpool turned its mods off again; if it starts now it runs without them"
     }
     if ($script:Ui) { [Windows.Forms.Application]::DoEvents() }
@@ -1080,7 +1084,7 @@ function Invoke-Join {
   while (Test-GameRunning) { Start-Sleep -Seconds 2 }
   $script:ModsOn = $false
   $left = @(Switch-MoonpoolMods $false)
-  if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods off, still in use: " + ($left -join ', ') + '; run the Subnautica 2 (Moonpool mods off) shortcut') }
+  if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods off, still in use: " + ($left -join ', ') + '; run the Subnautica 2 (without Moonpool mods) shortcut') }
   Say "Subnautica 2 closed; Moonpool's mods are off"
 }
 
