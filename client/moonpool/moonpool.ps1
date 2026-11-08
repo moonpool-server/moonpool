@@ -399,7 +399,7 @@ function Install-ServerShortcuts($Config, [string]$ServerId) {
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     $links = @{ "Subnautica 2 ($server)" = "-Server $ServerId" }
-    if ($folder -eq $folders[0]) { $links['Subnautica 2 (Moonpool mods off)'] = '-DisableMoonpoolMods' }
+    if ($folder -eq $folders[0]) { $links['Subnautica 2 (without Moonpool mods)'] = '-DisableMoonpoolMods' }
     foreach ($name in $links.Keys) {
       $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder "$name.lnk"))
       $run = Get-HiddenRun
@@ -831,11 +831,9 @@ function Invoke-Join {
     Enter-Lock
     $left = @(Switch-MoonpoolMods $false)
     if ($left.Count -gt 0) { Fail ("could not turn Moonpool's mods off, still in use: " + ($left -join ', ') + '; close Subnautica 2 and try again') }
-    Say "Moonpool's mods are off; Subnautica 2 starts without them until you next press Play with mods"
-    if ([Environment]::UserInteractive -and -not $env:SN2_JOIN_NO_DIALOG) {
-      Add-Type -AssemblyName System.Windows.Forms
-      [void][Windows.Forms.MessageBox]::Show("Moonpool's mods are off. Subnautica 2 starts without them until you next press Play with mods.", 'Subnautica 2 mods')
-    }
+    Say "Moonpool's mods are off; starting Subnautica 2 without them"
+    $url = "steam://rungameid/$DefaultAppId"
+    if ($Launch) { & $Launch $url } else { Start-Process $url }
     return
   }
   if ($Install -or (-not $Server -and -not $ManifestUrl)) {

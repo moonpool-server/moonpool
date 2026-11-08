@@ -302,7 +302,7 @@ try {
   $r = Invoke-Join $ws -Game 'Stop-Process -Id $PID -Force'
   Check ((Was-On $r) -and (All-On $ws)) 'killed while the game ran, the launcher left them on'
   $r = Invoke-Join $ws -Extra '-DisableMoonpoolMods'
-  Check ($r.Code -eq 0 -and (All-Off $ws) -and -not $r.Launched -and $r.Out -match "Moonpool's mods are off") "-DisableMoonpoolMods turns them off and starts nothing (got $($r.Code)): $($r.Out.Trim())"
+  Check ($r.Code -eq 0 -and (All-Off $ws) -and $r.Launched -match '^steam://rungameid/' -and $r.Out -match "Moonpool's mods are off") "-DisableMoonpoolMods turns them off and starts the plain game (got $($r.Code)): $($r.Out.Trim())"
   [void](Invoke-Join $ws -Game 'Stop-Process -Id $PID -Force')
   Write-Manifest $ws @((Mod $ws 'Foo' 'Foo.zip' 'Foo' 'Foo'), (Mod $ws 'Baz' 'Baz.zip' 'Baz' 'Baz' $true '3' 'pak')) 'server-a' $true $null '9999' 'public'
   $r = Invoke-Join $ws
