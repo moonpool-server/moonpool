@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Read-only proof a fresh install hosted by itself, from this recipe's own logs.
+# Read-only check, from its own logs, that a fresh install hosted by itself.
 set -u
 # shellcheck source=common.sh
 . "${SN2_COMMON:-$(dirname "$0")/common.sh}"

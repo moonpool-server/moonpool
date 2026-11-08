@@ -95,7 +95,7 @@ The server
 Looking inside
   logs [game|steam|services|join_watch] [-f]
                                tail a log from the volume (default: game)
-  diag verify-fresh            read-only proof that a fresh install hosted by itself
+  diag verify-fresh            read-only check of its own logs that a fresh install hosted by itself
   diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
   diag viewer                  the viewer's address and password
   diag console <player> <line...>
