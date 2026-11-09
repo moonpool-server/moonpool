@@ -109,9 +109,15 @@ Releases come often while the project is young. Each one passes CI and carries t
 
 ## Does it work
 
-Tested by hand by the maintainer, with real players joining over the internet on Docker Engine and Docker Desktop, on public build `25400633` and experimental `26283380`. The fix for the crash on join, the mod install through the launcher and moving a world between hosts have had short sessions only. CI runs the code's own tests but not the real game
+Tested by hand by the maintainer, with real players joining over the internet on Docker Engine and Docker Desktop. CI runs the code's own tests but not the real game. What has been seen, by game build:
 
-A game update can break it. If that happens the host says so and the [guide](docs/operating.md) covers what to do. A newer build is unproven until a host comes up on it
+| Branch | Build | Result |
+|---|---|---|
+| public | `25400633` | Hosted; real players joined over the internet |
+| experimental | `26283380` | Hosted for days; joins, the mod install through the launcher and moving the world between two hosts, each in short sessions |
+| experimental | `26496980` (9 November 2026) | Does not host: the UE4SS build Moonpool uses hangs on this executable before the hosting mod loads. The server comes up, says it is not hosting, and waits |
+
+A game update can break it, as that last row shows. The host says so and the [guide](docs/operating.md) covers what to do. A newer build is unproven until a host comes up on it. Nobody but the maintainer has reported a run yet; if you run one, an issue saying what happened is the most useful thing you can send
 
 ## More
 
@@ -137,6 +143,12 @@ The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is w
 The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) applies too. Without Valve's written consent section 2.G restricts modifying Steam content, and hosting or matchmaking through emulation, tunneling, added components or similar tools. Section 4.B restricts tampering with how Steam content runs. Section 4.C restricts scripts and bots that interact with Steam content. An unattended host, scripted clicks in the viewer and automatic friend accepting are the kind of automation those sections describe, and this project has no consent from Valve
 
 Unknown Worlds doesn't officially support mods yet. KRAFTON, Unknown Worlds or Valve could act against this project or the hosting account. Use a spare account you can afford to lose and decide for yourself. This isn't legal advice
+
+**Is it approved by the game's makers or by Valve?** No. Nobody has been asked and nobody has consented
+
+**Can the hosting account be suspended?** Yes. Both sets of terms allow it and nothing here can prevent it. A separate account limits what you lose; it does not make the use allowed
+
+**Why a licensed copy on a Steam account, not a dedicated server?** There is no official dedicated server. Moonpool runs the real game under Wine, signed in to an account that owns it, and the game checks that sign-in. One copy per host, and that copy's terms apply
 
 We try to stay out of the studio's way. Moonpool ships no game files, no data taken from them and none of the game's art. Its code does name objects in the game so it can call them. Its own commands don't spawn items or teleport anyone, and the game's console is reachable from the host only if you turn that on. It hosts four players by default, the game's own limit. If something breaks take mods out and check the game alone before you report anything to Unknown Worlds, and report Moonpool problems here
 
