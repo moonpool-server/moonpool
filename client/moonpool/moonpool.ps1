@@ -861,7 +861,7 @@ function Remove-EmptyDirs([string]$Path, [string]$Stop) {
   $d = $Path
   while ($d -and $d.Length -gt $Stop.Length -and $d.StartsWith($Stop, [StringComparison]::OrdinalIgnoreCase)) {
     if (-not (Test-Path -LiteralPath $d)) { $d = Split-Path -Parent $d; continue }
-    if (@(Get-ChildItem -LiteralPath $d -Force).Count -gt 0) { break }
+    if (@(Get-ChildItem -LiteralPath $d -Force).Count -gt 0) { return $d }
     Remove-Item -LiteralPath $d -Force
     $d = Split-Path -Parent $d
   }
@@ -882,11 +882,18 @@ function Get-Removals($Ledger, $Keep, [bool]$Parked) {
   return @{ Remove = $remove; Kept = $kept }
 }
 
-# The folders removals left empty, up to the game's own Win64 or Paks folder.
+# The folders removals left empty, up to the game's own Win64 or Paks folder. Returns the loader's
+# or a mod's own folder when it stayed because the mod wrote files there while it ran.
 function Remove-EmptyParents($Paths) {
+  $full = @{}
   foreach ($path in $Paths) {
-    if ($path -match '^(.+?\\subnautica2\\(binaries\\win64|content\\paks))\\') { Remove-EmptyDirs (Split-Path -Parent $path) $Matches[1] }
+    if ($path -notmatch '^(.+?\\subnautica2\\(binaries\\win64|content\\paks))\\') { continue }
+    $left = Remove-EmptyDirs (Split-Path -Parent $path) $Matches[1]
+    if (-not $left) { continue }
+    $rel = $left.Substring($Matches[1].Length + 1)
+    if ($rel -match '^ue4ss(\\|$)' -and $rel -ne 'ue4ss\Mods') { $full[$left] = $true }
   }
+  return @($full.Keys)
 }
 
 function Invoke-Uninstall {
@@ -897,8 +904,8 @@ function Invoke-Uninstall {
     $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $script:Work | Out-Null
     Install-Plan @() $gone.Remove $script:Work "could not remove Moonpool's files ({0}); nothing was removed, close Subnautica 2 and try again"
-    Remove-EmptyParents $gone.Remove
-  }
+    $stayed = @(Remove-EmptyParents $gone.Remove | Where-Object { $dir = $_; @(Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object { $gone.Kept -notcontains $_.FullName.ToLowerInvariant() }).Count -gt 0 })
+  } else { $stayed = @() }
   $done = @("$($gone.Remove.Count) game file(s) it placed")
   # The handler goes only while it still opens this launcher; another program may have taken the name.
   $key = Get-HandlerKey
@@ -933,6 +940,7 @@ function Invoke-Uninstall {
   if ($folder) { $done += $folder }
   $text = "Moonpool is uninstalled. Removed " + ($done -join ', ') + '.'
   if ($gone.Kept.Count -gt 0) { $text += "`n`nLeft in place because they changed after Moonpool placed them, so they may be yours: " + ($gone.Kept -join ', ') }
+  if ($stayed.Count -gt 0) { $text += "`n`nStill there, holding files the mods wrote while they ran (settings, logs), which Moonpool never placed: " + ($stayed -join ', ') }
   $text += "`n`nA mod or loader of yours that Moonpool replaced with -Adopt is not put back. Steam's Verify integrity of game files restores any of the game's own files."
   Write-Host "moonpool: $text"
   if (-not $env:SN2_JOIN_NO_DIALOG) { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods') }
@@ -1157,7 +1165,7 @@ function Invoke-Join {
       else { Remove-Item -LiteralPath $ledgerPath -Force -ErrorAction SilentlyContinue }
       throw
     }
-    Remove-EmptyParents $removals
+    [void](Remove-EmptyParents $removals)
     foreach ($path in @($ledger.files.Keys)) { if (-not $desired.ContainsKey($path)) { $ledger.files.Remove($path) } }
     foreach ($k in $goneMods) { $ledger.mods.Remove($k) }
   }
