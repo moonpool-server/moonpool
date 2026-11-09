@@ -22,7 +22,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. There are no g
 Run these in a terminal on the machine that will host the server
 
 ```sh
-git clone --branch v0.3.13 --depth 1 https://github.com/moonpool-server/moonpool.git && cd moonpool
+git clone https://github.com/moonpool-server/moonpool.git && cd moonpool && git checkout "$(git describe --tags --abbrev=0)"
 cp .env.example .env
 docker compose up -d --build
 ```

@@ -60,7 +60,7 @@ services:
       WORLD_NAME: "${WORLD_NAME:-Subnautica 2 server}"  # the session and save name
       MOTD: "${MOTD:-}"  # greeting each player gets once on joining; empty = none
       STEAM_BRANCH: "${STEAM_BRANCH:-public}"  # public | experimental
-      AUTO_UPDATE: "${AUTO_UPDATE:-true}"  # false pins the installed build
+      AUTO_UPDATE: "${AUTO_UPDATE:-true}"  # false = no validation asked; Steam can still update
       RESTART_CRON: "${RESTART_CRON:-}"  # empty = no scheduled restart
       RESTART_WARNING_SECONDS: "${RESTART_WARNING_SECONDS:-120}"
       RESTART_SAVE_WAIT_SECONDS: "${RESTART_SAVE_WAIT_SECONDS:-60}"

@@ -100,7 +100,7 @@ signed() { run bash -c ". '$BIN/common.sh'; steam_setup_signed /tmp/SteamSetup.e
   run check UPDATE_WITHOUT_BACKUP=true
   [ "$status" -eq 0 ]
   run check AUTO_UPDATE=false
-  [ "$status" -eq 0 ]
+  [ "$status" -ne 0 ]
   rmdir "$SAVE_DIR"
   run check X=1
   [ "$status" -eq 0 ]
