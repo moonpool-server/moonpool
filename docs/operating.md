@@ -20,9 +20,20 @@ Lost the machine? Deauthorize devices in Steam and change the password. `docker 
 
 ## Joining
 
-There's no port to forward. Invite each player with `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request, you accept it in the viewer (`AUTO_ACCEPT_FRIENDS=1` has Moonpool accept invited players within a minute, using the host's Steam web session), and they hit Join Game or use the join page. `ALLOWLIST_ONLY=false` lets in anyone who asks. With `AUTO_ACCEPT_FRIENDS=0`, Moonpool reads the waiting requests once a minute through the same Steam web session the lobby lookup uses, without accepting or refusing any, and shows how many of them it would let in (invited players, or anyone with `ALLOWLIST_ONLY=false`, never a banned one) on the Discord card and in `bin/moonpool status`, which also names up to five when `SHOW_PLAYER_NAMES=true`. Anyone already friends with the account can join either way until you remove them from its friends in the viewer, or with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
+The game needs no forwarded port. Invite each player with `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request, you accept it in the viewer (`AUTO_ACCEPT_FRIENDS=1` has Moonpool accept invited players within a minute, using the host's Steam web session), and they hit Join Game or use the join page. `ALLOWLIST_ONLY=false` lets in anyone who asks. With `AUTO_ACCEPT_FRIENDS=0`, Moonpool reads the waiting requests once a minute through the same Steam web session the lobby lookup uses, without accepting or refusing any, and shows how many of them it would let in (invited players, or anyone with `ALLOWLIST_ONLY=false`, never a banned one) on the Discord card and in `bin/moonpool status`, which also names up to five when `SHOW_PLAYER_NAMES=true`. Anyone already friends with the account can join either way until you remove them from its friends in the viewer, or with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
 
 `moonpool ban add <name>` removes a matching player whenever they join, and `players kick` only removes them for now. `ban add <steamid64>` also takes them off the host's friends list, but only with `AUTO_ACCEPT_FRIENDS=1`; without it they can still join until you remove them in the viewer
+
+## Public address
+
+Players open the join page and fetch mods on port 8081; the game itself needs no open port. Pick one way for them to reach it:
+
+- **Quick tunnel**, no setup: `TUNNEL=quick` and `COMPOSE_PROFILES=tunnel` in `.env`. The address is free and random and changes whenever the tunnel restarts, for example after a reboot. The Discord card and `bin/moonpool status` always show the current one, so send friends there rather than a saved link.
+- **Stable, no domain**: [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel) on the host, `tailscale funnel --bg http://127.0.0.1:8081`, then `SN2_PUBLIC_URL=https://<machine>.<tailnet>.ts.net`, `TUNNEL=off` and `MODS_BIND=127.0.0.1`. It's free and in beta, with bandwidth limits Tailscale doesn't state, so try a mod download through it.
+- **Your own domain** on Cloudflare: `TUNNEL=token` and `COMPOSE_PROFILES=tunnel-token` with the tunnel's token.
+- **Your own network only**: `http://<this machine's address>:8081/join`, nothing else needed.
+
+Never forward the viewer's port 8080, and don't put 8081 on the internet as plain http.
 
 ## Xbox and Game Pass players
 

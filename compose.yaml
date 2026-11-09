@@ -138,7 +138,7 @@ services:
       # Point BACKUP_DIR at any mount (NAS, second disk); default ./backups.
       - "${BACKUP_DIR:-./backups}:/archive"
 
-  # Opt-in quick HTTPS address: TUNNEL=quick docker compose --profile tunnel up -d.
+  # Opt-in quick HTTPS address: TUNNEL=quick and COMPOSE_PROFILES=tunnel in .env.
   # The origin is only lighttpd's read-only player root on 8081, never noVNC.
   tunnel:
     image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
@@ -148,7 +148,7 @@ services:
     depends_on:
       - sn2
 
-  # Stable-address upgrade. Configure the named tunnel's public hostname to
+  # Cloudflare named tunnel on your own domain. Configure the named tunnel's public hostname to
   # http://sn2:8081 in Cloudflare, and put that hostname in SN2_PUBLIC_URL.
   tunnel-token:
     image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
