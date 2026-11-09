@@ -77,6 +77,13 @@ jobs:
       - name: Run the launcher tests
         shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File client\tests\moonpool.tests.ps1
+      - name: bin\moonpool runs from cmd and PowerShell
+        shell: pwsh
+        run: |
+          $out = cmd /c "bin\moonpool.cmd help" 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'Usage: moonpool') { throw "cmd: $LASTEXITCODE $out" }
+          $out = powershell -NoProfile -Command "bin/moonpool help" 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'Usage: moonpool') { throw "powershell: $LASTEXITCODE $out" }
 
   # A release only exists if every check above passed on that tag.
   release:

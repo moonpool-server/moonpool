@@ -1900,8 +1900,9 @@ EOF
   # the first is answered (the fakes' own log; wall time is not evidence here).
   FAKE_DELAY=1 fake_mod true
   FAKE_DELAY=1 fake_mod true
-  "$CTL" --json server slots 8 >"$BATS_TEST_TMPDIR/a.json" &
-  "$CTL" --json server slots 7 >"$BATS_TEST_TMPDIR/b.json" &
+  # A long lock wait: the order is under test here, and a busy machine must not turn the wait into a refusal.
+  SN2_LOCK_WAIT=60 "$CTL" --json server slots 8 >"$BATS_TEST_TMPDIR/a.json" &
+  SN2_LOCK_WAIT=60 "$CTL" --json server slots 7 >"$BATS_TEST_TMPDIR/b.json" &
   wait
   log="$SN2_CONTROL_DIR/fake.log"
   [ "$(grep -c ' claim ' "$log")" -eq 2 ] && [ "$(grep -c ' answer ' "$log")" -eq 2 ]
