@@ -727,7 +727,7 @@ function Expand-Counted([string]$Archive, [string]$Dest, [string]$Label) {
         $in = $entry.Open()
         # CreateNew: two names that land on one file (a short 8.3 name, say) never overwrite each other.
         try { $out = [IO.File]::Open($path, [IO.FileMode]::CreateNew) }
-        catch { Fail "${Label}: two entries in the archive land on the same file ($name); nothing changed, game not started" }
+        catch { if (-not (Test-Path -LiteralPath $path)) { throw }; Fail "${Label}: two entries in the archive land on the same file ($name); nothing changed, game not started" }
         while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
           $total += $n
           if ($total -gt $MaxUnpackedBytes) { Fail "${Label}: the archive unpacks to more than this launcher accepts; nothing changed, game not started" }
