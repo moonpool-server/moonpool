@@ -114,10 +114,10 @@ Tested by hand by the maintainer, with real players joining over the internet on
 | Branch | Build | Result |
 |---|---|---|
 | public | `25400633` | Hosted; real players joined over the internet |
-| experimental | `26283380` | Hosted for days; joins, the mod install through the launcher and moving the world between two hosts, each in short sessions |
-| experimental | `26496980` (9 November 2026) | Does not host: the UE4SS build Moonpool uses hangs on this executable before the hosting mod loads. The server comes up, says it is not hosting, and waits |
+| experimental | `26283380` | Hosted; real players joined over the internet. Joins with mods through the launcher, and moving the world between two hosts, each in short sessions |
+| experimental | `26496980` (seen 9 November 2026) | Did not host on the maintainer's server: the UE4SS build Moonpool uses hung on this executable before the hosting mod loaded. The server came up, reported no hosted world, and waited |
 
-A game update can break it, as that last row shows. The host says so and the [guide](docs/operating.md) covers what to do. A newer build is unproven until a host comes up on it. Nobody but the maintainer has reported a run yet; if you run one, an issue saying what happened is the most useful thing you can send
+A game update can break it, as that last row shows. The host says so and the [guide](docs/operating.md) covers what to do. A newer build is unproven until a host comes up on it. This table records the maintainer's runs only; if you run one, an issue saying what happened is the most useful thing you can send
 
 ## More
 
@@ -144,11 +144,11 @@ The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agree
 
 Unknown Worlds doesn't officially support mods yet. KRAFTON, Unknown Worlds or Valve could act against this project or the hosting account. Use a spare account you can afford to lose and decide for yourself. This isn't legal advice
 
-**Is it approved by the game's makers or by Valve?** No. Nobody has been asked and nobody has consented
+**Is it approved by the game's makers or by Valve?** No. This project is unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve, and none of them has consented to it
 
-**Can the hosting account be suspended?** Yes. Both sets of terms allow it and nothing here can prevent it. A separate account limits what you lose; it does not make the use allowed
+**Can the hosting account lose the game, or be acted against?** Yes. The EULA says breaking its terms can end your game licence, and Valve can act against a Steam account under its agreement. Nothing here can prevent either. A separate account limits what you lose; it does not make the use allowed
 
-**Why a licensed copy on a Steam account, not a dedicated server?** There is no official dedicated server. Moonpool runs the real game under Wine, signed in to an account that owns it, and the game checks that sign-in. One copy per host, and that copy's terms apply
+**Why a licensed copy on a Steam account, not a dedicated server?** Moonpool has no dedicated-server program to run: it runs the normal game under Wine and waits for Steam to be signed in. Each world needs its own account that owns the game, and that copy's terms apply
 
 We try to stay out of the studio's way. Moonpool ships no game files, no data taken from them and none of the game's art. Its code does name objects in the game so it can call them. Its own commands don't spawn items or teleport anyone, and the game's console is reachable from the host only if you turn that on. It hosts four players by default, the game's own limit. If something breaks take mods out and check the game alone before you report anything to Unknown Worlds, and report Moonpool problems here
 
