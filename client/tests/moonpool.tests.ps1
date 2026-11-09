@@ -34,12 +34,13 @@ function New-Zip([string]$Out, [string[]]$Members, [string]$Version = '1') {
 
 # A zip written entry by entry, for names no folder can hold. $Declare overstates an entry's
 # unpacked size in the central directory; $Links makes entries Unix symlinks to the given target.
-function New-RawZip([string]$Out, [string[]]$Names, [hashtable]$Declare = @{}, [hashtable]$Links = @{}) {
+function New-RawZip([string]$Out, [string[]]$Names, [hashtable]$Declare = @{}, [hashtable]$Links = @{}, [hashtable]$Bodies = @{}) {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   if (Test-Path -LiteralPath $Out) { Remove-Item -LiteralPath $Out -Force }
   $z = [IO.Compression.ZipFile]::Open($Out, 'Create')
   foreach ($n in $Names) {
     $e = $z.CreateEntry($n); $body = 'x'
+    if ($Bodies.ContainsKey($n)) { $body = $Bodies[$n] }
     if ($Links.ContainsKey($n)) { $e.ExternalAttributes = [int](0xA1FF -shl 16); $body = $Links[$n] }  # S_IFLNK | 0777
     $s = New-Object IO.StreamWriter($e.Open()); $s.Write($body); $s.Dispose()
   }
@@ -401,11 +402,11 @@ try {
   Write-Manifest $wz @((Mod $wz 'Foo' 'Foo.zip' 'Foo' 'Foo'))
   $r = Invoke-Join $wz
   Check ($r.Code -eq 0 -and (Text (Join-Path $wz.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v1') 'the mod to be updated is installed first'
-  function Refused([string[]]$Names, [string]$Why, [hashtable]$Declare = @{}) {
+  function Refused([string[]]$Names, [string]$Why, [hashtable]$Declare = @{}, [string]$Extra = '', [hashtable]$Bodies = @{}) {
     $before = Snapshot $wz.Game
-    New-RawZip (Join-Path $wz.Server 'Foo.zip') $Names $Declare
+    New-RawZip (Join-Path $wz.Server 'Foo.zip') $Names $Declare -Bodies $Bodies
     Write-Manifest $wz @((Mod $wz 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '2.0'))
-    $r = Invoke-Join $wz
+    $r = Invoke-Join $wz -Extra $Extra
     $ok = $r.Code -ne 0 -and $r.Out -match $Why -and $null -eq $r.Launched -and (Snapshot $wz.Game) -eq $before
     if (-not $ok) { Write-Host "    exit $($r.Code): $($r.Out.Trim())" }
     return $ok
@@ -415,6 +416,7 @@ try {
          (Refused @('Foo/Scripts/main.lua', 'aux.txt') 'unsafe path in the archive: aux\.txt')) 'a Windows device name in the archive is refused'
   Check (Refused @('Foo/Scripts/main.lua', 'Foo/a.bin', 'Foo/b.bin') 'unpacks to more than' @{ 'Foo/a.bin' = 4294967294; 'Foo/b.bin' = ($maxBytes - 4294967294) }) 'an archive declaring one byte past the expansion limit is refused'
   Check (Refused (@('Foo/Scripts/main.lua') + @(1..$maxEntries | ForEach-Object { "Foo/f$_.txt" })) "holds $($maxEntries + 1) files") 'an archive one entry past the limit is refused'
+  Check (Refused @('Foo/Scripts/main.lua', 'Foo/big.bin') 'unpacks to more than' @{ 'Foo/big.bin' = 1 } '-UnpackLimit 200000' @{ 'Foo/big.bin' = ('y' * 300000) }) 'an archive that declares 1 byte but holds more is stopped by the bytes really written'
 
   Write-Host 'an entry marked as a Unix symlink unpacks as a plain file holding the link text'
   New-RawZip (Join-Path $wz.Server 'Link.zip') @('Link/Scripts/main.lua', 'Link/Scripts/up.lua', 'Link/Scripts/win.lua') -Links @{ 'Link/Scripts/up.lua' = '../../../../../../outside.txt'; 'Link/Scripts/win.lua' = 'C:\Windows\win.ini' }
