@@ -131,11 +131,15 @@ heartbeat() {
       echo "$build" >"$RUN_DIR/last-buildid"; oldbuild=$build
     fi
     [ $((n % 2)) -eq 0 ] || continue
-    # Every minute: accept pending friend requests from invited players (AUTO_ACCEPT_FRIENDS=1).
+    # Every minute: accept pending friend requests from invited players (AUTO_ACCEPT_FRIENDS=1),
+    # or only count them, read-only, for moonpool status and the card.
     if [ "${AUTO_ACCEPT_FRIENDS:-0}" = 1 ]; then
       STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" 2>&1 |
         grep -v '^friend accept skipped' | sed "s/^/[$(stamp)] /" >>"$OUT" || true
-    fi
+    elif STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" --pending \
+      >"$RUN_DIR/friend-requests.json.tmp" 2>/dev/null; then
+      mv "$RUN_DIR/friend-requests.json.tmp" "$RUN_DIR/friend-requests.json"
+    else rm -f "$RUN_DIR/friend-requests.json"; fi
     # For a build whose log masks the lobby id, Steam's own answer: once, then every 5 minutes.
     if [ -n "$pid" ] && jq -e '.hosted == true' "$CONTROL_DIR/readiness.json" >/dev/null 2>&1 &&
       { [ ! -s "$RUN_DIR/mod-session.json" ] || [ $((n % 10)) -eq 0 ]; }; then
@@ -163,6 +167,7 @@ heartbeat() {
   done
 }
 python3 "$(dirname "$0")/join-page.py" || true
+rm -f "$RUN_DIR/friend-requests.json" # a count from before this start is not shown
 heartbeat &
 trap 'kill $! 2>/dev/null' EXIT
 

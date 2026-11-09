@@ -59,13 +59,14 @@ TEXT = {
     "accepts_invite": "an admin has to invite you first",
     "accepts_manual": "the host accepts it by hand",
     "steam_join": "• Press **Join**, or **Friends** › right-click the host › **Join Game**",
+    "friend_requests": "-# Friend requests waiting for the host: {n}",
     "xbox_title": "**Xbox / PC Game Pass**",
     "xbox_beta": "• Join the Subnautica 2 preview in **Xbox Insider Hub**",
     "xbox_add": "• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? Ask the host to run moonpool diag friend-code",
     "tip": "-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab",
     "footer": "-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve",
 }
-PLACEHOLDERS = {"last_aboard": {"when"}, "scanned": {"scans"}, "mods": {"n", "url"}, "steam_beta": {"branch"}, "steam_add": {"accepts"}}
+PLACEHOLDERS = {"last_aboard": {"when"}, "scanned": {"scans"}, "mods": {"n", "url"}, "steam_beta": {"branch"}, "steam_add": {"accepts"}, "friend_requests": {"n"}}
 TEXT_MAX = 400
 
 
@@ -380,6 +381,11 @@ def world_container():
         codes.append(f"**Xbox** add code **{sonar}**")
     if mods:
         codes.append(mods)
+    fr = RUN / "friend-requests.json"  # the watcher rewrites it every minute; an older one is not shown
+    fresh = E.get("AUTO_ACCEPT_FRIENDS", "0") != "1" and fr.is_file() and time.time() - fr.stat().st_mtime < 180
+    waiting = (read_json(fr, {}) or {}).get("count") if fresh else 0
+    if isinstance(waiting, int) and waiting > 0:
+        codes.append(T["friend_requests"].format(n=waiting))
 
     head_component = {"type": 10, "content": clamp(head, 260)}
     if join:

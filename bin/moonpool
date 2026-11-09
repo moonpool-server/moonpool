@@ -900,11 +900,20 @@ def inner(r):
     if op == "status":
         url = public_url()
         join = f"{url}/join" if url else None
+        f = Path(run_dir()) / "friend-requests.json"  # the watcher's minute check; None: not checked lately
+        fr = read_json(f) if f.is_file() and time.time() - f.stat().st_mtime < 180 else None
+        if isinstance(fr, dict) and E.get("SHOW_PLAYER_NAMES", "true") != "true":
+            fr["names"] = []
         if R["json"]:
-            finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join})
+            finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join,
+                                                                "friend_requests": fr})
         print(f"== join page: {join or 'no public address; port ' + (E.get('SN2_MODS_PORT') or '8081') + ' on this machine serves it, reachable as MODS_BIND allows'}")
         print("== readiness (written by the mod every poll)")
         print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
+        k = fr.get("count") if isinstance(fr, dict) else 0
+        if isinstance(k, int) and k > 0:
+            print(f"{k} friend request{'s' * (k > 1)} waiting: accept {'them' if k > 1 else 'it'} in the viewer"
+                  + (f" {json.dumps(fr.get('names'), ensure_ascii=False)}" if fr.get("names") else ""))
         sys.exit(0)
     if op == "verify_fresh":
         if R["json"]:
