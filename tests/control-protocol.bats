@@ -487,7 +487,7 @@ steam_env() {
   run env TUNNEL=quick TUNNEL_METRICS_URL="file://$BATS_TEST_TMPDIR/quicktunnel" "$CTL" status
   [[ $output == *"== join page: https://a-b-c.trycloudflare.com/join"* ]]
   run env TUNNEL=off "$CTL" status
-  [[ $output == *"== join page: no public address; on your network http://<this machine>:8081/join"* ]]
+  [[ $output == *"== join page: no public address; port 8081 on this machine serves it"* ]]
 }
 
 @test "invite takes a profile link" {
