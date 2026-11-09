@@ -144,7 +144,7 @@ For mentions on important alerts, make a role people can opt into and set `DISCO
 
 ## Map
 
-`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one dot per player where they were 15 minutes ago (`MAP_DELAY_MINUTES`), colored by depth and tagged with their name ("Player 1" with `SHOW_PLAYER_NAMES=false`), plus bases and lifepods. Someone who left stays as a faded dot for an hour. With a map picture behind it, everywhere nobody has been yet sits under fog, cleared in 50 m squares on the same delay. Anyone with the link can see it all
+`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one dot per player where they were 15 minutes ago (`MAP_DELAY_MINUTES`), colored by depth and tagged with their name ("Player 1" with `SHOW_PLAYER_NAMES=false`), plus bases and lifepods. Someone who left stays as a faded dot for an hour. With a map picture behind it, everywhere nobody has been yet stays dark, so the map gives nothing away, and clears in soft patches on the same delay. The Discord picture is fogged the same way. Anyone with the link can see it all
 
 Moonpool ships no map picture. To put one behind the dots, copy a map file into the data volume:
 
