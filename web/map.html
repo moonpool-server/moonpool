@@ -68,7 +68,7 @@ var Fog = L.Layer.extend({
     g.fillStyle = '#071923'; g.fillRect(0, 0, size.x, size.y);
     g.globalCompositeOperation = 'destination-out';
     (this._pts || []).forEach(function (p) {
-      var at = m.latLngToContainerPoint(p), px = Math.abs(m.latLngToContainerPoint([p[0], p[1] + r]).x - at.x);
+      var at = m.latLngToContainerPoint(p), px = Math.max(6, Math.abs(m.latLngToContainerPoint([p[0], p[1] + r]).x - at.x));  // still seen zoomed out
       if (at.x < -px || at.y < -px || at.x > size.x + px || at.y > size.y + px) return;
       var soft = g.createRadialGradient(at.x, at.y, px * 0.35, at.x, at.y, px);
       soft.addColorStop(0, 'rgba(0,0,0,1)'); soft.addColorStop(1, 'rgba(0,0,0,0)');
@@ -93,12 +93,13 @@ function setup(bgs) {
   var hosts = [];
   bgs.forEach(function (g) {
     var area = [[g.bounds[1], g.bounds[0]], [g.bounds[3], g.bounds[2]]];
-    if (g.tiles) L.tileLayer(g.url, {tileSize: TILE, minZoom: -2, maxZoom: g.max_zoom + 1, maxNativeZoom: g.max_zoom, bounds: area}).addTo(map);
+    if (g.tiles) L.tileLayer(g.url, {tileSize: TILE, minZoom: -2, maxZoom: g.max_zoom + 1, minNativeZoom: 0, maxNativeZoom: g.max_zoom, bounds: area}).addTo(map);
     else L.imageOverlay(g.url, area).addTo(map);
     if (/^https?:/.test(g.url)) { var h = new URL(g.url).hostname; if (hosts.indexOf(h) < 0) hosts.push(h); }
   });
   if (bgs.length) {
     map.fitBounds([[b[1], b[0]], [b[3], b[2]]]);
+    map.setMinZoom(map.getZoom() - 1);  // no further out than the whole world, with room
     if (hosts.length) document.getElementById('credit').textContent = 'Background from ' + hosts.join(', ');
   }
   map.createPane('fog').style.zIndex = 350;  // over the picture, under the dots
