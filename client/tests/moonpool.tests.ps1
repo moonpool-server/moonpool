@@ -32,6 +32,30 @@ function New-Zip([string]$Out, [string[]]$Members, [string]$Version = '1') {
   Remove-Item -LiteralPath $dir -Recurse -Force
 }
 
+# A zip written entry by entry, for names no folder can hold. $Declare overstates an entry's
+# unpacked size in the central directory; $Links makes entries Unix symlinks to the given target.
+function New-RawZip([string]$Out, [string[]]$Names, [hashtable]$Declare = @{}, [hashtable]$Links = @{}) {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  if (Test-Path -LiteralPath $Out) { Remove-Item -LiteralPath $Out -Force }
+  $z = [IO.Compression.ZipFile]::Open($Out, 'Create')
+  foreach ($n in $Names) {
+    $e = $z.CreateEntry($n); $body = 'x'
+    if ($Links.ContainsKey($n)) { $e.ExternalAttributes = [int](0xA1FF -shl 16); $body = $Links[$n] }  # S_IFLNK | 0777
+    $s = New-Object IO.StreamWriter($e.Open()); $s.Write($body); $s.Dispose()
+  }
+  $z.Dispose()
+  if ($Declare.Count -eq 0 -and $Links.Count -eq 0) { return }
+  $b = [IO.File]::ReadAllBytes($Out); $patched = 0
+  for ($i = 0; $i -le $b.Length - 46; $i++) {
+    if ($b[$i] -ne 0x50 -or $b[$i + 1] -ne 0x4b -or $b[$i + 2] -ne 1 -or $b[$i + 3] -ne 2) { continue }
+    $name = [Text.Encoding]::UTF8.GetString($b, $i + 46, [BitConverter]::ToUInt16($b, $i + 28))
+    if ($Links.ContainsKey($name)) { $b[$i + 5] = 3; $patched++ }  # made by Unix, as Info-ZIP writes a symlink
+    if ($Declare.ContainsKey($name)) { [BitConverter]::GetBytes([uint32]$Declare[$name]).CopyTo($b, $i + 24); $patched++ }
+  }
+  if ($patched -ne $Declare.Count + $Links.Count) { throw "New-RawZip patched $patched of the entries it was asked to" }
+  [IO.File]::WriteAllBytes($Out, $b)
+}
+
 function New-World {
   $root = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-' + [guid]::NewGuid().ToString('N'))
   $steam = Join-Path $root 'Steam'
@@ -128,6 +152,7 @@ function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Ans
   $cmd = "`$env:LOCALAPPDATA='$($w.Root)'; & '$Script' -ManifestUrl '$(([Uri]$w.Manifest).AbsoluteUri)' -SteamRoot '$($w.Steam)' " +
          "-Downloads '$($w.Downloads)' -IsGameRunning { $running } -Launch { param(`$u) Set-Content -LiteralPath '$launchLog' -Value `$u; $start; $LaunchExtra } " +
          "-OpenPage { param(`$u) Set-Content -LiteralPath '$pageLog' -Value `$u } -Approve { param(`$q) Set-Content -LiteralPath '$askLog' -Value `$q; $Answer } -OpenFriend { param(`$u) } -ScanFile { param(`$p) $Scan } -NoShortcuts $Extra; exit `$LASTEXITCODE"
+  $ErrorActionPreference = 'Continue'  # a launcher that dies writing to stderr is a failed check, not a stopped suite
   $out = & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String
   $launched = $null; $page = $null; $asked = ''; $session = @()
   if (Test-Path -LiteralPath $askLog) { $asked = (Get-Content -LiteralPath $askLog -Raw) }
@@ -363,13 +388,41 @@ try {
   $r = Invoke-Join $w8
   Check ($r.Code -eq 0 -and $r.Out -match 'starting that record over') "a corrupt ledger does not block the join (got: $($r.Out.Trim()))"
   $w9 = New-World; $worlds += $w9
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $evil = [IO.Compression.ZipFile]::Open((Join-Path $w9.Server 'Evil.zip'), 'Create')
-  foreach ($n in @('Scripts/main.lua', '../../evil.txt')) { $s = New-Object IO.StreamWriter($evil.CreateEntry($n).Open()); $s.Write('x'); $s.Dispose() }
-  $evil.Dispose()
+  New-RawZip (Join-Path $w9.Server 'Evil.zip') @('Scripts/main.lua', '../../evil.txt')
   Write-Manifest $w9 @((Mod $w9 'Evil' 'Evil.zip' 'Evil' ''))
   $r = Invoke-Join $w9
   Check ($r.Code -ne 0 -and $r.Out -match 'unsafe path in the archive' -and -not (Test-Path -LiteralPath $w9.Mods) -and $null -eq $r.Launched) "a climbing path is refused (got: $($r.Out.Trim()))"
+
+  Write-Host 'an update whose archive breaks a limit is refused and the installed version stays'
+  $wz = New-World; $worlds += $wz
+  $src = Text $Script
+  $maxEntries = [int]([regex]::Match($src, '(?m)^\$MaxArchiveEntries = (\d+)\s*$').Groups[1].Value)
+  $maxBytes = [long]([regex]::Match($src, '(?m)^\$MaxUnpackedBytes = (\d+)GB\s*$').Groups[1].Value) * 1GB
+  Write-Manifest $wz @((Mod $wz 'Foo' 'Foo.zip' 'Foo' 'Foo'))
+  $r = Invoke-Join $wz
+  Check ($r.Code -eq 0 -and (Text (Join-Path $wz.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v1') 'the mod to be updated is installed first'
+  function Refused([string[]]$Names, [string]$Why, [hashtable]$Declare = @{}) {
+    $before = Snapshot $wz.Game
+    New-RawZip (Join-Path $wz.Server 'Foo.zip') $Names $Declare
+    Write-Manifest $wz @((Mod $wz 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '2.0'))
+    $r = Invoke-Join $wz
+    $ok = $r.Code -ne 0 -and $r.Out -match $Why -and $null -eq $r.Launched -and (Snapshot $wz.Game) -eq $before
+    if (-not $ok) { Write-Host "    exit $($r.Code): $($r.Out.Trim())" }
+    return $ok
+  }
+  if (-not ($maxEntries -gt 0 -and $maxBytes -gt 0)) { throw 'the archive limits were not found in the launcher' }
+  Check ((Refused @('Foo/Scripts/main.lua', 'Foo/Scripts/CON.lua') 'unsafe path in the archive: Foo/Scripts/CON\.lua') -and
+         (Refused @('Foo/Scripts/main.lua', 'aux.txt') 'unsafe path in the archive: aux\.txt')) 'a Windows device name in the archive is refused'
+  Check (Refused @('Foo/Scripts/main.lua', 'Foo/a.bin', 'Foo/b.bin') 'unpacks to more than' @{ 'Foo/a.bin' = 4294967294; 'Foo/b.bin' = ($maxBytes - 4294967294) }) 'an archive declaring one byte past the expansion limit is refused'
+  Check (Refused (@('Foo/Scripts/main.lua') + @(1..$maxEntries | ForEach-Object { "Foo/f$_.txt" })) "holds $($maxEntries + 1) files") 'an archive one entry past the limit is refused'
+
+  Write-Host 'an entry marked as a Unix symlink unpacks as a plain file holding the link text'
+  New-RawZip (Join-Path $wz.Server 'Link.zip') @('Link/Scripts/main.lua', 'Link/Scripts/up.lua', 'Link/Scripts/win.lua') -Links @{ 'Link/Scripts/up.lua' = '../../../../../../outside.txt'; 'Link/Scripts/win.lua' = 'C:\Windows\win.ini' }
+  Write-Manifest $wz @((Mod $wz 'Link' 'Link.zip' 'Link' 'Link'))
+  $r = Invoke-Join $wz
+  $placed = @('Link', 'Link\Scripts', 'Link\Scripts\up.lua', 'Link\Scripts\win.lua') | ForEach-Object { Get-Item -LiteralPath (Join-Path $wz.Mods $_) -Force -ErrorAction SilentlyContinue }
+  Check ($r.Code -eq 0 -and @($placed).Count -eq 4 -and -not @($placed | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -and
+         (Text (Join-Path $wz.Mods 'Link\Scripts\up.lua')) -eq '../../../../../../outside.txt') "no reparse point in the mod folder (got $($r.Code)): $($r.Out.Trim())"
 
   Write-Host 'a mod whose folder inside the archive climbs out of it is refused before anything is fetched'
   $wp = New-World; $worlds += $wp
