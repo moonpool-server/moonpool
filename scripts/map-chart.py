@@ -141,6 +141,12 @@ def published(chart, status, world, delay_s, now, names=True):
             "divers": divers, "bases": settled("bases"), "lifepods": settled("lifepods")}
 
 
+class _HttpsOnly(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return super().redirect_request(req, fp, code, msg, headers, newurl) if newurl.startswith("https://") else None
+
+
+_OPEN = urllib.request.build_opener(_HttpsOnly).open
 MAX_PICTURE_BYTES = 20 * 1024 * 1024  # a tile or picture past this is treated as missing
 
 
@@ -152,7 +158,7 @@ def fetch(url, cache):
         return None
     if not path.exists():
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "moonpool"}), timeout=10) as r:
+            with _OPEN(urllib.request.Request(url, headers={"User-Agent": "moonpool"}), timeout=10) as r:
                 body = r.read(MAX_PICTURE_BYTES + 1)
             if len(body) > MAX_PICTURE_BYTES:
                 print(f"map: {url} is over {MAX_PICTURE_BYTES // (1024 * 1024)} MB, left out", file=sys.stderr)
@@ -287,7 +293,8 @@ def still(page, bg, public, cache):
 def render_page(template, page, public_url):
     """The page with its link-preview tags filled in; absolute addresses need the public url."""
     world = page["world"] or "World map"
-    about = "Where players were on %s about %d minutes ago, with bases and lifepods." % (world, page["delay_minutes"])
+    about = ("Where players were on %s about %d minutes ago." % (world, page["delay_minutes"])
+             if page["explored"] is not None else "A map of %s." % world)
     image = (public_url.rstrip("/") + "/map.png") if public_url else "map.png"
     return (template.replace("{{WORLD}}", html.escape(world)).replace("{{ABOUT}}", html.escape(about))
             .replace("{{IMAGE}}", html.escape(image)))
@@ -332,7 +339,7 @@ def main():
         print("map-chart: no background: %s" % err, file=sys.stderr)
     page_data["background"] = page_data["backgrounds"][0] if page_data["backgrounds"] else None
     # The still only when what it shows changed: the explored places, bases, lifepods or backdrop.
-    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"] or [], page_data["bases"], page_data["lifepods"],
+    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"], page_data["bases"], page_data["lifepods"],
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)

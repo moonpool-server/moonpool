@@ -204,6 +204,8 @@ def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothin
 if __name__ == "__main__":
     test_each_player_shows_where_they_were_after_the_delay_and_never_now()
     test_a_new_base_waits_out_the_delay_too()
+    test_players_and_bases_can_be_kept_off_the_map()
+    test_a_map_picture_comes_over_https_only()
     test_the_map_file_gives_each_game_branch_its_own_background()
     test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits()
     test_a_branch_can_lay_several_pictures_side_by_side()

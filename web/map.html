@@ -121,8 +121,10 @@ function draw(d) {
   if (!map) setup(d.backgrounds || (d.background ? [d.background] : []));
   ['players', 'bases', 'lifepods'].forEach(function (k) { layers[k].clearLayers(); });
   var seen = [], h = d.cell_m / 2;
-  if (d.explored) layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
-  else if (map.hasLayer(layers.fog)) map.removeLayer(layers.fog);  // MAP_PLAYERS=false: nothing explored is published
+  if (d.explored) {
+    layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
+    if (layers.fogHeld) { layers.fog.addTo(map); layers.fogHeld = false; }
+  } else if (map.hasLayer(layers.fog)) { map.removeLayer(layers.fog); layers.fogHeld = true; }  // nothing explored is published
   d.divers.forEach(function (p) {
     pin(layers.players, [p.x, p.y], p.name + (p.online ? ' · ' + p.depth + ' m' : ' · left ' + p.left_minutes + ' min ago'), colour(p.depth), !p.online);
     seen.push([p.y, p.x]);
@@ -133,8 +135,8 @@ function draw(d) {
     document.title = d.world + ' map';
     document.getElementById('title').textContent = d.world;
   }
-  document.getElementById('about').textContent = d.divers.length
-    ? 'Where each player was about ' + d.delay_minutes + ' minutes ago. Never where they are now.'
+  document.getElementById('about').textContent = d.explored === null ? 'Player positions are not shown on this map.'
+    : d.divers.length ? 'Where each player was about ' + d.delay_minutes + ' minutes ago. Never where they are now.'
     : 'Nobody has played here in the last hour. Players show up about ' + d.delay_minutes + ' minutes after they move.';
   var bare = !(d.backgrounds && d.backgrounds.length);
   if (!map.fitted && seen.length) {  // open where the action is; the whole world is one zoom out

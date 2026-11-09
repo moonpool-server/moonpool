@@ -17,6 +17,7 @@ import struct
 import sys
 import tempfile
 import threading
+import urllib.error
 import urllib.parse
 
 sys.dont_write_bytecode = True
@@ -282,6 +283,37 @@ def main() -> int:
         os.environ.pop(k) if v is None else os.environ.__setitem__(k, v)
     check(again.BASE == "https://steamcommunity.com" and again.API == "https://api.steampowered.com",
           "the environment cannot send the session anywhere but Steam")
+    hits = []
+
+    class Elsewhere(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.headers.get("Cookie"))
+            self.send_response(200); self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    away = http.server.HTTPServer(("127.0.0.1", 0), Elsewhere)
+    threading.Thread(target=away.serve_forever, daemon=True).start()
+
+    class Bounce(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302); self.send_header("Location", f"http://127.0.0.1:{away.server_port}/x"); self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    bounce = http.server.HTTPServer(("127.0.0.1", 0), Bounce)
+    threading.Thread(target=bounce.serve_forever, daemon=True).start()
+    fa.BASE, kept = f"http://127.0.0.1:{bounce.server_port}", fa.BASE
+    try:
+        fa._req("/textfilter/ajaxgetfriendslist", {"sessionid": "s", "steamLoginSecure": "secret"})
+        followed = True
+    except urllib.error.HTTPError:
+        followed = False
+    fa.BASE = kept
+    bounce.shutdown(); away.shutdown()
+    check(not followed and hits == [], "a redirect is refused, so the cookies never reach another host")
     print("all passed" if FAILS == 0 else f"{FAILS} failed")
     return 1 if FAILS else 0
 
