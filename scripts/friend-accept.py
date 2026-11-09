@@ -38,7 +38,7 @@ import urllib.request
 
 WINE_SECRET = b"I'm hunting wabbits"  # crypt32_protectdata_secret, protectdata.c
 REQUEST_RECIPIENT = 2  # EFriendRelationship.RequestRecipient
-BASE = os.environ.get("STEAMCOMMUNITY_BASE", "https://steamcommunity.com")
+BASE = "https://steamcommunity.com"  # fixed: the session cookies go nowhere else
 READ_ONLY = False
 
 
@@ -187,7 +187,7 @@ def accept_pending(cookies: dict[str, str], dry_run: bool = False,
     return lines
 
 
-API = os.environ.get("STEAMAPI_BASE", "https://api.steampowered.com")
+API = "https://api.steampowered.com"
 
 
 def own_lobby(cookies: dict[str, str], steamid: str) -> str:

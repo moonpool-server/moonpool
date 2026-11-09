@@ -274,6 +274,14 @@ def main() -> int:
         for k in ("ALLOWLIST_ONLY", "SHOW_PLAYER_NAMES"):
             os.environ.pop(k)
     srv.shutdown()
+    saved = {k: os.environ.get(k) for k in ("STEAMCOMMUNITY_BASE", "STEAMAPI_BASE")}
+    os.environ.update(STEAMCOMMUNITY_BASE="https://evil.example", STEAMAPI_BASE="https://evil.example")
+    again = importlib.util.module_from_spec(importlib.util.spec_from_file_location("fa_env", spec.origin))
+    again.__spec__.loader.exec_module(again)
+    for k, v in saved.items():
+        os.environ.pop(k) if v is None else os.environ.__setitem__(k, v)
+    check(again.BASE == "https://steamcommunity.com" and again.API == "https://api.steampowered.com",
+          "the environment cannot send the session anywhere but Steam")
     print("all passed" if FAILS == 0 else f"{FAILS} failed")
     return 1 if FAILS else 0
 

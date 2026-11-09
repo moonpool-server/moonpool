@@ -147,6 +147,9 @@ MAX_PICTURE_BYTES = 20 * 1024 * 1024  # a tile or picture past this is treated a
 def fetch(url, cache):
     """One tile or picture, kept in the data volume so a still costs the network once."""
     path = cache / hashlib.sha256(url.encode()).hexdigest()
+    if not url.startswith("https://"):
+        print(f"map: {url} is not https, left out", file=sys.stderr)
+        return None
     if not path.exists():
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "moonpool"}), timeout=10) as r:
@@ -234,6 +237,8 @@ def backdrop(bgs, public, cache, region=None):
             if it["tiles"]:
                 continue
             src = fetch(it["url"], cache) if "://" in it["url"] else Image.open(public / it["url"]).convert("RGBA")
+            if src is None:
+                continue
             l, t, r, b = it["bounds"]
             box = (round((l - left) * px), round((t - top) * px), round((r - left) * px), round((b - top) * px))
             canvas.paste(src.resize((max(1, box[2] - box[0]), max(1, box[3] - box[1]))), box[:2])
@@ -260,7 +265,7 @@ def still(page, bg, public, cache):
     def at(x, y):
         return ((x - left) * sx, (y - top) * sy)
 
-    if bg:  # the picture shows only what someone has visited
+    if bg and page["explored"] is not None:  # the picture shows only what someone has visited
         shroud = Image.new("L", img.size, 255)
         hole = ImageDraw.Draw(shroud)
         r = page["cell_m"] * 1.1 * sx
@@ -315,6 +320,10 @@ def main():
     public.mkdir(parents=True, exist_ok=True)
     page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now,
                           os.environ.get("SHOW_PLAYER_NAMES", "true") == "true")
+    if os.environ.get("MAP_PLAYERS", "true") != "true":  # no dots and no trace of where anyone went
+        page_data["divers"], page_data["explored"] = [], None
+    if os.environ.get("MAP_BASES", "true") != "true":
+        page_data["bases"] = []
     write_json(store, chart)
     try:
         page_data["backgrounds"] = background(status, os.environ, data, public)
@@ -323,7 +332,7 @@ def main():
         print("map-chart: no background: %s" % err, file=sys.stderr)
     page_data["background"] = page_data["backgrounds"][0] if page_data["backgrounds"] else None
     # The still only when what it shows changed: the explored places, bases, lifepods or backdrop.
-    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"], page_data["bases"], page_data["lifepods"],
+    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"] or [], page_data["bases"], page_data["lifepods"],
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)

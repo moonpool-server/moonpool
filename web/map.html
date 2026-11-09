@@ -121,7 +121,8 @@ function draw(d) {
   if (!map) setup(d.backgrounds || (d.background ? [d.background] : []));
   ['players', 'bases', 'lifepods'].forEach(function (k) { layers[k].clearLayers(); });
   var seen = [], h = d.cell_m / 2;
-  layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
+  if (d.explored) layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
+  else if (map.hasLayer(layers.fog)) map.removeLayer(layers.fog);  // MAP_PLAYERS=false: nothing explored is published
   d.divers.forEach(function (p) {
     pin(layers.players, [p.x, p.y], p.name + (p.online ? ' · ' + p.depth + ' m' : ' · left ' + p.left_minutes + ' min ago'), colour(p.depth), !p.online);
     seen.push([p.y, p.x]);
@@ -143,7 +144,8 @@ function draw(d) {
   if (bare && !map.fitted) map.setView([0, 0], 0);
 }
 function load() {
-  fetch('map.json', {cache: 'no-store'}).then(function (r) { return r.json(); }).then(draw).catch(function () {});
+  fetch('map.json', {cache: 'no-store'}).then(function (r) { if (!r.ok) throw r.status; return r.json(); }).then(draw)
+    .catch(function () { document.getElementById('about').textContent = 'Map data unavailable right now; trying again every minute.'; });
 }
 load();
 setInterval(load, 60000);

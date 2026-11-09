@@ -58,7 +58,13 @@ jobs:
           load: true
           push: false
           tags: moonpool:panel
-      - name: Scan the image for known critical vulnerabilities with a fix (Grype)
+      - name: Report every critical and high vulnerability, fixed or not (Grype)
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9
+          moonpool:panel -o table | awk 'NR == 1 || / (High|Critical) /'
+          | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Fail on a critical vulnerability that has a fix (Grype)
         run: >-
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
           anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9
@@ -100,7 +106,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Stamp the launcher with this run, so an update can never go backwards
-        run: sed -i "s/^\$LauncherBuild = 0/\$LauncherBuild = $GITHUB_RUN_NUMBER/" client/moonpool/moonpool.ps1
+        run: |
+          sed -i "s/^\$LauncherBuild = 0/\$LauncherBuild = $GITHUB_RUN_NUMBER/" client/moonpool/moonpool.ps1
+          cd client/moonpool && sha256sum moonpool-setup.cmd moonpool.ps1 > moonpool-SHA256SUMS.txt
       - name: Record where the player launcher came from
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
