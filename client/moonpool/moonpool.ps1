@@ -904,7 +904,10 @@ function Invoke-Uninstall {
     $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $script:Work | Out-Null
     Install-Plan @() $gone.Remove $script:Work "could not remove Moonpool's files ({0}); nothing was removed, close Subnautica 2 and try again"
-    $stayed = @(Remove-EmptyParents $gone.Remove | Where-Object { $dir = $_; @(Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object { $gone.Kept -notcontains $_.FullName.ToLowerInvariant() }).Count -gt 0 })
+    # The loader's folder counts without Mods beneath it, which may hold the player's own mods.
+    $stayed = @(Remove-EmptyParents $gone.Remove | Where-Object { $dir = $_; $mods = "$dir\Mods\"
+      @(Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object { $gone.Kept -notcontains $_.FullName.ToLowerInvariant() -and
+        -not ($dir -match '\\ue4ss$' -and $_.FullName.StartsWith($mods, [StringComparison]::OrdinalIgnoreCase)) }).Count -gt 0 })
   } else { $stayed = @() }
   $done = @("$($gone.Remove.Count) game file(s) it placed")
   # The handler goes only while it still opens this launcher; another program may have taken the name.
@@ -940,7 +943,7 @@ function Invoke-Uninstall {
   if ($folder) { $done += $folder }
   $text = "Moonpool is uninstalled. Removed " + ($done -join ', ') + '.'
   if ($gone.Kept.Count -gt 0) { $text += "`n`nLeft in place because they changed after Moonpool placed them, so they may be yours: " + ($gone.Kept -join ', ') }
-  if ($stayed.Count -gt 0) { $text += "`n`nStill there, holding files the mods wrote while they ran (settings, logs), which Moonpool never placed: " + ($stayed -join ', ') }
+  if ($stayed.Count -gt 0) { $text += "`n`nStill there, holding files Moonpool never placed, such as a mod's own settings or log: " + ($stayed -join ', ') }
   $text += "`n`nA mod or loader of yours that Moonpool replaced with -Adopt is not put back. Steam's Verify integrity of game files restores any of the game's own files."
   Write-Host "moonpool: $text"
   if (-not $env:SN2_JOIN_NO_DIALOG) { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods') }
