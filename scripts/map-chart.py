@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # Turns this host's own status.json into the data for its map page.
-"""The map is a chart of where players have been, drawn from the game's own positions.
-
-Every run adds each player's position to a grid, one chart per branch and save. Anything
-new about the world, a new cell, a deeper reading of an old cell, a new base or lifepod, is
-published only MAP_DELAY_MINUTES later, so the page never shows where someone is now. No
-names, no game art.
+"""The map shows where each player was MAP_DELAY_MINUTES ago, the 50 m squares anyone has
+visited (the rest stays under fog), and the world's bases and lifepods, all from the game's own
+positions. Nothing is published sooner, so the page never shows where someone is now. A player
+who left stays faded for an hour. Names follow SHOW_PLAYER_NAMES; one chart per branch and save.
 A still of the map (map.png) goes beside the page for link previews and the card.
 Off (WEB_MAP not true) withdraws the published files and keeps the chart.
 """
@@ -31,7 +29,8 @@ FOCUS_PAD_M = 150  # room around the outermost dot
 STILL_VERSION = 3  # bump when the drawing changes, so a cached still is fetched again
 STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
-CELL_M = 50  # one square on the chart
+KEEP_S = 3600  # how long a player's last spot stays, faded, after they leave
+CELL_M = 50  # one square cleared from the fog
 UU_PER_M = 100  # the game's units are centimetres
 STALE_S = 180
 
@@ -69,19 +68,16 @@ def record(chart, status, host, now):
         for x, y in points(status.get(kind)):
             seen.setdefault("%d,%d" % (x, y), now)
     cells = chart.setdefault("cells", {})
+    divers = chart.setdefault("divers", {})
     players = status.get("players")
     for row in players if isinstance(players, list) else []:
-        if not isinstance(row, dict) or row.get("name") == host:
+        if not isinstance(row, dict) or row.get("name") == host or not isinstance(row.get("name"), str):
             continue
         if not (number(row.get("x")) and number(row.get("y"))):
             continue
-        key = "%d,%d" % (row["x"] // (CELL_M * UU_PER_M), row["y"] // (CELL_M * UU_PER_M))
-        depth = row["depth_m"] if number(row.get("depth_m")) else 0
-        cell = cells.get(key)
-        if cell is None:
-            cells[key] = {"t": now, "d": depth}
-        elif depth > max(cell["d"], cell.get("next", 0)):
-            cell["next"], cell["next_t"] = depth, now  # shown after the delay, like a new cell
+        depth = round(row["depth_m"]) if number(row.get("depth_m")) else 0
+        divers.setdefault(row["name"], []).append([now, round(row["x"] / UU_PER_M), round(row["y"] / UU_PER_M), depth])
+        cells.setdefault("%d,%d" % (row["x"] // (CELL_M * UU_PER_M), row["y"] // (CELL_M * UU_PER_M)), {"t": now})
 
 
 def background(status, env, data, public):
@@ -114,22 +110,35 @@ def background(status, env, data, public):
     return out
 
 
-def published(chart, status, world, delay_s, now):
-    cells = []
-    for key, cell in chart.get("cells", {}).items():
-        if "next" in cell and now - cell["next_t"] >= delay_s:
-            cell["d"] = cell.pop("next")
-            del cell["next_t"]
-        if now - cell["t"] >= delay_s:
-            x, y = key.split(",")
-            cells.append([int(x) * CELL_M, int(y) * CELL_M, cell["d"]])
+def published(chart, status, world, delay_s, now, names=True):
+    rows = status.get("players")
+    online = {r.get("name") for r in rows if isinstance(r, dict)} if isinstance(rows, list) else set()
+    divers = []
+    for name, samples in list(chart.get("divers", {}).items()):
+        if now - samples[-1][0] > delay_s + KEEP_S:
+            del chart["divers"][name]
+            continue
+        due = [s for s in samples if now - s[0] >= delay_s]
+        if not due:
+            continue
+        samples[:] = samples[samples.index(due[-1]):]  # older ones will never be shown
+        _, x, y, depth = due[-1]
+        here = name in online
+        divers.append({"name": name, "x": x, "y": y, "depth": depth, "online": here,
+                       "left_minutes": None if here else (now - samples[-1][0]) // 60})
+    explored = sorted([int(v) * CELL_M for v in key.split(",")] for key, cell in chart.get("cells", {}).items()
+                      if now - cell["t"] >= delay_s)
+    divers.sort(key=lambda d: d["name"].lower())
+    if not names:
+        for i, d in enumerate(divers):
+            d["name"] = "Player %d" % (i + 1)
 
     def settled(kind):
         current = {"%d,%d" % (x, y) for x, y in points(status.get(kind))}
         return sorted([int(v) for v in key.split(",")] for key, first in chart.get(kind, {}).items()
                       if key in current and now - first >= delay_s)
-    return {"world": world, "cell_m": CELL_M, "delay_minutes": delay_s // 60, "updated": now,
-            "cells": sorted(cells), "bases": settled("bases"), "lifepods": settled("lifepods")}
+    return {"world": world, "delay_minutes": delay_s // 60, "updated": now, "cell_m": CELL_M, "explored": explored,
+            "divers": divers, "bases": settled("bases"), "lifepods": settled("lifepods")}
 
 
 MAX_PICTURE_BYTES = 20 * 1024 * 1024  # a tile or picture past this is treated as missing
@@ -162,11 +171,10 @@ def union(items):
 
 
 def focus(page, world):
-    """Where the action is: the charted cells, bases and lifepods with room around them, at
-    least FOCUS_MIN_M across and twice as wide as tall, kept inside the world. None when
-    nothing is charted yet, so the still shows the whole world."""
-    pts = [(x + page["cell_m"] / 2, y + page["cell_m"] / 2) for x, y, _ in page["cells"]]
-    pts += [(x, y) for kind in ("bases", "lifepods") for x, y in page[kind]]
+    """Where the action is: the bases and lifepods with room around them, at least FOCUS_MIN_M
+    across and twice as wide as tall, kept inside the world. None when there are none, so the
+    still shows the whole world."""
+    pts = [(x, y) for kind in ("bases", "lifepods") for x, y in page[kind]]
     if not pts:
         return None
     wl, wr = min(world[0], world[2]), max(world[0], world[2])
@@ -241,7 +249,7 @@ def backdrop(bgs, public, cache, region=None):
 
 
 def still(page, bg, public, cache):
-    """map.png: the backdrop around the action, with the delayed trails, bases and lifepods on it."""
+    """map.png: the backdrop around the action, with the bases and lifepods on it."""
     world = union(bg) if bg else [-2560, 2560, 2560, -2560]
     img, (left, top, right, bottom) = backdrop(bg, public, cache, focus(page, world))
     scale = STILL_W / img.width
@@ -264,7 +272,7 @@ def still(page, bg, public, cache):
 def render_page(template, page, public_url):
     """The page with its link-preview tags filled in; absolute addresses need the public url."""
     world = page["world"] or "World map"
-    about = "Where players have been on %s, about %d minutes behind. No live positions." % (world, page["delay_minutes"])
+    about = "Where players were on %s about %d minutes ago, with bases and lifepods." % (world, page["delay_minutes"])
     image = (public_url.rstrip("/") + "/map.png") if public_url else "map.png"
     return (template.replace("{{WORLD}}", html.escape(world)).replace("{{ABOUT}}", html.escape(about))
             .replace("{{IMAGE}}", html.escape(image)))
@@ -295,7 +303,8 @@ def main():
     chart = chart if isinstance(chart, dict) else {}
     record(chart, status, os.environ.get("HOST_NAME", "SN2 Host"), now)
     public.mkdir(parents=True, exist_ok=True)
-    page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now)
+    page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now,
+                          os.environ.get("SHOW_PLAYER_NAMES", "true") == "true")
     write_json(store, chart)
     try:
         page_data["backgrounds"] = background(status, os.environ, data, public)
@@ -303,8 +312,8 @@ def main():
         page_data["backgrounds"] = []
         print("map-chart: no background: %s" % err, file=sys.stderr)
     page_data["background"] = page_data["backgrounds"][0] if page_data["backgrounds"] else None
-    # The still only when what it shows changed: the chart, the bases, the lifepods or the backdrop.
-    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["cells"], page_data["bases"], page_data["lifepods"],
+    # The still only when what it shows changed: the bases, the lifepods or the backdrop.
+    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["bases"], page_data["lifepods"],
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)

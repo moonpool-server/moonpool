@@ -144,9 +144,9 @@ For mentions on important alerts, make a role people can opt into and set `DISCO
 
 ## Map
 
-`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It charts where players have been from the positions the game reports, colored by depth, with bases and lifepods. It shows no names and anything new appears 15 minutes later (`MAP_DELAY_MINUTES`), but anyone with the link can see bases and explored areas
+`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one dot per player where they were 15 minutes ago (`MAP_DELAY_MINUTES`), colored by depth and tagged with their name ("Player 1" with `SHOW_PLAYER_NAMES=false`), plus bases and lifepods. Someone who left stays as a faded dot for an hour. With a map picture behind it, everywhere nobody has been yet sits under fog, cleared in 50 m squares on the same delay. Anyone with the link can see it all
 
-Moonpool ships no map picture. To put one behind the trails, copy a map file into the data volume:
+Moonpool ships no map picture. To put one behind the dots, copy a map file into the data volume:
 
 ```sh
 docker compose cp map-background.example.json sn2:/home/container/map-background.json

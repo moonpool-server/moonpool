@@ -55,29 +55,29 @@ def test_a_picture_over_the_size_cap_is_left_out_like_a_missing_tile() -> None:
         assert len(cached) == 1 and cached[0].stat().st_size == 0
 
 
-def test_a_position_shows_only_after_the_delay_and_a_revisit_stays_hidden_history() -> None:
+def test_each_player_shows_where_they_were_after_the_delay_and_never_now() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
-        alice = {"name": "Alice", "x": 123456, "y": -7000, "z": -9000, "depth_m": 90}
+        alice = {"name": "Alice", "x": 123456, "y": -7000, "depth_m": 90}
         published = run(tmp, 1000, [alice, {"name": "Host", "x": 1, "y": 1}])
-        assert json.loads(published.read_text())["cells"] == []  # now is never published
-        day = json.loads(run(tmp, 1000 + 900, []).read_text())
-        assert day["cells"] == [[1200, -100, 90]]  # one cell, the host never charted
-        assert day["lifepods"] == [[1000, 2000]] and day["bases"] == []
-        text = published.read_text()
-        assert "Alice" not in text and "Host" not in text  # no names on the page
+        assert json.loads(published.read_text())["divers"] == []  # now is never published
+        moved = json.loads(run(tmp, 1900, [dict(alice, x=500000)]).read_text())
+        assert moved["divers"] == [{"name": "Alice", "x": 1235, "y": -70, "depth": 90, "online": True, "left_minutes": None}]
+        assert moved["explored"] == [[1200, -100]]  # her first square clears from the fog; the host never does
+        assert moved["lifepods"] == [[1000, 2000]] and moved["bases"] == []
+        left = json.loads(run(tmp, 1900 + 1200, [], SHOW_PLAYER_NAMES="false").read_text())
+        assert [(p["name"], p["x"], p["online"], p["left_minutes"]) for p in left["divers"]] == [("Player 1", 5000, False, 20)]
+        assert "Alice" not in published.read_text()
+        assert json.loads(run(tmp, 1900 + 900 + 3600 + 60, []).read_text())["divers"] == []  # an hour after they left
 
 
-def test_a_deeper_visit_and_a_new_base_wait_out_the_delay_too() -> None:
+def test_a_new_base_waits_out_the_delay_too() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
-        spot = {"name": "Alice", "x": 500, "y": 500, "depth_m": 10}
-        run(tmp, 1000, [spot])
-        run(tmp, 3000, [dict(spot, depth_m=300)], BASES='[{"x":70000,"y":80000}]')
-        now = json.loads((tmp / "public" / "map.json").read_text())
-        assert now["cells"] == [[0, 0, 10]] and now["bases"] == []  # the deeper visit is not shown yet
-        later = json.loads(run(tmp, 3000 + 900, [], BASES='[{"x":70000,"y":80000}]').read_text())
-        assert later["cells"] == [[0, 0, 300]] and later["bases"] == [[700, 800]]
+        now = json.loads(run(tmp, 1000, [], BASES='[{"x":70000,"y":80000}]').read_text())
+        assert now["bases"] == []
+        later = json.loads(run(tmp, 1000 + 900, [], BASES='[{"x":70000,"y":80000}]').read_text())
+        assert later["bases"] == [[700, 800]]
 
 
 def test_the_map_file_gives_each_game_branch_its_own_background() -> None:
@@ -109,7 +109,7 @@ def test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits() -> None:
             (control / "status.json").write_text(json.dumps({"ts": now, "save": save, "branch": "public", "players": [
                 {"name": "A", "x": 5000 if save == "One" else 50000, "y": 0, "depth_m": 1}]}))
             subprocess.run([sys.executable, str(SCRIPT)], check=True, env=dict(env, SN2_NOW=str(now)))
-        assert json.loads((tmp / "public" / "map.json").read_text())["cells"] == [[500, 0, 1]]  # save One's isn't here
+        assert [p["x"] for p in json.loads((tmp / "public" / "map.json").read_text())["divers"]] == [500]  # save One's isn't here
         env["MAP_DELAY_MINUTES"] = "15"
         (control / "status.json").write_text(json.dumps({"ts": 2000, "save": "Two", "branch": "public",
                                                          "lifepods": [{"x": 700, "y": 800}]}))
@@ -160,7 +160,7 @@ def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothin
         env = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
                    MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW="1000000", WEB_MAP="true", MAP_DELAY_MINUTES="0")
         subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
-        assert json.loads(published.read_text())["cells"] == []
+        assert json.loads(published.read_text())["divers"] == []
         env["WEB_MAP"] = "false"
         subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
         assert not published.exists() and not (tmp / "public" / "map.html").exists()
@@ -168,8 +168,8 @@ def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothin
 
 
 if __name__ == "__main__":
-    test_a_position_shows_only_after_the_delay_and_a_revisit_stays_hidden_history()
-    test_a_deeper_visit_and_a_new_base_wait_out_the_delay_too()
+    test_each_player_shows_where_they_were_after_the_delay_and_never_now()
+    test_a_new_base_waits_out_the_delay_too()
     test_the_map_file_gives_each_game_branch_its_own_background()
     test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits()
     test_a_branch_can_lay_several_pictures_side_by_side()
