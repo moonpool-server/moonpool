@@ -60,7 +60,7 @@ Where the save lives and which builds load is in the [guide](docs/operating.md#b
 ## What's exposed
 
 - Port 8081 (`SN2_MODS_PORT`) serves the join page and the signed mod list on every interface by default because players without a tunnel need it. It shows the host account's Steam id and the current lobby id, which Steam shows the host's friends anyway. `MODS_BIND=127.0.0.1` closes it when you use the tunnel. The first time a player presses Play with mods their launcher saves this server's signing key from that address and holds every later list to it, so over plain http that first fetch trusts the network; the launcher allows http only on a private network and anything else needs the tunnel or HTTPS. `PUBLISH_CARD=true` adds `/card.json`, what the Discord card shows, player names included
-- With `WEB_MAP=true` the map page shows explored areas and base positions to anyone with the link
+- With `WEB_MAP=true` the map page shows where each player was 15 minutes ago, with their name unless `SHOW_PLAYER_NAMES=false`, and the bases, to anyone with the link
 - The viewer on 8080 controls the signed-in Steam so it listens on this machine only unless you set `VIEWER_BIND` and a password. To reach it from elsewhere use Tailscale or `ssh -L 8080:localhost:8080 <server>`, never a forwarded port
 - The data volume holds the hosting account's Steam session. Keep it and your backups private
 
@@ -72,7 +72,7 @@ Where the save lives and which builds load is in the [guide](docs/operating.md#b
 - Admin in game by naming a PDA signal `!help`
 - Backups you can restore with one command
 - A Discord card showing who is on with a join button
-- An optional map that charts where players have been
+- An optional map of where everyone was a few minutes ago, with bases and lifepods
 - A clock that holds while the world is empty
 - The join page, the map page and the card's wording are yours to change from the data volume
 

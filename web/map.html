@@ -34,7 +34,6 @@ p{margin:4px 0 0;color:#9fc2cf}
 </header>
 <div id="chart"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js" integrity="sha256-65UqrlgGoRAnKfKRuriH3eeDrOhZgZo1SCenduc+SGo=" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/3.0.0/Control.FullScreen.min.js" integrity="sha256-RRgp0Apphsfcq2HCH06yN9MGixhRf/4qs11Cu6SJdOM=" crossorigin="anonymous"></script>
 <script>
 var TILE = 512, map, layers = {};
@@ -49,6 +48,34 @@ function colour(depth) {
   }
   return 'rgb(39,18,79)';
 }
+// Fog of war: a dark sheet over the view with a soft round hole wherever someone has been, so
+// nearby visits melt into one clearing. Redrawn on every move; [lat, lng] points, radius in metres.
+var Fog = L.Layer.extend({
+  onAdd: function (m) {
+    this._c = L.DomUtil.create('canvas', 'leaflet-zoom-animated', m.getPane('fog'));
+    m.on('move zoom resize', this._draw, this).on('zoomanim', this._zoom, this); this._draw();
+  },
+  onRemove: function (m) { L.DomUtil.remove(this._c); m.off('move zoom resize', this._draw, this).off('zoomanim', this._zoom, this); },
+  _zoom: function (e) {  // scale along with the picture while the zoom animates, redraw sharp at the end
+    var m = this._map;
+    L.DomUtil.setTransform(this._c, m._latLngBoundsToNewLayerBounds(this._bounds, e.zoom, e.center).min, m.getZoomScale(e.zoom));
+  },
+  set: function (pts, r) { this._pts = pts; this._r = r; if (this._map) this._draw(); },
+  _draw: function () {
+    var m = this._map, size = m.getSize(), c = this._c, g = c.getContext('2d'), r = this._r;
+    c.width = size.x; c.height = size.y; this._bounds = m.getBounds();
+    L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+    g.fillStyle = 'rgba(3, 17, 26, 0.62)'; g.fillRect(0, 0, size.x, size.y);
+    g.globalCompositeOperation = 'destination-out';
+    (this._pts || []).forEach(function (p) {
+      var at = m.latLngToContainerPoint(p), px = Math.abs(m.latLngToContainerPoint([p[0], p[1] + r]).x - at.x);
+      if (at.x < -px || at.y < -px || at.x > size.x + px || at.y > size.y + px) return;
+      var soft = g.createRadialGradient(at.x, at.y, px * 0.35, at.x, at.y, px);
+      soft.addColorStop(0, 'rgba(0,0,0,1)'); soft.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = soft; g.beginPath(); g.arc(at.x, at.y, px, 0, 2 * Math.PI); g.fill();
+    });
+  }
+});
 // Latitude and longitude here are the game's y and x in metres, so markers need no
 // conversion and the scale bar is true. Zoom 0 fits the background in one tile.
 function setup(bgs) {
@@ -74,35 +101,39 @@ function setup(bgs) {
     map.fitBounds([[b[1], b[0]], [b[3], b[2]]]);
     if (hosts.length) document.getElementById('credit').textContent = 'Background from ' + hosts.join(', ');
   }
-  layers.trails = L.layerGroup().addTo(map);
-  layers.heat = L.heatLayer([], {radius: 18, blur: 14, minOpacity: 0.35});
+  map.createPane('fog').style.zIndex = 350;  // over the picture, under the dots
+  layers.fog = new Fog();
+  if (bgs.length) layers.fog.addTo(map);
+  layers.players = L.layerGroup().addTo(map);
   layers.bases = L.layerGroup().addTo(map);
   layers.lifepods = L.layerGroup().addTo(map);
-  L.control.layers(null, {'Trails': layers.trails, 'Heat': layers.heat, 'Bases': layers.bases, 'Lifepods': layers.lifepods}, {position: 'topright'}).addTo(map);
+  var shown = {'Players': layers.players, 'Bases': layers.bases, 'Lifepods': layers.lifepods};
+  if (bgs.length) shown = L.extend({'Fog': layers.fog}, shown);
+  L.control.layers(null, shown, {position: 'topright'}).addTo(map);
 }
-function pin(group, p, label, fill) {
-  L.circleMarker([p[1], p[0]], {radius: 6, color: '#eaf7fb', weight: 2, fillColor: fill, fillOpacity: 1})
-    .bindTooltip(label, {permanent: true, direction: 'right', offset: [8, 0]}).addTo(group);
+function pin(group, p, label, fill, faded) {
+  var tag = document.createElement('span'); tag.textContent = label;  // a player's name is never HTML
+  L.circleMarker([p[1], p[0]], {radius: 6, color: '#eaf7fb', weight: 2, fillColor: fill, fillOpacity: faded ? 0.4 : 1, opacity: faded ? 0.4 : 1})
+    .bindTooltip(tag, {permanent: true, direction: 'right', offset: [8, 0]}).addTo(group);
 }
 function draw(d) {
   if (!map) setup(d.backgrounds || (d.background ? [d.background] : []));
-  ['trails', 'bases', 'lifepods'].forEach(function (k) { layers[k].clearLayers(); });
-  var seen = [], heat = [];
-  d.cells.forEach(function (c) {
-    var at = [c[1] + d.cell_m / 2, c[0] + d.cell_m / 2];
-    L.circleMarker(at, {radius: 6, color: '#ffffff', weight: 2, fillColor: colour(c[2]), fillOpacity: 1}).bindTooltip(c[2] + ' m deep').addTo(layers.trails);
-    seen.push(at); heat.push([at[0], at[1], 1]);
+  ['players', 'bases', 'lifepods'].forEach(function (k) { layers[k].clearLayers(); });
+  var seen = [], h = d.cell_m / 2;
+  layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
+  d.divers.forEach(function (p) {
+    pin(layers.players, [p.x, p.y], p.name + (p.online ? ' · ' + p.depth + ' m' : ' · left ' + p.left_minutes + ' min ago'), colour(p.depth), !p.online);
+    seen.push([p.y, p.x]);
   });
-  layers.heat.setLatLngs(heat);
   d.lifepods.forEach(function (p) { pin(layers.lifepods, p, 'Lifepod', '#ff5a4f'); seen.push([p[1], p[0]]); });
   d.bases.forEach(function (p) { pin(layers.bases, p, 'Base', '#7ee787'); seen.push([p[1], p[0]]); });
   if (d.world) {
     document.title = d.world + ' map';
     document.getElementById('title').textContent = d.world;
   }
-  document.getElementById('about').textContent = d.cells.length
-    ? 'Where players have been, about ' + d.delay_minutes + ' minutes behind. No live positions.'
-    : 'Nobody has charted this world yet. Trails appear here as people explore, about ' + d.delay_minutes + ' minutes behind.';
+  document.getElementById('about').textContent = d.divers.length
+    ? 'Where each player was about ' + d.delay_minutes + ' minutes ago. Never where they are now.'
+    : 'Nobody has played here in the last hour. Players show up about ' + d.delay_minutes + ' minutes after they move.';
   var bare = !(d.backgrounds && d.backgrounds.length);
   if (!map.fitted && seen.length) {  // open where the action is; the whole world is one zoom out
     map.fitBounds(seen, {padding: [60, 60], maxZoom: bare ? 3 : 4});
