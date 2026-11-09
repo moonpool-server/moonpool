@@ -33,6 +33,8 @@ param(
   [switch]$Adopt,
   # Turn off every file that makes Moonpool's mods load, then exit (the mods-off shortcut).
   [switch]$DisableMoonpoolMods,
+  # Remove what Moonpool put on this PC that is still as it placed it, and say what stayed.
+  [switch]$Uninstall,
   # For tests: no Desktop or Start menu shortcuts.
   [switch]$NoShortcuts,
   # For tests: how long the game may take to appear after the launch, and a smaller unpack limit.
@@ -375,14 +377,20 @@ function Get-HiddenRun {
   return @{ Exe = $ps; Prefix = '' }
 }
 
+# A test run points these at scratch places, so it never touches the user's own.
+function Get-HandlerKey { if ($env:MOONPOOL_CLASSES_ROOT) { Join-Path $env:MOONPOOL_CLASSES_ROOT 'moonpool' } else { 'HKCU:\Software\Classes\moonpool' } }
+function Get-ShortcutFolders {
+  if ($env:MOONPOOL_SHORTCUTS) { return @((Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop'), (Join-Path $env:MOONPOOL_SHORTCUTS 'Programs')) }
+  return @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
+}
+
 function Install-Launcher {
   New-Item -ItemType Directory -Path $KitHome -Force | Out-Null
   if ([IO.Path]::GetFullPath($PSCommandPath) -ine [IO.Path]::GetFullPath($InstalledScript)) {
     Copy-Item -LiteralPath $PSCommandPath -Destination $InstalledScript -Force
   }
   if ($NoShortcuts) { return }
-  # A test run points this at a scratch key, so it never rewrites the user's own handler.
-  $key = if ($env:MOONPOOL_CLASSES_ROOT) { Join-Path $env:MOONPOOL_CLASSES_ROOT 'moonpool' } else { 'HKCU:\Software\Classes\moonpool' }
+  $key = Get-HandlerKey
   New-Item -Path "$key\shell\open\command" -Force | Out-Null
   Set-ItemProperty -LiteralPath $key -Name '(default)' -Value 'URL:Subnautica 2 server'
   Set-ItemProperty -LiteralPath $key -Name 'URL Protocol' -Value ''
@@ -396,7 +404,7 @@ function Install-ServerShortcuts($Config, [string]$ServerId) {
   Write-Json (Join-Path $dir 'moonpool.json') $Config
   $firstRun = -not (Test-Path -LiteralPath (Join-Path $dir '.first-run-complete'))
   $server = [string](Get-Prop $Config 'server_name' 'server') -replace '[\\/:*?"<>|\x00-\x1f]', '_'
-  $folders = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
+  $folders = @(Get-ShortcutFolders)
   if ($NoShortcuts) { $folders = @() }
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
@@ -468,11 +476,13 @@ function Write-Ledger([string]$Path, $Ledger) {
 # What makes Moonpool's mods load: its own loader proxy, its mods' enabled.txt and their pak trios.
 # Off is a rename beside the file, and only a file that still matches what this launcher placed is
 # switched, so a player's own loader and mods are never touched. Returns what stayed in use.
+function Test-Switchable([string]$Path) { (@('dwmapi.dll', 'enabled.txt') -contains (Split-Path -Leaf $Path)) -or ($TrioExtensions -contains [IO.Path]::GetExtension($Path)) }
+
 function Switch-MoonpoolMods([bool]$On) {
   $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
   $left = @(); $stuck = @()
   foreach ($path in @($ledger.files.Keys)) {
-    if (@('dwmapi.dll', 'enabled.txt') -notcontains (Split-Path -Leaf $path) -and $TrioExtensions -notcontains [IO.Path]::GetExtension($path)) { continue }
+    if (-not (Test-Switchable $path)) { continue }
     $sha = $ledger.files[$path].sha256
     $from = $path; if ($On) { $from = "$path.moonpool-off" }
     if (-not (Test-Path -LiteralPath $from) -or (Get-Sha256 $from) -ne $sha) { continue }
@@ -807,7 +817,7 @@ function Get-LoaderFiles($Spec, [string]$Stage) {
 
 # Every planned file goes in and every removal goes out together; on a failure
 # everything is put back as it was.
-function Install-Plan($Plan, $Removals, [string]$Stage) {
+function Install-Plan($Plan, $Removals, [string]$Stage, [string]$Outcome = 'could not place the mod files ({0}); the previous set was put back, game not started') {
   $prev = Join-Path $Stage 'previous'
   New-Item -ItemType Directory -Path $prev -Force | Out-Null
   $placed = New-Object System.Collections.Generic.List[object]
@@ -839,7 +849,7 @@ function Install-Plan($Plan, $Removals, [string]$Stage) {
       if (Test-Path -LiteralPath $p.Target) { Remove-Item -LiteralPath $p.Target -Force }
       if ($p.Backup -and (Test-Path -LiteralPath $p.Backup)) { Move-Item -LiteralPath $p.Backup -Destination $p.Target }
     }
-    Fail "could not place the mod files ($why); the previous set was put back, game not started"
+    Fail ($Outcome -f $why)
   }
 }
 
@@ -857,12 +867,84 @@ function Remove-EmptyDirs([string]$Path, [string]$Stop) {
   }
 }
 
+# Ledger files not in $Keep go only while their bytes are the ones placed, live or (with $Parked)
+# switched off. Anything else may be the player's now: it stays and is named.
+function Get-Removals($Ledger, $Keep, [bool]$Parked) {
+  $remove = New-Object System.Collections.Generic.List[string]; $kept = New-Object System.Collections.Generic.List[string]
+  foreach ($path in @($Ledger.files.Keys)) {
+    if ($Keep.ContainsKey($path)) { continue }
+    $copies = @($path); if ($Parked -and (Test-Switchable $path)) { $copies += "$path.moonpool-off" }
+    foreach ($p in $copies) {
+      if (-not (Test-Path -LiteralPath $p)) { continue }
+      if ((Get-Sha256 $p) -eq $Ledger.files[$path].sha256) { $remove.Add($p) } else { $kept.Add($p) }
+    }
+  }
+  return @{ Remove = $remove; Kept = $kept }
+}
+
+# The folders removals left empty, up to the game's own Win64 or Paks folder.
+function Remove-EmptyParents($Paths) {
+  foreach ($path in $Paths) {
+    if ($path -match '^(.+?\\subnautica2\\(binaries\\win64|content\\paks))\\') { Remove-EmptyDirs (Split-Path -Parent $path) $Matches[1] }
+  }
+}
+
+function Invoke-Uninstall {
+  Enter-Lock
+  if (Test-GameRunning) { Fail 'Subnautica 2 is running; close it and start this again (nothing was changed)' 2 }
+  $gone = Get-Removals (Read-Ledger (Join-Path $KitHome 'owned.json')) @{} $true
+  if ($gone.Remove.Count -gt 0) {
+    $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $script:Work | Out-Null
+    Install-Plan @() $gone.Remove $script:Work "could not remove Moonpool's files ({0}); nothing was removed, close Subnautica 2 and try again"
+    Remove-EmptyParents $gone.Remove
+  }
+  $done = @("$($gone.Remove.Count) game file(s) it placed")
+  # The handler goes only while it still opens this launcher; another program may have taken the name.
+  $key = Get-HandlerKey
+  $command = [string](Get-Prop (Get-ItemProperty -LiteralPath "$key\shell\open\command" -ErrorAction SilentlyContinue) '(default)' '')
+  if ($command.IndexOf("`"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) { Remove-Item -LiteralPath $key -Recurse -Force; $done += 'its moonpool: link handler' }
+  $links = 0
+  $shell = New-Object -ComObject WScript.Shell
+  foreach ($dir in Get-ShortcutFolders) {
+    foreach ($lnk in @(Get-ChildItem -LiteralPath $dir -Filter 'Subnautica 2 (*).lnk' -File -ErrorAction SilentlyContinue)) {
+      if ($shell.CreateShortcut($lnk.FullName).Arguments.IndexOf("`"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) { Remove-Item -LiteralPath $lnk.FullName -Force; $links++ }
+    }
+  }
+  # A shortcut's console keeps this folder as its working folder until this run ends.
+  $temp = [IO.Path]::GetTempPath()
+  [IO.Directory]::SetCurrentDirectory($temp); Set-Location -LiteralPath $temp
+  $done += "$links shortcut(s)"
+  $folder = $null
+  if (Test-Path -LiteralPath $KitHome) {
+    $folder = "its folder $KitHome"
+    try { Remove-Item -LiteralPath $KitHome -Recurse -Force } catch { }
+  }
+  if ($folder -and (Test-Path -LiteralPath $KitHome)) {
+    if (@(Get-ChildItem -LiteralPath $KitHome -Force).Count -gt 0) { $folder = "not all of $KitHome (a file there is in use; delete the folder yourself)" }
+    else {
+      # Once this run and the console it ran in have closed; a non-recursive delete only takes an empty folder.
+      $q = $KitHome -replace "'", "''"
+      $wait = "Wait-Process -Id $PID -ErrorAction SilentlyContinue; for (`$i = 0; `$i -lt 60 -and (Test-Path -LiteralPath '$q'); `$i++) { try { [IO.Directory]::Delete('$q') } catch { Start-Sleep -Milliseconds 500 } }"
+      Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -WindowStyle Hidden -WorkingDirectory $temp -ArgumentList "-NoProfile -EncodedCommand $([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wait)))"
+      $folder = "its folder $KitHome (emptied now, gone once this closes)"
+    }
+  }
+  if ($folder) { $done += $folder }
+  $text = "Moonpool is uninstalled. Removed " + ($done -join ', ') + '.'
+  if ($gone.Kept.Count -gt 0) { $text += "`n`nLeft in place because they changed after Moonpool placed them, so they may be yours: " + ($gone.Kept -join ', ') }
+  $text += "`n`nA mod or loader of yours that Moonpool replaced with -Adopt is not put back. Steam's Verify integrity of game files restores any of the game's own files."
+  Write-Host "moonpool: $text"
+  if (-not $env:SN2_JOIN_NO_DIALOG) { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods') }
+}
+
 function Invoke-Join {
   if ($Link) {
     if ($BoundCount -ne 1) { Fail 'a join link comes alone; this one carried other options and was refused' }
     if ($Link -notmatch '^moonpool:(.+)$' -or -not (Test-ServerAddress $Matches[1])) { Fail "not a server address this launcher accepts (https, or http on a private network): $Link" }
     $script:Server = ($Link -replace '^moonpool:', '')
   }
+  if ($Uninstall) { Invoke-Uninstall; return }
   if ($DisableMoonpoolMods) {
     Enter-Lock
     $left = @(Switch-MoonpoolMods $false)
@@ -1038,14 +1120,9 @@ function Invoke-Join {
   # Everything managed locally that this server does not want goes: another server's
   # set, a mod the admin dropped, the loader when nothing needs it. Only unchanged
   # files are removed; a file the player edited is left and named.
-  $removals = New-Object System.Collections.Generic.List[string]
-  foreach ($path in @($ledger.files.Keys)) {
-    if ($desired.ContainsKey($path)) { continue }
-    if (Test-Path -LiteralPath $path) {
-      if ((Get-Sha256 $path) -eq $ledger.files[$path].sha256) { $removals.Add($path) }
-      else { Say "leaving ${path}: it was changed since this launcher placed it" }
-    }
-  }
+  $gone = Get-Removals $ledger $desired $false
+  $removals = $gone.Remove
+  foreach ($path in $gone.Kept) { Say "leaving ${path}: it was changed since this launcher placed it" }
   $keepNames = @($wanted | ForEach-Object { $_.Name })
   if ($loaderMod) { $keepNames += 'UE4SS' }
   $goneMods = @($ledger.mods.Keys | Where-Object {
@@ -1080,12 +1157,7 @@ function Invoke-Join {
       else { Remove-Item -LiteralPath $ledgerPath -Force -ErrorAction SilentlyContinue }
       throw
     }
-    $paksRoot = Join-Path $game 'Subnautica2\Content\Paks'
-    foreach ($path in $removals) {
-      $stop = $win64
-      if ($path.StartsWith($paksRoot, [StringComparison]::OrdinalIgnoreCase)) { $stop = $paksRoot }
-      Remove-EmptyDirs (Split-Path -Parent $path) $stop
-    }
+    Remove-EmptyParents $removals
     foreach ($path in @($ledger.files.Keys)) { if (-not $desired.ContainsKey($path)) { $ledger.files.Remove($path) } }
     foreach ($k in $goneMods) { $ledger.mods.Remove($k) }
   }
@@ -1132,7 +1204,7 @@ try {
   $script:UiCancelled = $false
   Write-Host "moonpool: $($_.Exception.Message)"
   # A link or shortcut has no console left open to read this in.
-  if (($Link -or $Server -or $DisableMoonpoolMods) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
+  if (($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     Add-Type -AssemblyName System.Windows.Forms
     if ($script:Ui) { [void][Windows.Forms.MessageBox]::Show($script:Ui.Form, $_.Exception.Message, 'Subnautica 2 mods') }
     else { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Subnautica 2 mods') }

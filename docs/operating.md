@@ -55,6 +55,8 @@ A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. Eve
 
 Play with mods turns the mods on only until Subnautica 2 closes, so starting the game from Steam loads none of them. If the launcher is killed mid-game, the next run or the Subnautica 2 (without Moonpool mods) shortcut turns them off. The launcher is Steam-only, so Xbox and Game Pass players join without mods
 
+To take the launcher off a PC, close Subnautica 2 and run `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps1" -Uninstall` in PowerShell. It removes every game file it placed that is still as it placed it, switched on or off, and the folders that leaves empty, then its `moonpool:` link handler, its shortcuts and its own folder. A file you changed since stays and is named. A mod or loader of yours that `-Adopt` replaced is not put back, because the launcher keeps no copy of it. Steam's Verify integrity of game files restores the game's own files
+
 ## In game admin
 
 Put each admin's Epic ID in `ADMINS`. The UE4SS log prints `player NAME eos=...` when someone joins. Names and Steam IDs don't count because a client can claim those

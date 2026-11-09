@@ -93,6 +93,8 @@ Players install the launcher once, [moonpool-setup.cmd](https://github.com/moonp
 
 The mods are on only while the game the launcher starts is running, so a normal Steam launch has none of them. If the launcher is killed mid-game they stay on until its next run or the Subnautica 2 (without Moonpool mods) shortcut. Xbox and Game Pass players join without mods
 
+To remove the launcher and what it placed, run `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps1" -Uninstall` in PowerShell with the game closed. [Mods](docs/operating.md#mods) says what it removes and what it leaves
+
 Mods run with the player's Windows rights and nobody here reviews them, so only say yes to a host you trust. A saved yes stays until the list changes and a new key at the same address counts as a new server
 
 The launcher comes only from this repo's releases. Setup and every update check its signature and the private key isn't on GitHub. It has no Windows code signing so Windows may warn about it. The setup file itself isn't signed: it comes from GitHub over TLS with a build attestation you can check with `gh attestation verify moonpool-setup.cmd -R moonpool-server/moonpool`, and everything it downloads is held to the release key. To check a copy against its release
