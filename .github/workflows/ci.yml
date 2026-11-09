@@ -59,6 +59,7 @@ jobs:
           push: false
           tags: moonpool:panel
       - name: Report every critical and high vulnerability, fixed or not (Grype)
+        shell: bash
         run: >-
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
           anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9

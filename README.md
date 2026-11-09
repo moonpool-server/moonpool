@@ -101,7 +101,7 @@ The launcher comes only from this repo's releases. Setup and every update check 
 gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-workflow moonpool-server/moonpool/.github/workflows/ci.yml
 ```
 
-Each release also lists `moonpool-SHA256SUMS.txt`, under the same attestation. To install by hand, download `moonpool-setup.cmd` and check it with `Get-FileHash moonpool-setup.cmd` against that list before you run it. Setup runs PowerShell with `-ExecutionPolicy Bypass` so the downloaded launcher can start; that is a PowerShell script setting, not an antivirus one, and Defender still scans everything. Never turn Defender or SmartScreen off for it
+Each release also lists `moonpool-SHA256SUMS.txt`, under the same attestation. To install by hand, download `moonpool-setup.cmd` and check it with `Get-FileHash moonpool-setup.cmd` against that list before you run it. Setup runs PowerShell with `-ExecutionPolicy Bypass` so the downloaded launcher can start; that is a PowerShell script setting and does not disable or bypass Defender. Never turn Defender or SmartScreen off for it
 
 Releases come often while the project is young. Each one passes CI and carries those attestations, and there is no separate stable channel yet
 

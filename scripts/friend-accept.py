@@ -39,6 +39,14 @@ import urllib.request
 WINE_SECRET = b"I'm hunting wabbits"  # crypt32_protectdata_secret, protectdata.c
 REQUEST_RECIPIENT = 2  # EFriendRelationship.RequestRecipient
 BASE = "https://steamcommunity.com"  # fixed: the session cookies go nowhere else
+
+
+class _Stay(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # a redirect is an error, never a second request
+        return None
+
+
+_OPEN = urllib.request.build_opener(_Stay).open
 READ_ONLY = False
 
 
@@ -119,7 +127,7 @@ def _req(path: str, cookies: dict[str, str], form: dict[str, str] | None = None)
     r = urllib.request.Request(BASE + path, data=data, headers={
         "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
         "Referer": BASE + "/", "User-Agent": "sn2-host friend-accept"})
-    with urllib.request.urlopen(r, timeout=20) as resp:
+    with _OPEN(r, timeout=20) as resp:
         return resp.read()
 
 
@@ -203,7 +211,7 @@ def own_lobby(cookies: dict[str, str], steamid: str) -> str:
     if not tok:
         raise ValueError("the community session handed out no web API token")
     q = urllib.parse.urlencode({"access_token": tok, "steamids[0]": steamid})
-    with urllib.request.urlopen(f"{API}/IPlayerService/GetPlayerLinkDetails/v1/?{q}", timeout=20) as r:
+    with _OPEN(f"{API}/IPlayerService/GetPlayerLinkDetails/v1/?{q}", timeout=20) as r:
         acc = (json.load(r).get("response", {}).get("accounts") or [{}])[0]
     lobby = str((acc.get("private_data") or {}).get("lobby_steam_id") or "")
     return lobby if lobby.isdigit() and lobby != "0" else ""
