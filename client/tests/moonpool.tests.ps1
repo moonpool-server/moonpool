@@ -140,7 +140,7 @@ function Write-Manifest($w, $Mods, [string]$ServerId = 'server-a', [bool]$Loader
 # The launch starts a fake game that is seen running once, when the game folder is
 # listed into Session, runs $Game, and has exited by the next look.
 function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Answer = '$true', [string]$Scan = "`$p -notmatch 'Flagged'",
-                     [string]$Game = '', [switch]$NoStart, [string]$LaunchExtra = '') {
+                     [string]$Game = '', [switch]$NoStart, [string]$LaunchExtra = '', [switch]$Shortcuts) {
   $launchLog = Join-Path $w.Root 'launched.txt'
   $pageLog = Join-Path $w.Root 'page.txt'
   $askLog = Join-Path $w.Root 'asked.txt'
@@ -149,10 +149,11 @@ function Invoke-Join($w, [switch]$GameRunning, [string]$Extra = '', [string]$Ans
   foreach ($f in @($launchLog, $pageLog, $askLog, $gameFlag, $sessionLog)) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f } }
   if ($GameRunning) { Set-Content -LiteralPath $gameFlag -Value 'up' }
   $start = "Set-Content -LiteralPath '$gameFlag' -Value 'up'"; if ($NoStart) { $start = ''; $Extra += ' -StartWait 1' }
+  $noShortcuts = if ($Shortcuts) { '' } else { '-NoShortcuts' }
   $running = "if (Test-Path -LiteralPath '$gameFlag') { Remove-Item -LiteralPath '$gameFlag'; Get-ChildItem -LiteralPath '$($w.Game)' -Recurse -File -Name | Set-Content -LiteralPath '$sessionLog'; $Game; `$true } else { `$false }"
   $cmd = "`$env:LOCALAPPDATA='$($w.Root)'; & '$Script' -ManifestUrl '$(([Uri]$w.Manifest).AbsoluteUri)' -SteamRoot '$($w.Steam)' " +
          "-Downloads '$($w.Downloads)' -IsGameRunning { $running } -Launch { param(`$u) Set-Content -LiteralPath '$launchLog' -Value `$u; $start; $LaunchExtra } " +
-         "-OpenPage { param(`$u) Set-Content -LiteralPath '$pageLog' -Value `$u } -Approve { param(`$q) Set-Content -LiteralPath '$askLog' -Value `$q; $Answer } -OpenFriend { param(`$u) } -ScanFile { param(`$p) $Scan } -NoShortcuts $Extra; exit `$LASTEXITCODE"
+         "-OpenPage { param(`$u) Set-Content -LiteralPath '$pageLog' -Value `$u } -Approve { param(`$q) Set-Content -LiteralPath '$askLog' -Value `$q; $Answer } -OpenFriend { param(`$u) } -ScanFile { param(`$p) $Scan } $noShortcuts $Extra; exit `$LASTEXITCODE"
   $ErrorActionPreference = 'Continue'  # a launcher that dies writing to stderr is a failed check, not a stopped suite
   $out = & powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1 | Out-String
   $launched = $null; $page = $null; $asked = ''; $session = @()
@@ -552,6 +553,50 @@ try {
   $r = Invoke-Join $w11
   Check ($r.Code -ne 0 -and $r.Out -match 'Defender flagged' -and -not (Test-Path -LiteralPath (Join-Path $w11.Mods 'Flagged')) -and -not $r.Launched) "nothing is placed and the game does not start (got: $($r.Out.Trim()))"
 
+  Write-Host 'uninstall takes off what Moonpool placed and set up, keeps what the player owns or changed, and is safe twice'
+  $wx = New-World; $worlds += $wx
+  $env:MOONPOOL_SHORTCUTS = Join-Path $wx.Root 'shell'
+  $kit = Join-Path $wx.Root 'moonpool'
+  $handlerKey = 'HKCU:\Software\moonpool-tests\moonpool'
+  Set-Content -LiteralPath (Join-Path $wx.Win64 'notes.txt') -Value 'mine' -NoNewline
+  New-Item -ItemType Directory -Path (Join-Path $wx.Mods 'MyMod\Scripts') -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $wx.Mods 'MyMod\Scripts\main.lua') -Value 'my mod' -NoNewline
+  New-Item -ItemType Directory -Path (Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop') -Force | Out-Null
+  $mine = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop\Subnautica 2 (my own).lnk'))
+  $mine.TargetPath = "$env:SystemRoot\notepad.exe"; $mine.Save()
+  $pristine = Snapshot $wx.Game
+  $xrsa = New-Object Security.Cryptography.RSACryptoServiceProvider 2048
+  $xpub = $xrsa.ExportParameters($false)
+  $xcfg = [ordered]@{ public_key = [ordered]@{ modulus = [Convert]::ToBase64String($xpub.Modulus); exponent = [Convert]::ToBase64String($xpub.Exponent) }; server_name = 'Gone' }
+  Set-Content -LiteralPath (Join-Path $wx.Server 'moonpool.json') -Value ($xcfg | ConvertTo-Json -Depth 5)
+  Write-Manifest $wx @((Mod $wx 'Foo' 'Foo.zip' 'Foo' 'Foo'), (Mod $wx 'Baz' 'Baz.zip' 'Baz' 'Baz' $true '3' 'pak'))
+  [IO.File]::WriteAllBytes($wx.Manifest + '.sig', $xrsa.SignData([IO.File]::ReadAllBytes($wx.Manifest), [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')))
+  $r = Invoke-Join $wx -Extra "-Server '$(([Uri]$wx.Server).AbsoluteUri)'" -Shortcuts
+  $links = @(Get-ChildItem -LiteralPath $env:MOONPOOL_SHORTCUTS -Filter '*.lnk' -Recurse)
+  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 4 -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, three shortcuts of its own and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
+  Set-Content -LiteralPath (Join-Path $wx.Mods 'Foo\Scripts\lib.lua') -Value 'my edit' -NoNewline
+  $r = Invoke-Join $wx -GameRunning -Extra '-Uninstall'
+  Check ($r.Code -eq 2 -and $r.Out -match 'Subnautica 2 is running' -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and (Test-Path -LiteralPath (Join-Path $kit 'owned.json'))) "refused while the game runs, nothing changed (got $($r.Code)): $($r.Out.Trim())"
+  # From the installed copy, with its folder as the working folder of the process above it, as a shortcut runs it.
+  $oldScript = $Script; $Script = Join-Path $kit 'moonpool.ps1'; $cwd = [Environment]::CurrentDirectory
+  [IO.Directory]::SetCurrentDirectory($kit)
+  try { $r = Invoke-Join $wx -Extra '-Uninstall' } finally { [IO.Directory]::SetCurrentDirectory($cwd); $Script = $oldScript }
+  $edited = Join-Path $wx.Mods 'Foo\Scripts\lib.lua'
+  Check ($r.Code -eq 0 -and $r.Out -match 'uninstalled' -and $r.Out -match [regex]::Escape($edited.ToLowerInvariant()) -and (Text $edited) -eq 'my edit') "the changed file is kept and named (got $($r.Code)): $($r.Out.Trim())"
+  Remove-Item -LiteralPath $edited
+  Check ((Snapshot $wx.Game) -eq $pristine -and -not (Test-Path -LiteralPath $wx.Paks) -and -not (Test-Path -LiteralPath (Join-Path $wx.Mods 'Foo\enabled.txt')) -and (Test-Path -LiteralPath (Join-Path $wx.Mods 'MyMod'))) 'every other file is as it was before Moonpool, live or parked, and the folders it made are gone'
+  $links = @(Get-ChildItem -LiteralPath $env:MOONPOOL_SHORTCUTS -Filter '*.lnk' -Recurse)
+  Check (-not (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 1 -and $links[0].Name -eq 'Subnautica 2 (my own).lnk') "the handler and its shortcuts are gone, the player's own shortcut stays (left: $(@($links | ForEach-Object Name) -join ', '))"
+  for ($i = 0; $i -lt 40 -and (Test-Path -LiteralPath $kit); $i++) { Start-Sleep -Milliseconds 250 }
+  Check (-not (Test-Path -LiteralPath $kit)) "its folder is gone, launcher included, once the run's console lets it go"
+  $again = Snapshot $wx.Game
+  New-Item -Path "$handlerKey\shell\open\command" -Force | Out-Null
+  Set-ItemProperty -LiteralPath "$handlerKey\shell\open\command" -Name '(default)' -Value 'another-program.exe "%1"'
+  $r = Invoke-Join $wx -Extra '-Uninstall'
+  Check ($r.Code -eq 0 -and $r.Out -match 'Removed 0 game file' -and $r.Out -notmatch 'link handler' -and (Snapshot $wx.Game) -eq $again -and -not (Test-Path -LiteralPath $kit)) "a second uninstall is harmless (got $($r.Code)): $($r.Out.Trim())"
+  Check (Test-Path -LiteralPath $handlerKey) 'a moonpool: handler that opens another program is not removed'
+  Remove-Item Env:MOONPOOL_SHORTCUTS
+
   Write-Host 'a join link: only a safe address, and nothing else alongside it'
   $w9 = New-World; $worlds += $w9
   function Link-Run([string]$Args1) {
@@ -568,6 +613,8 @@ try {
   Check ($r.Code -ne 0 -and $r.Out -match 'not a server address') "a link with script characters is refused (got: $($r.Out.Trim()))"
   $r = Link-Run "-Link 'moonpool:https://x.example' -Adopt"
   Check ($r.Code -ne 0 -and $r.Out -match 'comes alone') "a link carrying another option is refused (got: $($r.Out.Trim()))"
+  $r = Link-Run "-Link 'moonpool:https://x.example' -Uninstall"
+  Check ($r.Code -ne 0 -and $r.Out -match 'comes alone' -and (Test-Path -LiteralPath 'HKCU:\Software\moonpool-tests\moonpool')) "a link cannot uninstall (got: $($r.Out.Trim()))"
 
   $r = Link-Run "-Server 'https://x.invalid'"
   Check ($r.Code -ne 0) 'an unreachable server stops the run'
