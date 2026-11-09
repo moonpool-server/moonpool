@@ -7,7 +7,7 @@ UE4SS or Subnautica 2 binaries, no game files and no prebuilt image; the
 project is unofficial and non-commercial. The container image built from it, and the
 volume it creates at run time, contain or download the third-party components
 below under their own licenses. The list is the parts this project fetches or
-serves itself and is not everything in the image: it also runs s6-overlay,
+serves itself and is not everything in the image: it also runs
 lighttpd, cloudflared (the tunnel profiles) and offen's docker-volume-backup
 (the backup profile) as published, and the Debian packages inside it carry
 their own notices under /usr/share/doc.
@@ -37,9 +37,19 @@ Wine and Wine Staging
 
 ------------------------------------------------------------------------------
 noVNC, x11vnc, Xvfb (panel target only)
-  noVNC: Mozilla Public License 2.0, https://github.com/novnc/noVNC
+  noVNC: https://github.com/novnc/noVNC; mixed licences: the core JavaScript (core/, app/*.js)
+    MPL 2.0, the HTML and CSS 2-Clause BSD, the Orbitron font SIL OFL 1.1, app/images CC BY-SA 3.0,
+    vendor/pako MIT; the archive's own LICENSE.txt, at /usr/share/novnc/LICENSE.txt in the image, applies.
+    Its release archive, pinned by version and sha256 in the Dockerfile; not modified.
   x11vnc: GNU GPL v2, Xvfb: MIT/X11 license
   Installed from distribution packages; not modified.
+
+------------------------------------------------------------------------------
+s6-overlay and supercronic (process supervision and the backup schedule)
+  s6-overlay: https://github.com/just-containers/s6-overlay, ISC license
+  supercronic: https://github.com/aptible/supercronic, MIT License
+  Both are release binaries downloaded by the Dockerfile, pinned by version and
+  sha256; not modified.
 
 ------------------------------------------------------------------------------
 Subnautica 2 is a trademark of its owners. This project is not affiliated with,

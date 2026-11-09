@@ -39,10 +39,19 @@ RUN dpkg --add-architecture i386 \
       "winehq-staging=${WINE_STAGING_DEB}" "wine-staging=${WINE_STAGING_DEB}" \
       "wine-staging-amd64=${WINE_STAGING_DEB}" "wine-staging-i386=${WINE_STAGING_DEB}" \
  && apt-get install -y --no-install-recommends \
-      xvfb x11-utils xdotool x11vnc novnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-pil python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
+      apt libapt-pkg7.0 \
+      xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-pil python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
  && apt-get purge -y ipp-usb avahi-daemon \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /tmp
+# noVNC from its own release: static files websockify serves. Debian's package would bring Node.js
+# along, which nothing here runs.
+ARG NOVNC_VERSION=1.7.0
+ARG NOVNC_SHA256=b1003a11b6e6e8d8f7f5e5586daae7f8ca651d8aee0aa155ff9ac841c48f52c6
+RUN curl -fsSL -o novnc.tar.gz "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
+ && echo "${NOVNC_SHA256}  novnc.tar.gz" | sha256sum -c - \
+ && mkdir -p /usr/share/novnc && tar -C /usr/share/novnc --strip-components=1 -xzf novnc.tar.gz \
+ && rm -f novnc.tar.gz
 RUN base="https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}" \
  && curl -fsSLO "$base/s6-overlay-noarch.tar.xz" && curl -fsSLO "$base/s6-overlay-x86_64.tar.xz" \
  && echo "${S6_NOARCH_SHA256}  s6-overlay-noarch.tar.xz" | sha256sum -c - \
