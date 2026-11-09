@@ -35,8 +35,9 @@ param(
   [switch]$DisableMoonpoolMods,
   # For tests: no Desktop or Start menu shortcuts.
   [switch]$NoShortcuts,
-  # For tests: how long the game may take to appear after the launch.
+  # For tests: how long the game may take to appear after the launch, and a smaller unpack limit.
   [int]$StartWait = 180,
+  [long]$UnpackLimit = 0,
   # For tests: replace the running-game check, the launch and the pages opened.
   [scriptblock]$IsGameRunning,
   [scriptblock]$Launch,
@@ -69,6 +70,7 @@ $InstalledScript = Join-Path $KitHome 'moonpool.ps1'
 # Forks change this one line and the same one in moonpool-setup.cmd.
 $ReleaseBase = 'https://github.com/moonpool-server/moonpool/releases/latest/download'
 $MaxUnpackedBytes = 4GB
+if ($UnpackLimit -gt 0) { $MaxUnpackedBytes = $UnpackLimit }
 $MaxArchiveEntries = 20000
 
 function Say([string]$Message) {
@@ -707,12 +709,37 @@ function Assert-ArchiveSafe([string]$Archive, [string]$Label) {
   } finally { $zip.Dispose() }
 }
 
+# Unpacks a checked archive, counting the bytes really written: a size an archive declares can lie.
+function Expand-Counted([string]$Archive, [string]$Dest, [string]$Label) {
+  $root = [IO.Path]::GetFullPath($Dest).TrimEnd('\') + '\'
+  $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
+  $buf = New-Object byte[] 65536
+  $total = [long]0
+  try {
+    foreach ($entry in $zip.Entries) {
+      $path = [IO.Path]::GetFullPath($root + ($entry.FullName -replace '/', '\'))
+      if (-not $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { Fail "${Label}: unsafe path in the archive: $($entry.FullName); nothing changed, game not started" }
+      if ($entry.FullName.EndsWith('/')) { [void][IO.Directory]::CreateDirectory($path); continue }
+      [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))
+      $in = $entry.Open()
+      $out = [IO.File]::Create($path)
+      try {
+        while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+          $total += $n
+          if ($total -gt $MaxUnpackedBytes) { Fail "${Label}: the archive unpacks to more than this launcher accepts; nothing changed, game not started" }
+          $out.Write($buf, 0, $n)
+        }
+      } finally { $out.Dispose(); $in.Dispose() }
+    }
+  } finally { $zip.Dispose() }
+}
+
 # Unpacks the part of an archive this mod is (its prefix) into stage\<folder>\ and
 # returns the files as relative paths with their hashes.
 function Expand-ModArchive($Mod, [string]$Archive, [string]$Stage) {
   $unpacked = Join-Path $Stage ('unpacked-' + $Mod.Folder)
   Assert-ArchiveSafe $Archive $Mod.Name
-  Expand-Archive -LiteralPath $Archive -DestinationPath $unpacked
+  Expand-Counted $Archive $unpacked $Mod.Name
   $root = $unpacked
   if ($Mod.Prefix) {
     if ($Mod.Kind -eq 'ue4ss') { $root = Join-Path $unpacked ($Mod.Prefix -replace '/', '\') }
@@ -752,7 +779,7 @@ function Get-LoaderFiles($Spec, [string]$Stage) {
   if ((Get-Sha256 $zip) -ne ([string]$Spec.sha256).ToLowerInvariant()) { Fail 'the UE4SS loader failed its sha256 check; nothing changed, game not started' }
   $loader = Join-Path $Stage 'unpacked-ue4ss'
   Assert-ArchiveSafe $zip 'the UE4SS loader'
-  Expand-Archive -LiteralPath $zip -DestinationPath $loader
+  Expand-Counted $zip $loader 'the UE4SS loader'
   $src = $loader
   if (Test-Path -LiteralPath (Join-Path $loader 'ue4ss\UE4SS.dll')) { $src = Join-Path $loader 'ue4ss' }
   if (-not (Test-Path -LiteralPath (Join-Path $src 'UE4SS.dll'))) { Fail 'the UE4SS loader archive has no UE4SS.dll' }
