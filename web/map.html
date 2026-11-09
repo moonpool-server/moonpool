@@ -137,7 +137,7 @@ function draw(d) {
   }
   document.getElementById('about').textContent = d.explored === null ? 'Player positions are not shown on this map.'
     : d.divers.length ? 'Where each player was about ' + d.delay_minutes + ' minutes ago. Never where they are now.'
-    : 'Nobody has played here in the last hour. Players show up about ' + d.delay_minutes + ' minutes after they move.';
+    : 'No player positions to show yet. They appear about ' + d.delay_minutes + ' minutes after someone moves.';
   var bare = !(d.backgrounds && d.backgrounds.length);
   if (!map.fitted && seen.length) {  // open where the action is; the whole world is one zoom out
     map.fitBounds(seen, {padding: [60, 60], maxZoom: bare ? 3 : 4});
