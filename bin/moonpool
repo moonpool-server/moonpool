@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.request
 import zipfile
 import time
 from datetime import datetime, timezone
@@ -892,17 +893,16 @@ def inner(r):
         if not any(line.startswith(sid) for line in (f.read_text(encoding="utf-8").split("\n") if f.is_file() else [])):
             with f.open("a", encoding="utf-8") as out:
                 out.write(sid + "\n")
-        nxt = "accepted within a minute" if E.get("AUTO_ACCEPT_FRIENDS", "0") == "1" else "waiting for you to accept it in the viewer"
-        finish("ok", f"{sid} is invited: their friend request is {nxt}", "", {"steamid": sid})
+        nxt = "Moonpool accepts it within a minute" if E.get("AUTO_ACCEPT_FRIENDS", "0") == "1" else "accept it in the viewer"
+        finish("ok", f"{sid} is on the allowlist; when they send the host a friend request, {nxt}", "", {"steamid": sid})
     if op == "save":
         queue_send("save")
     if op == "status":
-        served = read_json(Path(cfg()["DATA_DIR"]) / "public" / "moonpool.json") or {}
-        join = str(served.get("manifest_url") or "").rsplit("/", 1)[0]
-        join = join + "/join" if join else None
+        url = public_url()
+        join = f"{url}/join" if url else None
         if R["json"]:
             finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join})
-        print(f"== join page: {join or 'none yet (no public address)'}")
+        print(f"== join page: {join or 'no public address; on your network http://<this machine>:' + (E.get('SN2_MODS_PORT') or '8081') + '/join'}")
         print("== readiness (written by the mod every poll)")
         print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
         sys.exit(0)
@@ -950,6 +950,19 @@ def inner(r):
 
 def num(v):
     return int(v) if float(v).is_integer() else v
+
+
+def public_url():
+    """The address players reach the join page at, worked out like the server does (common.sh public_url)."""
+    url = (E.get("SN2_PUBLIC_URL") or "").rstrip("/")
+    if url or E.get("TUNNEL", "off") != "quick":
+        return url
+    try:
+        with urllib.request.urlopen(E.get("TUNNEL_METRICS_URL") or "http://tunnel:20241/quicktunnel", timeout=2) as r:
+            host = str(json.loads(r.read().decode("utf-8")).get("hostname") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return f"https://{host}" if host.endswith(".trycloudflare.com") else ""
 
 
 def read_json_text(text):
