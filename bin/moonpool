@@ -44,7 +44,7 @@ Who is in
   players                      who is connected (PlayerState names)
   players kick <name>          the game's own KickPlayer <name>, run as the host
   players invite <steamid64|profile link>
-                               let them in: their friend request is accepted within a minute
+                               allowlist them; then accept their friend request (by itself with AUTO_ACCEPT_FRIENDS=1)
   players friends              the host's friend code and its friends, from Steam's files
   ban add <name|steamid64> [reason]
   ban remove <name|steamid64>  manage permanent access blocks
@@ -902,7 +902,7 @@ def inner(r):
         join = f"{url}/join" if url else None
         if R["json"]:
             finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join})
-        print(f"== join page: {join or 'no public address; on your network http://<this machine>:' + (E.get('SN2_MODS_PORT') or '8081') + '/join'}")
+        print(f"== join page: {join or 'no public address; port ' + (E.get('SN2_MODS_PORT') or '8081') + ' on this machine serves it, reachable as MODS_BIND allows'}")
         print("== readiness (written by the mod every poll)")
         print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
         sys.exit(0)
