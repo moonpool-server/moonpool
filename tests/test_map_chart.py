@@ -96,6 +96,11 @@ def test_a_map_picture_comes_over_https_only() -> None:
         for url in (secret.as_uri(), "http://tiles.example/0/0/0.png", "ftp://tiles.example/x.png"):
             assert chart.fetch(url, Path(d)) is None
         assert len(list(Path(d).iterdir())) == 1  # nothing fetched or cached
+    import urllib.request
+    req = urllib.request.Request("https://tiles.example/0/0/0.png")
+    stay = chart._HttpsOnly()
+    assert stay.redirect_request(req, None, 302, "Found", {}, "http://tiles.example/0/0/0.png") is None
+    assert stay.redirect_request(req, None, 302, "Found", {}, "https://cdn.example/0.png") is not None
 
 
 def test_a_new_base_waits_out_the_delay_too() -> None:
