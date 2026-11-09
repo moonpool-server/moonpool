@@ -21,12 +21,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 STILL_W = 1200  # the still's width in pixels; link previews want about this
 FOCUS_MIN_M = 800  # the still never shows less than this across
 FOCUS_PAD_M = 150  # room around the outermost dot
-STILL_VERSION = 3  # bump when the drawing changes, so a cached still is fetched again
+STILL_VERSION = 4  # bump when the drawing changes, so a cached still is fetched again
 STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
 KEEP_S = 3600  # how long a player's last spot stays, faded, after they leave
@@ -249,7 +249,8 @@ def backdrop(bgs, public, cache, region=None):
 
 
 def still(page, bg, public, cache):
-    """map.png: the backdrop around the action, with the bases and lifepods on it."""
+    """map.png: the backdrop around the action under the same fog as the page, with the bases and
+    lifepods on it."""
     world = union(bg) if bg else [-2560, 2560, 2560, -2560]
     img, (left, top, right, bottom) = backdrop(bg, public, cache, focus(page, world))
     scale = STILL_W / img.width
@@ -259,6 +260,15 @@ def still(page, bg, public, cache):
     def at(x, y):
         return ((x - left) * sx, (y - top) * sy)
 
+    if bg:  # the picture shows only what someone has visited
+        shroud = Image.new("L", img.size, 255)
+        hole = ImageDraw.Draw(shroud)
+        r = page["cell_m"] * 1.1 * sx
+        for x, y in page["explored"]:
+            px, py = at(x + page["cell_m"] / 2, y + page["cell_m"] / 2)
+            hole.ellipse([px - r * 0.85, py - r * 0.85, px + r * 0.85, py + r * 0.85], fill=0)
+        shroud = shroud.filter(ImageFilter.GaussianBlur(r * 0.25))
+        img = Image.composite(Image.new(img.mode, img.size, (7, 25, 35) + ((255,) if img.mode == "RGBA" else ())), img, shroud)
     draw = ImageDraw.Draw(img)
     for kind, fill in (("lifepods", (255, 90, 79)), ("bases", (126, 231, 135))):
         for x, y in page[kind]:
@@ -312,8 +322,8 @@ def main():
         page_data["backgrounds"] = []
         print("map-chart: no background: %s" % err, file=sys.stderr)
     page_data["background"] = page_data["backgrounds"][0] if page_data["backgrounds"] else None
-    # The still only when what it shows changed: the bases, the lifepods or the backdrop.
-    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["bases"], page_data["lifepods"],
+    # The still only when what it shows changed: the explored places, bases, lifepods or backdrop.
+    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"], page_data["bases"], page_data["lifepods"],
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)

@@ -145,9 +145,16 @@ def test_a_branch_can_lay_several_pictures_side_by_side() -> None:
         data = json.loads(run(tmp, 1000, [], STEAM_BRANCH="public").read_text())
         assert [g["url"] for g in data["backgrounds"]] == ["map-background-0.png", "map-background-1.png"]
         assert data["background"]["bounds"] == [0, 0, 1000, 1000] and len(data["still"]) == 16
-        still = Image.open(tmp / "public" / "map.png")
-        assert still.size[0] == 1200 and still.getpixel((300, 300))[:3] == (200, 50, 50)
-        assert still.getpixel((900, 300))[:3] == (50, 200, 50)
+        assert Image.open(tmp / "public" / "map.png").size[0] == 1200
+        # The still shows only what someone visited: one spot in each picture, the rest under fog.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("map_chart", SCRIPT)
+        chart = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(chart)
+        page = {"cell_m": 50, "explored": [[475, 475], [1475, 475]], "bases": [], "lifepods": []}
+        still = Image.open(__import__("io").BytesIO(chart.still(page, data["backgrounds"], tmp / "public", tmp)))
+        assert still.getpixel((300, 300))[:3] == (200, 50, 50) and still.getpixel((900, 300))[:3] == (50, 200, 50)
+        assert still.getpixel((300, 30))[:3] == (7, 25, 35) and still.getpixel((600, 300))[:3] == (7, 25, 35)
 
 
 def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing() -> None:

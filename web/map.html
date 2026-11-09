@@ -48,8 +48,8 @@ function colour(depth) {
   }
   return 'rgb(39,18,79)';
 }
-// Fog of war: a dark sheet over the view with a soft round hole wherever someone has been, so
-// nearby visits melt into one clearing. Redrawn on every move; [lat, lng] points, radius in metres.
+// Fog of war: an opaque sheet over the view, so the map gives nothing away, with a soft round
+// hole wherever someone has been; nearby visits melt into one clearing. Redrawn on every move; [lat, lng] points, radius in metres.
 var Fog = L.Layer.extend({
   onAdd: function (m) {
     this._c = L.DomUtil.create('canvas', 'leaflet-zoom-animated', m.getPane('fog'));
@@ -65,7 +65,7 @@ var Fog = L.Layer.extend({
     var m = this._map, size = m.getSize(), c = this._c, g = c.getContext('2d'), r = this._r;
     c.width = size.x; c.height = size.y; this._bounds = m.getBounds();
     L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
-    g.fillStyle = 'rgba(3, 17, 26, 0.62)'; g.fillRect(0, 0, size.x, size.y);
+    g.fillStyle = '#071923'; g.fillRect(0, 0, size.x, size.y);
     g.globalCompositeOperation = 'destination-out';
     (this._pts || []).forEach(function (p) {
       var at = m.latLngToContainerPoint(p), px = Math.abs(m.latLngToContainerPoint([p[0], p[1] + r]).x - at.x);
