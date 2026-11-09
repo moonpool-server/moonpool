@@ -903,12 +903,12 @@ function Invoke-Uninstall {
   # The handler goes only while it still opens this launcher; another program may have taken the name.
   $key = Get-HandlerKey
   $command = [string](Get-Prop (Get-ItemProperty -LiteralPath "$key\shell\open\command" -ErrorAction SilentlyContinue) '(default)' '')
-  if ($command.IndexOf("`"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) { Remove-Item -LiteralPath $key -Recurse -Force; $done += 'its moonpool: link handler' }
+  if ($command.IndexOf("-File `"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) { Remove-Item -LiteralPath $key -Recurse -Force; $done += 'its moonpool: link handler' }
   $links = 0
   $shell = New-Object -ComObject WScript.Shell
   foreach ($dir in Get-ShortcutFolders) {
     foreach ($lnk in @(Get-ChildItem -LiteralPath $dir -Filter 'Subnautica 2 (*).lnk' -File -ErrorAction SilentlyContinue)) {
-      if ($shell.CreateShortcut($lnk.FullName).Arguments.IndexOf("`"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) { Remove-Item -LiteralPath $lnk.FullName -Force; $links++ }
+      if ($shell.CreateShortcut($lnk.FullName).Arguments.IndexOf("-File `"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) { Remove-Item -LiteralPath $lnk.FullName -Force; $links++ }
     }
   }
   # A shortcut's console keeps this folder as its working folder until this run ends.
