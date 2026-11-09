@@ -717,19 +717,27 @@ function Expand-Counted([string]$Archive, [string]$Dest, [string]$Label) {
   $total = [long]0
   try {
     foreach ($entry in $zip.Entries) {
-      $path = [IO.Path]::GetFullPath($root + ($entry.FullName -replace '/', '\'))
-      if (-not $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { Fail "${Label}: unsafe path in the archive: $($entry.FullName); nothing changed, game not started" }
-      if ($entry.FullName.EndsWith('/')) { [void][IO.Directory]::CreateDirectory($path); continue }
+      $name = $entry.FullName -replace '\\', '/'
+      $path = [IO.Path]::GetFullPath($root + ($name -replace '/', '\'))
+      if (-not $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { Fail "${Label}: unsafe path in the archive: $name; nothing changed, game not started" }
+      if ($name.EndsWith('/')) { [void][IO.Directory]::CreateDirectory($path); continue }
       [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))
-      $in = $entry.Open()
-      $out = [IO.File]::Create($path)
+      $in = $null; $out = $null
       try {
+        $in = $entry.Open()
+        # CreateNew: two names that land on one file (a short 8.3 name, say) never overwrite each other.
+        try { $out = [IO.File]::Open($path, [IO.FileMode]::CreateNew) }
+        catch { Fail "${Label}: two entries in the archive land on the same file ($name); nothing changed, game not started" }
         while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
           $total += $n
           if ($total -gt $MaxUnpackedBytes) { Fail "${Label}: the archive unpacks to more than this launcher accepts; nothing changed, game not started" }
           $out.Write($buf, 0, $n)
         }
-      } finally { $out.Dispose(); $in.Dispose() }
+      } finally {
+        if ($out) { $out.Dispose() }
+        if ($in) { $in.Dispose() }
+      }
+      [IO.File]::SetLastWriteTime($path, $entry.LastWriteTime.DateTime)
     }
   } finally { $zip.Dispose() }
 }
