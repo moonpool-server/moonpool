@@ -580,7 +580,10 @@ try {
   # From the installed copy, with its folder as the working folder of the process above it, as a shortcut runs it.
   $oldScript = $Script; $Script = Join-Path $kit 'moonpool.ps1'; $cwd = [Environment]::CurrentDirectory
   [IO.Directory]::SetCurrentDirectory($kit)
+  $wrote = Join-Path $wx.Mods 'Foo\state.dat'; Set-Content -LiteralPath $wrote -Value 'the mod wrote this' -NoNewline
   try { $r = Invoke-Join $wx -Extra '-Uninstall' } finally { [IO.Directory]::SetCurrentDirectory($cwd); $Script = $oldScript }
+  Check ($r.Out -match 'wrote while they ran' -and $r.Out -match [regex]::Escape((Join-Path $wx.Mods 'Foo').ToLowerInvariant()) -and (Test-Path -LiteralPath $wrote)) "a folder a mod wrote into stays and is named (got: $($r.Out.Trim())"
+  Remove-Item -LiteralPath $wrote
   $edited = Join-Path $wx.Mods 'Foo\Scripts\lib.lua'
   Check ($r.Code -eq 0 -and $r.Out -match 'uninstalled' -and $r.Out -match [regex]::Escape($edited.ToLowerInvariant()) -and (Text $edited) -eq 'my edit') "the changed file is kept and named (got $($r.Code)): $($r.Out.Trim())"
   Remove-Item -LiteralPath $edited
