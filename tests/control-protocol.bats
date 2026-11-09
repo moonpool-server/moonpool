@@ -477,16 +477,17 @@ steam_env() {
   [ "$status" -eq 0 ]
   [ "$(cat "$SN2_CONTROL_DIR/allowlist.txt")" = 76561198000000000 ]
   [ -z "$(ls "$SN2_CONTROL_DIR/inbox")" ]
-  [[ $output == *"waiting for you to accept it in the viewer"* ]]
+  [[ $output == *"accept it in the viewer"* ]]
   run env AUTO_ACCEPT_FRIENDS=1 "$CTL" players invite 76561198000000001
-  [[ $output == *"accepted within a minute"* ]]
+  [[ $output == *"Moonpool accepts it within a minute"* ]]
 }
 
-@test "status names the join page the server serves now" {
-  data="$BATS_TEST_TMPDIR/data"; mkdir -p "$data/public"
-  echo '{"manifest_url":"https://a-b-c.trycloudflare.com/mods.json"}' >"$data/public/moonpool.json"
-  run env DATA_DIR="$data" "$CTL" status
+@test "status names the join page at the tunnel's current address, or says there is none" {
+  echo '{"hostname":"a-b-c.trycloudflare.com"}' >"$BATS_TEST_TMPDIR/quicktunnel"
+  run env TUNNEL=quick TUNNEL_METRICS_URL="file://$BATS_TEST_TMPDIR/quicktunnel" "$CTL" status
   [[ $output == *"== join page: https://a-b-c.trycloudflare.com/join"* ]]
+  run env TUNNEL=off "$CTL" status
+  [[ $output == *"== join page: no public address; on your network http://<this machine>:8081/join"* ]]
 }
 
 @test "invite takes a profile link" {
