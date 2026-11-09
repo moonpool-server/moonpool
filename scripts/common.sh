@@ -113,7 +113,7 @@ SAVE_DIR="${SAVE_DIR:-$(save_dir_for_exe "$GAME_EXE_NAME")}"
 STAGING_DIR="$DATA_DIR/backup-staging"
 # A save copy before anything that can update the game, since a new build can't be undone.
 save_copy_before_update() {
-  [ "$AUTO_UPDATE" = true ] && [ -d "$SAVE_DIR" ] && [ "${UPDATE_WITHOUT_BACKUP:-false}" != true ] || return 0
+  [ -d "$SAVE_DIR" ] && [ "${UPDATE_WITHOUT_BACKUP:-false}" != true ] || return 0
   "${SN2_BIN:-/opt/sn2/bin}/save-stage.sh" --now >>"$LOG_DIR/save-stage.log" 2>&1
 }
 BACKUP_STATUS="$DATA_DIR/backup-status.txt"

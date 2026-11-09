@@ -892,12 +892,17 @@ def inner(r):
         if not any(line.startswith(sid) for line in (f.read_text(encoding="utf-8").split("\n") if f.is_file() else [])):
             with f.open("a", encoding="utf-8") as out:
                 out.write(sid + "\n")
-        finish("ok", f"{sid} is invited: their friend request is accepted within a minute", "", {"steamid": sid})
+        nxt = "accepted within a minute" if E.get("AUTO_ACCEPT_FRIENDS", "0") == "1" else "waiting for you to accept it in the viewer"
+        finish("ok", f"{sid} is invited: their friend request is {nxt}", "", {"steamid": sid})
     if op == "save":
         queue_send("save")
     if op == "status":
+        served = read_json(Path(cfg()["DATA_DIR"]) / "public" / "moonpool.json") or {}
+        join = str(served.get("manifest_url") or "").rsplit("/", 1)[0]
+        join = join + "/join" if join else None
         if R["json"]:
-            finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json")})
+            finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join})
+        print(f"== join page: {join or 'none yet (no public address)'}")
         print("== readiness (written by the mod every poll)")
         print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
         sys.exit(0)

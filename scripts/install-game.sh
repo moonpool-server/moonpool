@@ -22,7 +22,7 @@ if [ -f "$WIN64_DIR/$GAME_EXE_NAME" ]; then
     log "install-game: AUTO_UPDATE=true, Steam validates and updates app $GAME_APP_ID"
     wine "$STEAM_EXE" "steam://validate/$GAME_APP_ID" >>"$LOG_DIR/steam.log" 2>&1 &
   else
-    log "install-game: game present; AUTO_UPDATE=false pins this build"
+    log "install-game: game present; AUTO_UPDATE=false asks for no validation, but the Steam client can still update it"
   fi
   exit 0
 fi
