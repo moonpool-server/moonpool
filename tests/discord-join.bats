@@ -166,6 +166,18 @@ YAML
   grep -q 'card.yaml not_a_line: not a card line' "$LOG_DIR/discord.log"
 }
 
+@test "Discord card counts waiting friend requests, never names them, and drops the line at zero" {
+  printf '{"count":2,"names":["Alice"]}' >"$RUN_DIR/friend-requests.json"
+  body=$(python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ "$body" == *'Friend requests waiting for the host: 2'* ]]
+  [[ "$body" != *Alice* ]]
+  body=$(AUTO_ACCEPT_FRIENDS=1 python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ "$body" != *'Friend requests waiting'* ]]
+  printf '{"count":0,"names":[]}' >"$RUN_DIR/friend-requests.json"
+  body=$(python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ "$body" != *'Friend requests waiting'* ]]
+}
+
 @test "card.example.yaml lists every line the card has, and nothing else" {
   python3 - "$ROOT" <<'PY'
 import importlib.util, pathlib, sys

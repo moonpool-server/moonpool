@@ -16,7 +16,8 @@ GET /textfilter/ajaxgetfriendslist, then for each relationship 2
 (request recipient) POST /actions/AddFriendAjax accept_invite=1. Removing a
 friend posts sessionID and steamid to /actions/RemoveFriendAjax.
 
-`--lobby STEAMID64` reads the same session for the host's current lobby id instead
+`--pending` only reads: it prints {"count", "names"} of the requests the host may accept by
+hand, and any POST is refused. `--lobby STEAMID64` reads the same session for the host's current lobby id instead
 (own_lobby), for builds whose game log does not carry it whole.
 """
 from __future__ import annotations
@@ -38,6 +39,7 @@ import urllib.request
 WINE_SECRET = b"I'm hunting wabbits"  # crypt32_protectdata_secret, protectdata.c
 REQUEST_RECIPIENT = 2  # EFriendRelationship.RequestRecipient
 BASE = os.environ.get("STEAMCOMMUNITY_BASE", "https://steamcommunity.com")
+READ_ONLY = False
 
 
 def policy_ids(path: str) -> set[str]:
@@ -111,6 +113,8 @@ def community_cookies(htmlcache: str, user: str) -> dict[str, str]:
 
 
 def _req(path: str, cookies: dict[str, str], form: dict[str, str] | None = None) -> bytes:
+    if form is not None and READ_ONLY:
+        raise ValueError(f"read-only: refused POST {path}")
     data = urllib.parse.urlencode(form).encode() if form is not None else None
     r = urllib.request.Request(BASE + path, data=data, headers={
         "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
@@ -133,17 +137,29 @@ def remove_friend(cookies: dict[str, str], steamid: str) -> bool:
     return r.get("success") in (1, True)
 
 
-def accept_pending(cookies: dict[str, str], dry_run: bool = False,
-                   banned: set[str] | None = None, allowed: set[str] | None = None,
-                   allowlist_only: bool = False) -> list[str]:
+def friends_list(cookies: dict[str, str]) -> list[dict]:
     if "sessionid" not in cookies or "steamLoginSecure" not in cookies:
         raise ValueError("the Steam client has no steamcommunity.com web session yet")
     body = json.loads(_req("/textfilter/ajaxgetfriendslist", cookies))
     if body.get("success") != 1:
         raise ValueError(f"friends list refused: success={body.get('success')}")
+    return body.get("friendslist", {}).get("friends", [])
+
+
+def pending(cookies: dict[str, str], banned: set[str], allowed: set[str], allowlist_only: bool,
+            names: bool) -> dict:
+    """Incoming requests the accept rules would let in; names (at most 5) only when asked, never an id."""
+    sids = [str(f["ulfriendid"]) for f in friends_list(cookies) if f.get("efriendrelationship") == REQUEST_RECIPIENT]
+    sids = [s for s in sids if s not in banned and (s in allowed or not allowlist_only)]
+    return {"count": len(sids), "names": [n for s in sids[:5] if (n := name_of(s, cookies)) != s] if names else []}
+
+
+def accept_pending(cookies: dict[str, str], dry_run: bool = False,
+                   banned: set[str] | None = None, allowed: set[str] | None = None,
+                   allowlist_only: bool = False) -> list[str]:
     lines = []
     banned, allowed = banned or set(), allowed or set()
-    for f in body.get("friendslist", {}).get("friends", []):
+    for f in friends_list(cookies):
         sid = str(f["ulfriendid"])
         if sid in banned:
             if dry_run:
@@ -194,7 +210,8 @@ def own_lobby(cookies: dict[str, str], steamid: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    dry = "--dry-run" in argv
+    global READ_ONLY
+    dry, READ_ONLY = "--dry-run" in argv, "--pending" in argv
     htmlcache = os.environ.get("STEAM_HTMLCACHE") or os.path.join(
         os.environ.get("STEAM_SESSION_DIR")
         or os.path.join(os.environ.get("DATA_DIR", "/data"), "steam-session", "local-appdata"), "htmlcache")
@@ -227,9 +244,12 @@ def main(argv: list[str]) -> int:
                 raise ValueError("Steam refused the friend removal")
             print(f"friend removed: {sid}")
             return 0
-        for line in accept_pending(cookies, dry, policy_ids(os.path.join(control, "bans.txt")),
-                                   policy_ids(os.path.join(control, "allowlist.txt")),
-                                   os.environ.get("ALLOWLIST_ONLY", "true").strip().lower() != "false"):
+        rules = (policy_ids(os.path.join(control, "bans.txt")), policy_ids(os.path.join(control, "allowlist.txt")),
+                 os.environ.get("ALLOWLIST_ONLY", "true").strip().lower() != "false")
+        if READ_ONLY:
+            print(json.dumps(pending(cookies, *rules, os.environ.get("SHOW_PLAYER_NAMES", "true") == "true")))
+            return 0
+        for line in accept_pending(cookies, dry, *rules):
             print(line)
     except (OSError, ValueError, KeyError) as e:  # never print a cookie value
         print(f"friend accept skipped: {type(e).__name__}: {str(e)[:160]}")

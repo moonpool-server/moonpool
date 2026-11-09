@@ -23,6 +23,8 @@ accepts_auto: "it accepts within a minute"
 accepts_invite: "an admin has to invite you first"
 accepts_manual: "the host accepts it by hand"
 steam_join: "• Press **Join**, or **Friends** › right-click the host › **Join Game**"
+# placeholders: {n}
+friend_requests: "-# Friend requests waiting for the host: {n}"
 xbox_title: "**Xbox / PC Game Pass**"
 xbox_beta: "• Join the Subnautica 2 preview in **Xbox Insider Hub**"
 xbox_add: >-

@@ -80,6 +80,24 @@ fake_mod() {
   [[ $output == *"all passed"* ]]
 }
 
+@test "status says how many friend requests wait for the host, by name, and nothing when none do" {
+  export SN2_RUN_DIR="$BATS_TEST_TMPDIR/run"; mkdir -p "$SN2_RUN_DIR"
+  run "$CTL" status
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'friend request'* ]]
+  printf '{"count":2,"names":["Alice","Bo"]}' >"$SN2_RUN_DIR/friend-requests.json"
+  run "$CTL" status
+  [[ "$output" == *'2 friend requests waiting: accept them in the viewer ["Alice", "Bo"]'* ]]
+  run "$CTL" --json status
+  [ "$(jq -c .data.friend_requests <<<"$output")" = '{"count":2,"names":["Alice","Bo"]}' ]
+  run env SHOW_PLAYER_NAMES=false "$CTL" status
+  [[ "$output" == *'2 friend requests waiting: accept them in the viewer'* ]]
+  [[ "$output" != *Alice* ]]
+  python3 -c 'import os, sys, time; os.utime(sys.argv[1], (time.time() - 600,) * 2)' "$SN2_RUN_DIR/friend-requests.json"
+  run "$CTL" status
+  [[ "$output" != *'friend request'* ]]
+}
+
 @test "player arguments are JSON-escaped" {
   run mp 'print(m.build_request("x", "player", ["a\"b", "Give DA_X_ItemType 2"]))'
   [ "$status" -eq 0 ]

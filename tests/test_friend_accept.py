@@ -86,8 +86,11 @@ class Fake(http.server.BaseHTTPRequestHandler):
     lobby: str | None = "109775243279513236"
     api_queries: list = []
 
+    get_paths: list = []
+
     def do_GET(self):
         Fake.cookies.append(self.headers.get("Cookie", ""))
+        Fake.get_paths.append(self.path)
         if self.path.startswith("/pointssummary/ajaxgetasyncconfig"):
             self._send(json.dumps({"success": 1, "data": {"webapi_token": "TOKEN"}}).encode())
         elif self.path.startswith("/IPlayerService/GetPlayerLinkDetails/v1/"):
@@ -244,6 +247,32 @@ def main() -> int:
         check(rc == 0 and Fake.post_paths == ["/actions/AddFriendAjax", "/actions/RemoveFriendAjax"]
               and [p["steamid"] for p in Fake.posts] == [listed, listed_and_banned],
               "unset ALLOWLIST_ONLY accepts only the listed ID and removes the banned one")
+
+        # 7. --pending only reads: the requests the rules would let in, by name, and no POST at all.
+        Fake.friends += [{"ulfriendid": listed_and_banned, "efriendrelationship": 3}]
+        Fake.posts, Fake.post_paths, Fake.get_paths = [], [], []
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = fa.main(["--pending"])
+        check(rc == 0 and json.loads(out.getvalue()) == {"count": 1, "names": ["Player 55"]},
+              "--pending counts only the requests the accept rules would let in")
+        check(Fake.post_paths == [] and Fake.posts == [], "--pending posts nothing, not even for a banned friend")
+        check("7656" not in out.getvalue(), "--pending prints no Steam id")
+        os.environ["ALLOWLIST_ONLY"], os.environ["SHOW_PLAYER_NAMES"] = "false", "false"
+        Fake.get_paths = []
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = fa.main(["--pending"])
+        check(rc == 0 and json.loads(out.getvalue()) == {"count": 2, "names": []}
+              and not any(p.startswith("/profiles/") for p in Fake.get_paths),
+              "SHOW_PLAYER_NAMES=false: a count, and no profile is looked up")
+        try:
+            fa._req("/actions/AddFriendAjax", ck, {"steamid": stranger})
+            check(False, "read-only mode refuses a POST")
+        except ValueError:
+            check(Fake.post_paths == [], "read-only mode refuses a POST")
+        for k in ("ALLOWLIST_ONLY", "SHOW_PLAYER_NAMES"):
+            os.environ.pop(k)
     srv.shutdown()
     print("all passed" if FAILS == 0 else f"{FAILS} failed")
     return 1 if FAILS else 0
