@@ -159,7 +159,7 @@ For mentions on important alerts, make a role people can opt into and set `DISCO
 
 `WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one dot per player where they were 15 minutes ago (`MAP_DELAY_MINUTES`), colored by depth and tagged with their name ("Player 1" with `SHOW_PLAYER_NAMES=false`), plus bases and lifepods. Someone who left stays as a faded dot for an hour. `MAP_PLAYERS=false` leaves players and the explored places out of the page and its data, `MAP_BASES=false` the bases. Everything the page draws is in `map.json`, which anyone with the link can fetch, so the fog hides nothing from someone who reads it. With a map picture behind it, the default view darkens everywhere nobody has visited yet, and clears in soft patches on the same delay. The Discord picture is fogged the same way. Anyone with the link can see it all
 
-Moonpool ships no map picture. To put one behind the dots, copy a map file into the data volume:
+Moonpool ships no map picture. To put one behind the dots, copy a map file into the data volume; its `credit` line is shown on the page, so name the picture's author and licence there:
 
 ```sh
 docker compose cp map-background.example.json sn2:/home/container/map-background.json

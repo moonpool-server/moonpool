@@ -106,7 +106,7 @@ def background(status, env, data, public):
             shutil.copyfile(data / name, public / served)
             source = served
         out.append({"url": source, "tiles": "{z}" in source, "max_zoom": max_zoom,
-                    "bounds": [v / UU_PER_M for v in bounds]})
+                    "bounds": [v / UU_PER_M for v in bounds], **({"credit": item["credit"]} if isinstance(item.get("credit"), str) and item["credit"] else {})})
     return out
 
 

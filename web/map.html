@@ -30,7 +30,7 @@ p{margin:4px 0 0;color:#9fc2cf}
 <header>
 <h1 id="title">{{WORLD}}</h1>
 <p id="about"></p>
-<div class="key"><span>Surface</span><span class="ramp"></span><span>Deep</span><span id="credit"></span></div>
+<div class="key"><span>Surface</span><span class="ramp"></span><span>Deep</span><span id="credit"></span><span>Anyone with this link sees this page and its data.</span></div>
 </header>
 <div id="chart"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
@@ -100,7 +100,9 @@ function setup(bgs) {
   if (bgs.length) {
     map.fitBounds([[b[1], b[0]], [b[3], b[2]]]);
     map.setMinZoom(map.getZoom() - 1);  // no further out than the whole world, with room
-    if (hosts.length) document.getElementById('credit').textContent = 'Background from ' + hosts.join(', ');
+    var credits = bgs.map(function (g) { return g.credit; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; });
+    if (credits.length) document.getElementById('credit').textContent = 'Map picture: ' + credits.join('; ');
+    else if (hosts.length) document.getElementById('credit').textContent = 'Background from ' + hosts.join(', ');
   }
   map.createPane('fog').style.zIndex = 350;  // over the picture, under the dots
   layers.fog = new Fog();
