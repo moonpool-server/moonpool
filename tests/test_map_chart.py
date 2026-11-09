@@ -71,6 +71,33 @@ def test_each_player_shows_where_they_were_after_the_delay_and_never_now() -> No
         assert json.loads(run(tmp, 1900 + 900 + 3600 + 60, []).read_text())["divers"] == []  # an hour after they left
 
 
+def test_players_and_bases_can_be_kept_off_the_map() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        alice = {"name": "Alice", "x": 500, "y": 500, "depth_m": 10}
+        base = '[{"x":70000,"y":80000}]'
+        run(tmp, 1000, [alice], BASES=base, MAP_DELAY_MINUTES="0")
+        shown = json.loads(run(tmp, 1001, [alice], BASES=base, MAP_DELAY_MINUTES="0").read_text())
+        assert shown["divers"] and shown["explored"] and shown["bases"]
+        hidden = json.loads(run(tmp, 1002, [alice], BASES=base, MAP_DELAY_MINUTES="0",
+                                MAP_PLAYERS="false", MAP_BASES="false").read_text())
+        assert hidden["divers"] == [] and hidden["explored"] is None and hidden["bases"] == []
+        assert "Alice" not in (tmp / "public" / "map.json").read_text()
+
+
+def test_a_map_picture_comes_over_https_only() -> None:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("map_chart", SCRIPT)
+    chart = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(chart)
+    with tempfile.TemporaryDirectory() as d:
+        secret = Path(d) / "secret.png"
+        secret.write_bytes(b"not for the map")
+        for url in (secret.as_uri(), "http://tiles.example/0/0/0.png", "ftp://tiles.example/x.png"):
+            assert chart.fetch(url, Path(d)) is None
+        assert len(list(Path(d).iterdir())) == 1  # nothing fetched or cached
+
+
 def test_a_new_base_waits_out_the_delay_too() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
