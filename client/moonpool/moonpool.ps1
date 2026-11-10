@@ -1050,6 +1050,13 @@ function Expand-ModArchive($Mod, [string]$Archive, [string]$Stage) {
       New-Item -ItemType File -Path $marker -Force | Out-Null
       $files.Add([pscustomobject]@{ Rel = 'enabled.txt'; Path = $marker; Sha256 = (Get-Sha256 $marker) })
     }
+  } elseif ($Mod.Prefix -and (Test-Path -LiteralPath (Join-Path $unpacked ($Mod.Prefix -replace '/', '\')) -PathType Container)) {
+    # A folder of trios: the author's set, each file placed in ~mods under its own name.
+    $dir = Join-Path $unpacked ($Mod.Prefix -replace '/', '\')
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -File | Where-Object { $TrioExtensions -contains $_.Extension.ToLowerInvariant() })) {
+      $files.Add([pscustomobject]@{ Rel = $f.Name; Path = $f.FullName; Sha256 = (Get-Sha256 $f.FullName) })
+    }
+    if ($files.Count -eq 0) { Fail "$($Mod.Name): the archive has no .pak files in '$($Mod.Prefix)'; the server's list is stale" }
   } else {
     $stem = ($Mod.Prefix -replace '/', '\')
     foreach ($ext in $TrioExtensions) {

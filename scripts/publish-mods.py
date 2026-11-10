@@ -235,13 +235,20 @@ def archive_roots(archive, kind):
             for member in names:
                 p = Path(member)
                 if p.suffix.lower() in TRIO:
-                    stems.setdefault(str(p.with_suffix("")), set()).add(p.suffix.lower())
+                    stems.setdefault(p.with_suffix("").as_posix(), set()).add(p.suffix.lower())
             if not stems:
                 raise ValueError(f"archive {Path(archive).name} has no .pak/.ucas/.utoc files")
             for stem, have in sorted(stems.items()):
                 if (".ucas" in have or ".utoc" in have) and have != TRIO:
                     raise ValueError(f"archive {Path(archive).name}: {stem} is an incomplete .pak/.ucas/.utoc trio")
                 roots.append({"name": Path(stem).name, "prefix": stem})
+            # A folder holding several trios is also one mod: the author's set, placed together.
+            parents = {}
+            for stem in stems:
+                parents.setdefault(Path(stem).parent.as_posix(), []).append(stem)
+            for parent, members in sorted(parents.items()):
+                if parent != "." and len(members) > 1:
+                    roots.append({"name": Path(parent).name, "prefix": parent, "group": True})
     return roots
 
 
@@ -257,6 +264,10 @@ def choose_root(roots, install, name):
                          + ", ".join(r["name"] or "(root)" for r in roots))
     if len(roots) == 1:
         return roots[0]
+    # Every trio in one folder: that folder is the mod, with nothing to choose.
+    groups = [r for r in roots if r.get("group")]
+    if len(groups) == 1 and all(r is groups[0] or r["prefix"].startswith(groups[0]["prefix"] + "/") for r in roots):
+        return groups[0]
     raise ValueError(f"{name}: the archive holds several mods ({', '.join(r['name'] for r in roots)}); "
                      "set install.folder to the one this entry installs")
 
@@ -431,6 +442,8 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
             raise ValueError(f"{name}: the archive has not been inspected; pin it with `moonpool mods pin`")
     root = choose_root(roots, install, name)
     folder = install.get("folder") or root["name"] or re.sub(r"[^A-Za-z0-9_.-]+", "", name)
+    if root.get("group"):  # a folder of trios is named by its folder, in the characters a game folder takes
+        folder = re.sub(r"[^A-Za-z0-9_.-]+", "", root["name"]) or re.sub(r"[^A-Za-z0-9_.-]+", "", name)
     if not SAFE_FOLDER.match(folder):
         raise ValueError(f"{name}: the install folder '{folder}' has characters the game folder cannot take")
     tier = str(entry.get("tier", "optional")).lower()

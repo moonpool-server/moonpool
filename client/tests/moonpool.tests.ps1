@@ -220,6 +220,15 @@ try {
   $r = Invoke-Join $w -Extra "-Keep 'Bar'"
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $w.Mods 'Bar\Scripts\main.lua'))) '-Keep takes it back'
 
+  Write-Host 'a pak mod that is a folder of trios places every trio under its own name'
+  $wp = New-World; $worlds += $wp
+  New-Zip (Join-Path $wp.Server 'Set.zip') @('Better Set\0_A_P.pak', 'Better Set\0_A_P.ucas', 'Better Set\0_A_P.utoc', 'Better Set\0_B_P.pak', 'Better Set\0_B_P.ucas', 'Better Set\0_B_P.utoc')
+  Write-Manifest $wp @((Mod $wp 'Better Set' 'Set.zip' 'BetterSet' 'Better Set' $true '1' 'pak'))
+  $r = Invoke-Join $wp
+  $paks = Join-Path $wp.Game 'Subnautica2\Content\Paks\~mods'
+  $placed = @(Get-ChildItem -LiteralPath $paks -File -Name -ErrorAction SilentlyContinue)
+  Check ($r.Code -eq 0 -and @($placed | Where-Object { $_ -like '0_*_p.*.moonpool-off' }).Count -eq 6 -and @($placed | Where-Object { $_ -notlike '*.moonpool-off' }).Count -eq 0) "all six files placed, and off again after the session (files: $($placed -join ' '))"
+
   Write-Host 'an optional mod the host set default_on false starts left out, until the player takes it'
   $wd = New-World; $worlds += $wd
   $bar = Mod $wd 'Bar' 'Bar.zip' 'Bar' '' $false; $bar.default_on = $false
