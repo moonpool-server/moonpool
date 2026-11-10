@@ -147,6 +147,8 @@ Or a greeting in `hooks/on-event`:
 
 ## Server mods
 
+A pak mod the host should run goes in `paks-local/` in the data volume as its `.pak` `.ucas` and `.utoc` files; each launch copies them into the game's `Content/Paks/~mods` and removes ones you've taken out. Mods that change the game's rules, such as storage sizes or vehicle stats, usually need to be on the host as well as in `plugins.yaml`, because the host decides those in co-op.
+
 A UE4SS mod the host should run goes in `ue4ss-local/Mods/<name>/` in the data volume with an empty `enabled.txt` beside its `Scripts` folder. Recreate the host to load it. To remove one delete it from there and from `ue4ss/Mods` in the game folder. Most mods we read act on the local player, so on a host they do nothing for players and belong in `plugins.yaml` instead. A mod that also changes something on players' PCs belongs in `plugins.yaml` too. Mods are other people's code running with the host's rights and Steam session so only use ones you trust
 
 ## Discord card

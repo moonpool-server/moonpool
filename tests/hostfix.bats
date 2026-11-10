@@ -44,3 +44,22 @@ teardown() { rm -rf "$TMPROOT"; }
   # never writes bUseEOSRTC.
   run ! grep -q bUseEOSRTC "$ROOT/scripts/launch-headless.sh"
 }
+
+@test "host pak mods are copied into ~mods, removed once taken out, and a link is never followed" {
+  d="$TMPROOT/data"; g="$TMPROOT/game"; mods="$g/Subnautica2/Content/Paks/~mods"
+  mkdir -p "$d/paks-local" "$d/run" "$mods"
+  printf 'theirs' >"$mods/Other_P.pak"
+  for ext in pak ucas utoc; do printf "v1 %s" "$ext" >"$d/paks-local/Big_P.$ext"; done
+  printf 'secret' >"$TMPROOT/secret"; ln -s "$TMPROOT/secret" "$d/paks-local/Link_P.pak"
+  apply() { run bash -c '. "$1/scripts/common.sh"; apply_local_paks' bash "$ROOT"; }
+  export DATA_DIR="$d" GAME_DIR="$g" RUN_DIR="$d/run" LOG_DIR="$d/logs"
+  apply
+  [ "$status" -eq 0 ]
+  [ "$(cat "$mods/Big_P.ucas")" = 'v1 ucas' ]
+  [ ! -e "$mods/Link_P.pak" ]
+  rm "$d/paks-local/Big_P.pak" "$d/paks-local/Big_P.ucas" "$d/paks-local/Big_P.utoc"
+  apply
+  [ "$status" -eq 0 ]
+  [ ! -e "$mods/Big_P.pak" ] && [ ! -e "$mods/Big_P.utoc" ]
+  [ "$(cat "$mods/Other_P.pak")" = 'theirs' ]
+}

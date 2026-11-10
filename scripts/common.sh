@@ -163,6 +163,7 @@ HOST_DISARMED_FILE="$CONTROL_DIR/HOST_DISARMED"
 CLIPBOARD_BRIDGE="${CLIPBOARD_BRIDGE:-true}"
 UE4SS_CACHE="$DATA_DIR/ue4ss"
 UE4SS_LOCAL="$DATA_DIR/ue4ss-local"
+PAKS_LOCAL="$DATA_DIR/paks-local"
 # Operator layout sets for the pinned loader: one folder per build, with exe.sha256. None ship.
 UE4SS_LAYOUTS="${UE4SS_LAYOUTS:-$DATA_DIR/ue4ss-layouts}"
 UE4SS_NO_LAYOUT_FILE="$RUN_DIR/ue4ss-no-layout"
@@ -536,9 +537,31 @@ archive_previous_logs() {
   log "archived previous game logs in $dir"
 }
 
+# Pak mods the host runs: the .pak/.ucas/.utoc files in $PAKS_LOCAL are copied into the game's
+# Content/Paks/~mods before each launch. A file an earlier launch copied that is gone from
+# $PAKS_LOCAL is removed again; nothing else in ~mods is touched, and a link is never followed.
+apply_local_paks() {
+  local mods="$GAME_DIR/Subnautica2/Content/Paks/~mods" list="$RUN_DIR/paks-local.list" f n
+  if [ -f "$list" ]; then
+    while IFS= read -r n; do
+      [ -n "$n" ] && [ ! -f "$PAKS_LOCAL/$n" ] && rm -f "${mods:?}/$n"
+    done <"$list"
+  fi
+  : >"$list.tmp"
+  for f in "$PAKS_LOCAL"/*.pak "$PAKS_LOCAL"/*.ucas "$PAKS_LOCAL"/*.utoc; do
+    { [ -f "$f" ] && [ ! -L "$f" ]; } || continue
+    mkdir -p "$mods"
+    n=${f##*/}
+    cmp -s "$f" "$mods/$n" || cp -f "$f" "$mods/$n"
+    printf '%s\n' "$n" >>"$list.tmp"
+  done
+  mv -f "$list.tmp" "$list"
+  if [ -s "$list" ]; then log "host pak mods from $PAKS_LOCAL: $(tr '\n' ' ' <"$list")"; fi
+}
+
 # Create the volume layout; the control directory is private to this user.
 ensure_layout() {
-  mkdir -p "$LOG_DIR" "$RUN_DIR" "$UE4SS_CACHE" "$UE4SS_LOCAL" "$STAGING_DIR" \
+  mkdir -p "$LOG_DIR" "$RUN_DIR" "$UE4SS_CACHE" "$UE4SS_LOCAL" "$PAKS_LOCAL" "$STAGING_DIR" \
     "$CONTROL_DIR/inbox" "$CONTROL_DIR/outbox" "$CONTROL_DIR/tmp" "$CONTROL_DIR/receipts"
   # Run as root, the folder goes to the game's user or the mod cannot read it.
   if [ "$(id -u)" = 0 ] && [ -n "${GAME_USER:-}" ] && id "$GAME_USER" >/dev/null 2>&1; then

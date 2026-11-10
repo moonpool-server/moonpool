@@ -53,6 +53,16 @@ class ArchiveRootsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete"):
             PUBLISH.archive_roots(zip_of(self.root / "d.zip", ["Fov.pak", "Fov.ucas"]), "pak")
 
+    def test_a_folder_of_trios_is_one_mod_and_is_chosen_by_itself(self):
+        members = [f"Better Vehicles/0000_BV{n}_P{ext}" for n in ("", "II", "III") for ext in (".pak", ".ucas", ".utoc")]
+        roots = PUBLISH.archive_roots(zip_of(self.root / "g.zip", members), "pak")
+        self.assertIn({"name": "Better Vehicles", "prefix": "Better Vehicles", "group": True}, roots)
+        self.assertEqual(PUBLISH.choose_root(roots, {}, "Better Vehicles")["prefix"], "Better Vehicles")
+        two = zip_of(self.root / "h.zip", ["A/x.pak", "A/x.ucas", "A/x.utoc", "A/y.pak", "A/y.ucas", "A/y.utoc",
+                                           "B/z.pak", "B/z.ucas", "B/z.utoc", "B/w.pak", "B/w.ucas", "B/w.utoc"])
+        with self.assertRaisesRegex(ValueError, "set install.folder"):
+            PUBLISH.choose_root(PUBLISH.archive_roots(two, "pak"), {}, "Two sets")
+
     def test_a_path_that_climbs_out_is_refused(self):
         with self.assertRaisesRegex(ValueError, "unsafe path"):
             PUBLISH.archive_roots(zip_of(self.root / "e.zip", ["../Scripts/main.lua"]), "ue4ss")

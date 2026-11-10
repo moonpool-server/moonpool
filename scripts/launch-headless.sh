@@ -113,6 +113,7 @@ if ! set_background_fps "$GAME_USER_SETTINGS" "$SERVER_MAX_FPS"; then
 fi
 log "background frame-rate limit: $SERVER_MAX_FPS"
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
+apply_local_paks
 # The last run's lobby is gone: a player sent to it gets "session is no longer available".
 rm -f "$RUN_DIR/mod-session.json"; python3 "$(dirname "$0")/join-page.py" || true
 log "launching: $GAME_EXE_NAME ${args[*]}" | tee -a "$GAME_LOG"
