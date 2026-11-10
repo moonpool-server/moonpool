@@ -104,7 +104,7 @@ def render(plugins: list, manifest: dict, address: str = "", stats: dict | None 
             text += f" {esc(version)}"
         notes = []
         if str(p.get("tier", "optional")).lower() != "mandatory":
-            notes.append("optional")
+            notes.append("optional, off unless you tick it" if p.get("default", True) is False else "optional")
         if pub.get("native"):
             notes.append("native code")
         if source.get("type") == "local":

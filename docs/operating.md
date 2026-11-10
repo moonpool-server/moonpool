@@ -53,11 +53,11 @@ The join page shows each mod's `summary` and, for a GitHub repository or a Curse
 
 A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players then download it themselves and the launcher checks it matches
 
-A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. Everything optional installs by default; a player can leave one out
+A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. The launcher shows players a box for each mod: mandatory ones are ticked and locked, optional ones are ticked unless the entry says `default: false`. What a player ticks is remembered per server. The boxes come back when a mod is added or changes, with each new or changed one marked
 
 Play with mods turns the mods on only until Subnautica 2 closes, so starting the game from Steam loads none of them. If the launcher is killed mid-game, the next run or the Subnautica 2 (without Moonpool mods) shortcut turns them off. The launcher is Steam-only, so Xbox and Game Pass players join without mods
 
-To take the launcher off a PC, close Subnautica 2 and run `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps1" -Uninstall` in PowerShell. It removes every game file it placed that is still as it placed it, switched on or off, and the folders that leaves empty, then its `moonpool:` link handler, its shortcuts and its own folder. A file you changed since stays and is named. A mod or loader of yours that `-Adopt` replaced is not put back, because the launcher keeps no copy of it. Steam's Verify integrity of game files restores the game's own files
+To take the launcher off a PC, close Subnautica 2 and run `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps1" -Uninstall` in PowerShell. It removes every game file it placed that is still as it placed it, switched on or off, and the folders that leaves empty, then its `moonpool:` link handler, its shortcuts and its own folder. A file you changed since stays and is named. When the launcher finds files it didn't place where a server's mods go, it asks before replacing them and keeps a copy of each in `%LOCALAPPDATA%\Moonpool-replaced`, which uninstalling leaves alone; it doesn't put them back itself. With `-Adopt` it replaces them without asking and keeps no copy. Steam's Verify integrity of game files restores the game's own files
 
 ## In game admin
 
@@ -181,13 +181,14 @@ The example points at [joric's Subnautica 2 tileset](https://github.com/joric/su
 
 What players see is yours to change, from the data volume, nothing to fork
 
-- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `modnote`, `mods_published`, `build`, `branch` and `branch_label`. A copy that fails to render is said in the log and the shipped page is used
+- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch` and `branch_label`. A copy that fails to render is said in the log and the shipped page is used
 
 ```sh
 docker compose cp sn2:/opt/sn2/web/join.html.j2 join.html.j2
 docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 ```
 
+- A picture at the top of the join page: put it in the data volume as `templates/banner.png` (or `.jpg`, `.jpeg`, `.webp`, `.gif`). It is served as it is, at full card width; delete it and the page goes back to no picture. A template of your own gets its name as `banner`
 - The map page the same way, `web/map.html` to `templates/map.html`. It is a whole page you own, scripts and all, so treat it like anything else you publish
 - The Discord card's wording: copy [card.example.yaml](../card.example.yaml) to `card.yaml` in the data volume and change any line. The layout and the buttons stay. A line that is not text, too long or uses a placeholder it doesn't have is logged and the shipped line kept
 

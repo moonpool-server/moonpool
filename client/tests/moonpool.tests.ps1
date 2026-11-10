@@ -220,6 +220,17 @@ try {
   $r = Invoke-Join $w -Extra "-Keep 'Bar'"
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $w.Mods 'Bar\Scripts\main.lua'))) '-Keep takes it back'
 
+  Write-Host 'an optional mod the host set default_on false starts left out, until the player takes it'
+  $wd = New-World; $worlds += $wd
+  $bar = Mod $wd 'Bar' 'Bar.zip' 'Bar' '' $false; $bar.default_on = $false
+  Write-Manifest $wd @((Mod $wd 'Foo' 'Foo.zip' 'Foo' 'Foo'), $bar)
+  $r = Invoke-Join $wd
+  Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $wd.Mods 'Foo')) -and -not (Test-Path -LiteralPath (Join-Path $wd.Mods 'Bar')) -and $r.Asked -notmatch 'Bar') "a first join leaves it out and does not ask about it (got: $($r.Out.Trim()))"
+  $r = Invoke-Join $wd -Extra "-Keep 'Bar'"
+  Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $wd.Mods 'Bar\Scripts\main.lua'))) 'taking it installs it'
+  $r = Invoke-Join $wd
+  Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $wd.Mods 'Bar\Scripts\main.lua'))) 'and the choice holds over the default'
+
   Write-Host 'a mod the admin dropped is removed; a file the player edited is left alone'
   Set-Content -LiteralPath (Join-Path $w.Mods 'Bar\Scripts\main.lua') -Value 'my own tweak' -NoNewline
   Write-Manifest $w @((Mod $w 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '1.1'))
@@ -262,16 +273,27 @@ try {
   $r = Invoke-Join $w2
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $w2.Mods 'Foo\Scripts\main.lua'))) 'the verified download installs'
 
-  Write-Host 'files already there another way are a conflict until -Adopt'
+  Write-Host 'files already there another way are replaced only after a yes, with a copy kept, or with -Adopt'
   $w3 = New-World; $worlds += $w3
-  New-Item -ItemType Directory -Path (Join-Path $w3.Mods 'Foo\Scripts') -Force | Out-Null
-  Set-Content -LiteralPath (Join-Path $w3.Mods 'Foo\Scripts\main.lua') -Value 'installed by hand' -NoNewline
+  $hand = Join-Path $w3.Mods 'Foo\Scripts\main.lua'
+  New-Item -ItemType Directory -Path (Split-Path -Parent $hand) -Force | Out-Null
+  Set-Content -LiteralPath $hand -Value 'installed by hand' -NoNewline
   Write-Manifest $w3 @((Mod $w3 'Foo' 'Foo.zip' 'Foo' 'Foo'))
+  $noReplace = '($q -notmatch ''already has files'')'
+  $r = Invoke-Join $w3 -Answer $noReplace
+  Check ($r.Code -eq 3 -and $r.Out -match 'installed another way' -and $r.Asked -match 'Foo\\Scripts\\main\.lua \(for Foo\)') "the question names the file; no keeps it (code $($r.Code), asked: $($r.Asked))"
+  Check ((Text $hand) -eq 'installed by hand' -and $null -eq $r.Launched -and -not (Test-Path -LiteralPath (Join-Path $w3.Root 'Moonpool-replaced'))) 'nothing changed, no copy, game not started'
   $r = Invoke-Join $w3
-  Check ($r.Code -ne 0 -and $r.Out -match 'installed another way' -and $r.Out -match '-Adopt') 'conflict named with the way out'
-  Check ((Text (Join-Path $w3.Mods 'Foo\Scripts\main.lua')) -eq 'installed by hand' -and $null -eq $r.Launched) 'nothing changed, game not started'
-  $r = Invoke-Join $w3 -Extra '-Adopt'
-  Check ($r.Code -eq 0 -and (Text (Join-Path $w3.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v1') '-Adopt lets the server version take over'
+  $copies = @(Get-ChildItem -LiteralPath (Join-Path $w3.Root 'Moonpool-replaced') -Recurse -File -Filter main.lua)
+  Check ($r.Code -eq 0 -and (Text $hand) -eq 'Foo\Scripts\main.lua v1') 'yes lets the server version take over'
+  Check ($copies.Count -eq 1 -and (Text $copies[0].FullName) -eq 'installed by hand') 'a copy of the replaced file is kept outside the launcher folder'
+  $w3b = New-World; $worlds += $w3b
+  $hand = Join-Path $w3b.Mods 'Foo\Scripts\main.lua'
+  New-Item -ItemType Directory -Path (Split-Path -Parent $hand) -Force | Out-Null
+  Set-Content -LiteralPath $hand -Value 'installed by hand' -NoNewline
+  Write-Manifest $w3b @((Mod $w3b 'Foo' 'Foo.zip' 'Foo' 'Foo'))
+  $r = Invoke-Join $w3b -Extra '-Adopt' -Answer $noReplace
+  Check ($r.Code -eq 0 -and (Text $hand) -eq 'Foo\Scripts\main.lua v1' -and $r.Asked -notmatch 'already has files') "-Adopt replaces without asking (code $($r.Code), asked: $($r.Asked), out: $($r.Out.Trim()))"
 
   Write-Host 'a loader the player already has: their settings stay, nothing is claimed, leaving the server keeps it'
   $w7 = New-World; $worlds += $w7

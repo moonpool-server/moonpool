@@ -315,6 +315,69 @@ function Show-Question([string]$Text, [string]$Heading = 'Before you continue', 
   return $yes
 }
 
+# The server's mods with a box each: required ones ticked and locked, optional ones as the player
+# last chose (or as the host set them, the first time). Install and play is the answer to installing
+# what is ticked; Cancel or closing the window declines. Returns the optional mods left out.
+function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec) {
+  $ui = $script:Ui
+  $accepted = @(Read-Json (Join-Path $KitHome "$ServerId\accepted.json") @())
+  $acceptedNames = @($accepted | ForEach-Object { ([string]$_ -split '\|')[0] })
+  $name = [string](Get-Prop $Config 'server_name' 'this server')
+  Set-UiMode 'ask' ' '
+  $ui.Box.Visible = $false
+  $flow = New-Object Windows.Forms.FlowLayoutPanel
+  $flow.FlowDirection = 'TopDown'; $flow.WrapContents = $false; $flow.AutoScroll = $true
+  $flow.Location = New-Object Drawing.Point 14, 10
+  $flow.BackColor = Get-Color $Theme.Panel
+  $boxes = @{}
+  foreach ($m in $All) {
+    $cb = New-Object Windows.Forms.CheckBox
+    $cb.AutoSize = $true
+    $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
+    $cb.ForeColor = Get-Color $Theme.Text
+    $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
+    $tags = @(Get-ModHost $m); if ($m.Native) { $tags += 'native code' }; if ($m.Required) { $tags += 'required' }
+    if ($accepted -notcontains (Get-CodeSet @($m) $null)[0]) { if ($acceptedNames -contains $m.Name) { $tags += 'changed' } else { $tags += 'new' } }
+    $cb.Text = ("$($m.Name) $($m.Version)").Trim() + '   (' + ($tags -join ', ') + ')'
+    $cb.Checked = $m.Required -or -not $Skipped.Contains($m.Name)
+    $cb.Enabled = -not $m.Required
+    [void]$flow.Controls.Add($cb)
+    $boxes[$m.Name] = $cb
+  }
+  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * @($All).Count + 4, 240))
+  $noteText = (Get-KeyWarning $Config $ServerId) + "Ticked mods are installed and turned on for this game session only. They run with your Windows account's rights, so only install mods from a host you trust."
+  if ($LoaderSpec) {
+    $noteText += ' UE4SS mods also need the UE4SS loader, from this server, native code'
+    $loaderLine = @(Get-CodeSet @() $LoaderSpec)[0]
+    if ($accepted -notcontains $loaderLine) { $noteText += " ($(Get-Prop $LoaderSpec 'asset' ''), " + $(if ($acceptedNames -contains 'UE4SS loader') { 'changed' } else { 'new' }) + ')' }
+    $noteText += '.'
+  }
+  $noteText += "`n`nServer: $([string](Get-Prop $Config 'address' ''))"
+  $note = New-UiLabel 14 0 492 10 'Segoe UI' 9.5 $Theme.Muted
+  $note.AutoEllipsis = $false
+  $note.Text = $noteText
+  $note.Height = [Windows.Forms.TextRenderer]::MeasureText($noteText, $note.Font, (New-Object Drawing.Size 488, 0), [Windows.Forms.TextFormatFlags]::WordBreak).Height + 4
+  $note.Top = $flow.Bottom + 8
+  $ui.Pane.Controls.AddRange(@($flow, $note))
+  $ui.Pane.Height = $note.Bottom + 12
+  $height = $ui.Pane.Top + $ui.Pane.Height + 76
+  $ui.Form.ClientSize = New-Object Drawing.Size 560, $height
+  $ui.Primary.Location = New-Object Drawing.Point 378, ($height - 58)
+  $ui.Secondary.Location = New-Object Drawing.Point 206, ($height - 58)
+  $ui.Heading.Text = "Install mods from ${name}?"
+  $ui.Primary.Text = 'Install and play'
+  $ui.Secondary.Text = 'Cancel'
+  $yes = Wait-UiAnswer
+  if (-not $yes) { Fail 'you declined; nothing changed, game not started. The join page can join without mods.' 3 }
+  $left = New-Object System.Collections.Generic.List[string]
+  foreach ($m in $All) { if (-not $m.Required -and -not $boxes[$m.Name].Checked) { $left.Add($m.Name) } }
+  $ui.Pane.Controls.Remove($flow); $ui.Pane.Controls.Remove($note)
+  $ui.Box.Visible = $true
+  Set-UiMode 'progress'
+  $script:UiCancelled = $false
+  return ,$left
+}
+
 # A message the player reads once and closes: a failure, or what an uninstall did.
 function Show-Notice([string]$Heading, [string]$Text) {
   if ($Text) { $Text = $Text.Substring(0, 1).ToUpperInvariant() + $Text.Substring(1) }
@@ -397,13 +460,35 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
       }) -join "`n") +
       "`n`nThese run with your Windows account's rights, so only say yes to a host you trust. " +
       "They are on only until the game this starts closes, and Moonpool never turns off your own mods.`n`nServer: $where`n`nInstall?"
-    $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
-      $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
-    if ($where -and $known) { $text = "WARNING: this address had a different server key before. It may not be the same server.`n`n" + $text }
+    $text = (Get-KeyWarning $Config $ServerId) + $text
     if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text "Install mods from ${name}?" 'Install and play' 'Cancel' }
     if (-not $yes) { Fail 'you declined; nothing changed, game not started. The join page can join without mods.' 3 }
   }
   Write-Json $path @($Lines)
+}
+
+# Said first whenever this address answered with another server key before.
+function Get-KeyWarning($Config, [string]$ServerId) {
+  $where = [string](Get-Prop $Config 'address' '')
+  $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
+    $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
+  if ($where -and $known) { return "WARNING: this address had a different server key before. It may not be the same server.`n`n" }
+  return ''
+}
+
+# Where a mod's file really downloads from; the page only for a file the player fetches by hand.
+function Get-ModHost($Mod) {
+  $from = [string](Get-Prop $Mod.Source 'url' ''); if (-not $from) { $from = [string](Get-Prop $Mod.Source 'page' '') }
+  if ($from -match '^https?://([^/:]+)') { return $Matches[1] }
+  return 'this server'
+}
+
+# Every field that decides what runs, one line per mod and the loader, so changing any of them asks again.
+function Get-CodeSet($Wanted, $LoaderSpec) {
+  $lines = @($Wanted | ForEach-Object {
+    "$($_.Name)|$($_.Version)|$(@(Get-Prop $_.Source 'hashes' @()) | ForEach-Object { "$($_.algorithm):$($_.value)" })|$($_.Identity)|$(Get-ModHost $_)|$(if ($_.Native) { 'native code' } else { 'scripts' })" })
+  if ($LoaderSpec) { $lines += "UE4SS loader|$(Get-Prop $LoaderSpec 'asset' '')|sha256:$(Get-Prop $LoaderSpec 'sha256' '')|$(@(Get-Prop $LoaderSpec 'allowed_builds' @()) -join ',')|this server|native code" }
+  return ,$lines
 }
 
 function Test-GameRunning {
@@ -758,13 +843,19 @@ function Test-GameBuild($Manifest, [string]$Acf) {
 
 # ---- choosing what this server wants locally -------------------------------------------
 
-function Get-Choices([string]$Path) {
+function Get-Choices([string]$Path, $Manifest) {
   $raw = Read-Json $Path $null
   $skipped = New-Object System.Collections.Generic.List[string]
+  if ($null -eq $raw) {
+    # Nothing chosen yet for this server: an optional mod the host marked default_on false starts left out.
+    foreach ($m in @(Get-Prop $Manifest 'mods' @())) {
+      if (-not [bool](Get-Prop $m 'required' $true) -and -not [bool](Get-Prop $m 'default_on' $true)) { $skipped.Add([string](Get-Prop $m 'name' '')) }
+    }
+  }
   foreach ($n in @(Get-Prop $raw 'skipped' @())) { if ($n) { $skipped.Add([string]$n) } }
   foreach ($n in $Keep) { while ($skipped.Contains($n)) { [void]$skipped.Remove($n) } }
   foreach ($n in $Skip) { if (-not $skipped.Contains($n)) { $skipped.Add($n) } }
-  if ($Skip.Count -gt 0 -or $Keep.Count -gt 0) { Write-Json $Path ([ordered]@{ skipped = @($skipped) }) }
+  if ($Skip.Count -gt 0 -or $Keep.Count -gt 0) { Write-Json $Path ([ordered]@{ skipped = @($skipped); seen = @(Get-Prop $raw 'seen' @()) }) }
   return ,$skipped
 }
 
@@ -1125,7 +1216,7 @@ function Invoke-Uninstall {
   $text = "Moonpool is uninstalled. Removed " + ($done -join ', ') + '.'
   if ($gone.Kept.Count -gt 0) { $text += "`n`nLeft in place because they changed after Moonpool placed them, so they may be yours: " + ($gone.Kept -join ', ') }
   if ($stayed.Count -gt 0) { $text += "`n`nStill there, holding files Moonpool never placed, such as a mod's own settings or log: " + ($stayed -join ', ') }
-  $text += "`n`nA mod or loader of yours that Moonpool replaced with -Adopt is not put back. Steam's Verify integrity of game files restores any of the game's own files."
+  $text += "`n`nFiles of yours that Moonpool replaced after asking are not put back; their copies stay in $(Join-Path $env:LOCALAPPDATA 'Moonpool-replaced'). With -Adopt no copy was kept. Steam's Verify integrity of game files restores any of the game's own files."
   Write-Host "moonpool: $text"
   if (-not $env:SN2_JOIN_NO_DIALOG) { Show-Notice 'Moonpool is uninstalled' $text }
 }
@@ -1190,8 +1281,25 @@ function Invoke-Join {
   if (-not $serverId) { $serverId = 'test-' + ([string](Get-Prop (Get-Prop $manifest 'server' $null) 'id' 'none') -replace '[^A-Za-z0-9-]', '_') }
   $ledgerPath = Join-Path $KitHome 'owned.json'
   $ledger = Read-Ledger $ledgerPath
-  $skipped = Get-Choices (Join-Path $KitHome "$serverId\choices.json")
+  $choicesPath = Join-Path $KitHome "$serverId\choices.json"
+  $skipped = Get-Choices $choicesPath $manifest
   $wanted = Get-WantedMods $manifest $skipped
+  $chosen = $false
+  if ($script:Ui -and -not $Approve -and $cfg) {
+    $all = Get-WantedMods $manifest (New-Object System.Collections.Generic.List[string])
+    $firstLoader = $null; if ($wanted | Where-Object { $_.Kind -eq 'ue4ss' }) { $firstLoader = Get-Prop $manifest 'ue4ss' $null }
+    $accepted = @(Read-Json (Join-Path $KitHome "$serverId\accepted.json") @())
+    $unanswered = @((Get-CodeSet $wanted $firstLoader) | Where-Object { $accepted -notcontains $_ })
+    $optionalNames = @($all | Where-Object { -not $_.Required } | ForEach-Object { $_.Name })
+    $seen = @(Get-Prop (Read-Json $choicesPath $null) 'seen' @())
+    $unseen = @($optionalNames | Where-Object { $seen -notcontains $_ })
+    if (($unanswered.Count -gt 0 -or $unseen.Count -gt 0) -and $optionalNames.Count -gt 0) {
+      $skipped = Show-ModPicker $all $skipped $cfg $serverId (Get-Prop $manifest 'ue4ss' $null)
+      Write-Json $choicesPath ([ordered]@{ skipped = @($skipped); seen = @($optionalNames) })
+      $wanted = Get-WantedMods $manifest $skipped
+      $chosen = $true
+    }
+  }
   $loaderSpec = $null
   if ($wanted | Where-Object { $_.Kind -eq 'ue4ss' }) {
     $loaderSpec = Get-Prop $manifest 'ue4ss' $null
@@ -1205,15 +1313,10 @@ function Invoke-Join {
     }
   }
   $win64 = Join-Path $game 'Subnautica2\Binaries\Win64'
-  # Every field that decides what runs is compared, so changing any of them asks again.
-  $codeSet = @($wanted | ForEach-Object {
-    # Where the file really downloads from; the page only for a file the player fetches by hand.
-    $from = [string](Get-Prop $_.Source 'url' ''); if (-not $from) { $from = [string](Get-Prop $_.Source 'page' '') }
-    $fromHost = 'this server'; if ($from -match '^https?://([^/:]+)') { $fromHost = $Matches[1] }
-    "$($_.Name)|$($_.Version)|$(@(Get-Prop $_.Source 'hashes' @()) | ForEach-Object { "$($_.algorithm):$($_.value)" })|$($_.Identity)|$fromHost|$(if ($_.Native) { 'native code' } else { 'scripts' })" })
-  if ($loaderSpec) { $codeSet += "UE4SS loader|$(Get-Prop $loaderSpec 'asset' '')|sha256:$(Get-Prop $loaderSpec 'sha256' '')|$(@(Get-Prop $loaderSpec 'allowed_builds' @()) -join ',')|this server|native code" }
+  $codeSet = Get-CodeSet $wanted $loaderSpec
   $script:ServerId = $serverId
-  Confirm-CodeSet $cfg $serverId $codeSet
+  if ($chosen) { Write-Json (Join-Path $KitHome "$serverId\accepted.json") @($codeSet) }  # the ticked list was the answer
+  else { Confirm-CodeSet $cfg $serverId $codeSet }
   if ($cfg) { Install-ServerShortcuts $cfg $serverId $game }
 
   $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-' + [guid]::NewGuid().ToString('N'))
@@ -1224,6 +1327,7 @@ function Invoke-Join {
   $desired = @{}                                               # target path (lower) -> owner entry
   $changes = New-Object System.Collections.Generic.List[string]
   $conflicts = New-Object System.Collections.Generic.List[string]
+  $held = New-Object System.Collections.Generic.List[object]   # files there already, not placed here
 
   # A mod is current when its archive and install place are the ones recorded and every file that archive
   # put or found in place still matches, whether it was placed here or already there.
@@ -1265,7 +1369,14 @@ function Invoke-Join {
         # A file already identical is used without being claimed: only what this
         # launcher placed is ever removed.
         if ($same) { continue }
-        if (-not $Adopt) { $conflicts.Add("$target (for $ModName)"); continue }
+        if (-not $Adopt) {
+          $conflicts.Add("$target (for $ModName)")
+          # A file sitting where this launcher parks one of its own switched-off files is never offered:
+          # replacing it would leave two copies for the on/off switch to choose between.
+          if (Test-Path -LiteralPath "$target.moonpool-off") { continue }
+          $held.Add([pscustomobject]@{ Key = $key; Entry = @{ sha256 = $f.Sha256; server = $serverId; mod = $ModName }; Path = $f.Path; Target = $target; Mod = $ModName })
+          continue
+        }
       }
       $desired[$key] = @{ sha256 = $f.Sha256; server = $serverId; mod = $ModName }
       if (-not $same) { $plan.Add([pscustomobject]@{ Path = $f.Path; Target = $target }) }
@@ -1305,9 +1416,33 @@ function Invoke-Join {
       if ($plan.Count -gt $before) { $changes.Add("installing the UE4SS loader ($([string](Get-Prop $loaderSpec 'asset' 'pinned')))") }
     }
   }
-  if ($conflicts.Count -gt 0) {
+  if ($conflicts.Count -gt $held.Count) {
     Fail ("this PC already has files the server wants to replace, installed another way: " + ($conflicts -join ', ') +
-      "; run again with -Adopt to replace them with the server's versions (yours are not kept), or remove them yourself; nothing changed, game not started")
+      "; remove them yourself, or run again with -Adopt to replace them with the server's versions (no copy is kept); nothing changed, game not started")
+  }
+  if ($conflicts.Count -gt 0) {
+    # Files already where the server's go that this launcher did not place: the player says whether
+    # to replace them, and a copy of each is kept outside Moonpool's own folder, which an uninstall removes.
+    $aside = Join-Path $env:LOCALAPPDATA ('Moonpool-replaced\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $gameRoot = $game.TrimEnd('\') + '\'
+    $relative = { param($p) if ($p.StartsWith($gameRoot, [StringComparison]::OrdinalIgnoreCase)) { $p.Substring($gameRoot.Length) } else { Split-Path -Leaf $p } }
+    $text = "This PC already has files where this server's mods go, and Moonpool didn't put them there:`n`n" +
+      (($held | ForEach-Object { "  - $(& $relative $_.Target) (for $($_.Mod))" }) -join "`n") +
+      "`n`nThey may be an older copy of the same mod or loader, installed by hand or by another tool. " +
+      "Moonpool can keep a copy of them in $aside and install the server's versions. It doesn't put them back by itself.`n`nReplace them?"
+    if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text 'Files already in the game folder' 'Replace and play' 'Cancel' }
+    if (-not $yes) {
+      Fail ("this PC already has files the server wants to replace, installed another way: " + ($conflicts -join ', ') +
+        "; nothing changed, game not started") 3
+    }
+    foreach ($h in $held) {
+      $copy = Join-Path $aside (& $relative $h.Target)
+      New-Item -ItemType Directory -Path (Split-Path -Parent $copy) -Force | Out-Null
+      Copy-Item -LiteralPath $h.Target -Destination $copy -Force
+      $desired[$h.Key] = $h.Entry
+      $plan.Add([pscustomobject]@{ Path = $h.Path; Target = $h.Target })
+    }
+    $changes.Add("replacing $($held.Count) file(s) that were already there; copies in $aside")
   }
 
   # Everything managed locally that this server does not want goes: another server's
