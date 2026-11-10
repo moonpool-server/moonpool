@@ -115,7 +115,7 @@ Tested by hand by the maintainer, with real players joining over the internet on
 |---|---|---|
 | public | `25400633` | Hosted; real players joined over the internet |
 | experimental | `26283380` | Hosted; real players joined over the internet. Joins with mods through the launcher, and moving the world between two hosts, each in short sessions |
-| experimental | `26496980` (seen 9 November 2026) | Did not host on the maintainer's server: the UE4SS build Moonpool uses hung on this executable before the hosting mod loaded. The server came up, reported no hosted world, and waited |
+| default (no beta branch set) | `26496980` (seen 9 November 2026) | Did not host on the maintainer's server. This build's executable is `Subnautica2-Win64-Test.exe`, an Unreal Test-configuration build, and the UE4SS builds Moonpool offers (the pinned 1190 and the experimental 1218) each wrote a crash dump while locating `KismetStringLibrary`, before the hosting mod loaded. The game kept running at its menu, so the server came up, reported no hosted world, and waited |
 
 A game update can break it, as that last row shows. The host says so and the [guide](docs/operating.md) covers what to do. A newer build is unproven until a host comes up on it. This table records the maintainer's runs only; if you run one, an issue saying what happened is the most useful thing you can send
 
