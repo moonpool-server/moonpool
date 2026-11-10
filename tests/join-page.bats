@@ -8,6 +8,8 @@ setup() {
   export DATA_DIR="$BATS_TEST_TMPDIR/data"
   export SN2_CONTROL_DIR="$DATA_DIR/control"
   mkdir -p "$DATA_DIR/run" "$DATA_DIR/public" "$SN2_CONTROL_DIR"
+  # The page build reads mod stats; a test never reaches GitHub or CurseForge.
+  export GITHUB_API_URL="file://$BATS_TEST_TMPDIR/no-api" CURSEFORGE_API_URL="file://$BATS_TEST_TMPDIR/no-api"
   printf '{"lobby_id":"109775000000000001","host_steamid":"76561198000000001"}\n' >"$DATA_DIR/run/mod-session.json"
 }
 render() { env "$@" WORLD_NAME=Slot1 python3 "$ROOT/scripts/join-page.py"; cat "$DATA_DIR/public/join.html"; }
@@ -70,9 +72,9 @@ JSON
   [[ "$output" != *'Join now'* && "$output" != *'class="button ghost"'* ]]
   [[ "${output%%Join without mods*}" == *'Play with mods</a>'* && "$output" == *'href="steam://joinlobby/'*'>Join without mods</a>'* ]]
   [[ "$output" != *'http-equiv="refresh"'* && "$output" != *'location.href'* && "$output" != *'location.assign'* ]]
-  # The one script only shows the help line when the button opened nothing.
-  [[ "$output" == *'id="nothing" hidden'*'Nothing opened?'* ]]
-  [[ "$output" == *'Voice</a> 1.2</li>'* ]]
+  # A click says at once what should open; the install steps show only if the page still has focus.
+  [[ "$output" == *'id="opening" hidden'*'id="nothing" hidden'*'Still waiting?'* ]]
+  [[ "$output" == *'Voice</a> 1.2<span class="about">Voice chat.</span></li>'* ]]
   [[ "$output" == *'nexusmods.com'* && "$output" == *'(optional, needs one download from its page)'* ]]
 }
 

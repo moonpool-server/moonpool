@@ -52,9 +52,18 @@ def main():
         join = f"steam://joinlobby/1962700/{lobby}/{sid}"
         friend = f"https://steamcommunity.com/profiles/{sid}"
 
+    # Each mod's public numbers, refreshed every few hours (mod-stats.py); a slow or failed read
+    # leaves the last ones and never holds up the page.
+    stats_file = run / "mod-stats.json"
+    try:
+        subprocess.run([sys.executable, str(HERE / "mod-stats.py"), str(control / "plugins.yaml"), str(stats_file)],
+                       capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        pass
     # The server's mod list as HTML (plugins-section.py), empty when there is none.
     try:
-        modnote = subprocess.run([sys.executable, str(HERE / "plugins-section.py"), str(control / "plugins.yaml"), str(public)],
+        modnote = subprocess.run([sys.executable, str(HERE / "plugins-section.py"), str(control / "plugins.yaml"), str(public),
+                                  str(stats_file)],
                                  capture_output=True, text=True, timeout=30).stdout
     except (OSError, subprocess.SubprocessError):
         modnote = ""

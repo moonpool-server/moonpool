@@ -80,44 +80,182 @@ function Say([string]$Message) {
   if ($script:Ui) { Set-Status ($Message.Substring(0, 1).ToUpperInvariant() + $Message.Substring(1)) }
 }
 
-# The one window a player sees: what is happening, a bar, and every question on top of it.
-# Windows' own forms, because this launcher is one signed file. A test or console run has none.
+# The one window a player sees, from the click to the game starting: what is happening with a bar,
+# and every question and failure inside it, never a separate box. Windows' own forms, because this
+# launcher is one signed file. A test or console run has none.
 $script:Ui = $null
 $script:UiCancelled = $false
 $script:UiInstalling = $false
+$script:UiClosed = $false
+$script:UiAnswer = $null
+$script:UiMode = 'progress'
 $script:UiStep = 0
 $script:UiSteps = 0
+$Theme = @{ Back = '#0C2835'; Head = '#071923'; Text = '#EAF7FB'; Muted = '#9FB9C3'; Accent = '#39B7D5'; AccentText = '#04141C'; Line = '#286174'; Panel = '#0A2230' }
+function Get-Color([string]$Hex) { [Drawing.ColorTranslator]::FromHtml($Hex) }
+
+function New-UiLabel([int]$X, [int]$Y, [int]$W, [int]$H, [string]$Font, [float]$Size, [string]$Color) {
+  $l = New-Object Windows.Forms.Label
+  $l.Location = New-Object Drawing.Point $X, $Y
+  $l.Size = New-Object Drawing.Size $W, $H
+  $l.Font = New-Object Drawing.Font $Font, $Size
+  $l.ForeColor = Get-Color $Color
+  $l.BackColor = [Drawing.Color]::Transparent
+  $l.AutoEllipsis = $true
+  return $l
+}
+
+function New-UiButton([string]$Text, [bool]$Primary, [int]$X) {
+  $b = New-Object Windows.Forms.Button
+  $b.Text = $Text
+  $b.FlatStyle = 'Flat'
+  $b.Font = New-Object Drawing.Font 'Segoe UI Semibold', 10
+  $b.Location = New-Object Drawing.Point $X, 262
+  $b.Size = New-Object Drawing.Size 160, 38
+  $b.Cursor = [Windows.Forms.Cursors]::Hand
+  if ($Primary) {
+    $b.BackColor = Get-Color $Theme.Accent; $b.ForeColor = Get-Color $Theme.AccentText; $b.FlatAppearance.BorderSize = 0
+  } else {
+    $b.BackColor = Get-Color $Theme.Back; $b.ForeColor = Get-Color $Theme.Text; $b.FlatAppearance.BorderColor = Get-Color $Theme.Line
+  }
+  return $b
+}
+
+# A porthole mark drawn here, so the window and the taskbar show Moonpool, not a blank form.
+function New-UiIcon {
+  $bmp = New-Object Drawing.Bitmap 64, 64
+  $g = [Drawing.Graphics]::FromImage($bmp)
+  $g.SmoothingMode = 'AntiAlias'
+  $g.Clear([Drawing.Color]::Transparent)
+  $g.FillEllipse((New-Object Drawing.SolidBrush (Get-Color $Theme.Accent)), 2, 2, 60, 60)
+  $g.FillEllipse((New-Object Drawing.SolidBrush (Get-Color $Theme.Head)), 13, 13, 38, 38)
+  $g.FillEllipse((New-Object Drawing.SolidBrush (Get-Color $Theme.Accent)), 24, 24, 16, 16)
+  $g.Dispose()
+  return [Drawing.Icon]::FromHandle($bmp.GetHicon())
+}
+
 function Open-Window {
-  if ($script:Ui -or -not ($Link -or $Server) -or $env:SN2_JOIN_NO_DIALOG -or -not [Environment]::UserInteractive) { return }
+  if ($script:Ui -or -not ($Link -or $Server -or $Uninstall -or $DisableMoonpoolMods) -or $env:SN2_JOIN_NO_DIALOG -or -not [Environment]::UserInteractive) { return }
   try {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     [Windows.Forms.Application]::EnableVisualStyles()
     $form = New-Object Windows.Forms.Form
-    $form.Text = 'Subnautica 2 mods'
-    $form.ClientSize = New-Object Drawing.Size 460, 104
-    $form.FormBorderStyle = 'FixedDialog'
+    $form.Text = 'Moonpool'
+    $form.ClientSize = New-Object Drawing.Size 560, 320
+    $form.FormBorderStyle = 'FixedSingle'
     $form.MaximizeBox = $false
     $form.StartPosition = 'CenterScreen'
     $form.TopMost = $true
-    $label = New-Object Windows.Forms.Label
-    $label.Location = New-Object Drawing.Point 16, 14
-    $label.Size = New-Object Drawing.Size 428, 44
-    $label.Font = New-Object Drawing.Font 'Segoe UI', 10
-    $label.Text = 'Getting ready'
-    $bar = New-Object Windows.Forms.ProgressBar
-    $bar.Location = New-Object Drawing.Point 16, 66
-    $bar.Size = New-Object Drawing.Size 428, 22
-    $bar.Style = 'Marquee'
-    $form.Controls.Add($label)
-    $form.Controls.Add($bar)
+    $form.BackColor = Get-Color $Theme.Back
+    $form.ForeColor = Get-Color $Theme.Text
+    try { $form.Icon = New-UiIcon } catch { }
+    $head = New-Object Windows.Forms.Panel
+    $head.Dock = 'Top'
+    $head.Height = 66
+    $head.BackColor = Get-Color $Theme.Head
+    $title = New-UiLabel 22 10 516 28 'Segoe UI Semibold' 15 $Theme.Text
+    $title.Text = 'Moonpool'
+    $sub = New-UiLabel 23 39 516 20 'Segoe UI' 9.5 $Theme.Muted
+    $sub.Text = 'Subnautica 2 mods for this server'
+    $head.Controls.AddRange(@($title, $sub))
+    $heading = New-UiLabel 22 86 516 52 'Segoe UI Semibold' 12 $Theme.Text
+    $heading.AutoEllipsis = $false
+    $heading.Text = 'Getting ready'
+    $detail = New-UiLabel 23 142 516 44 'Segoe UI' 9.5 $Theme.Muted
+    $detail.AutoEllipsis = $false
+    $detail.Text = "Moonpool checks this server's mods, installs or updates them, turns them on for this game session only, then starts Subnautica 2 through Steam."
+    $bar = New-Object Windows.Forms.Panel
+    $bar.Location = New-Object Drawing.Point 22, 204
+    $bar.Size = New-Object Drawing.Size 516, 8
+    $bar.BackColor = Get-Color $Theme.Line
+    $fill = New-Object Windows.Forms.Panel
+    $fill.BackColor = Get-Color $Theme.Accent
+    $fill.Size = New-Object Drawing.Size 120, 8
+    $bar.Controls.Add($fill)
+    $timer = New-Object Windows.Forms.Timer
+    $timer.Interval = 30
+    $timer.add_Tick({
+      $f = $script:Ui.Fill
+      $x = $f.Left + 8
+      if ($x -gt $script:Ui.Bar.Width) { $x = -$f.Width }
+      $f.Left = $x
+    })
+    # The text sits in a padded panel; the panel grows with the text and the window with it.
+    $pane = New-Object Windows.Forms.Panel
+    $pane.Location = New-Object Drawing.Point 22, 126
+    $pane.Size = New-Object Drawing.Size 516, 120
+    $pane.BackColor = Get-Color $Theme.Panel
+    $pane.Visible = $false
+    $box = New-Object Windows.Forms.TextBox
+    $box.Multiline = $true
+    $box.ReadOnly = $true
+    $box.ScrollBars = 'None'
+    $box.BorderStyle = 'None'
+    $box.BackColor = Get-Color $Theme.Panel
+    $box.ForeColor = Get-Color $Theme.Text
+    $box.Font = New-Object Drawing.Font 'Segoe UI', 10
+    $box.Location = New-Object Drawing.Point 14, 12
+    $box.Size = New-Object Drawing.Size 492, 96
+    $box.TabStop = $false
+    $pane.Controls.Add($box)
+    $primary = New-UiButton 'OK' $true 378
+    $primary.Visible = $false
+    $secondary = New-UiButton 'Cancel' $false 378
+    $form.Controls.AddRange(@($head, $heading, $detail, $bar, $pane, $primary, $secondary))
+    $primary.add_Click({ $script:UiAnswer = $true })
+    $secondary.add_Click({
+      if ($script:UiMode -eq 'ask') { $script:UiAnswer = $false }
+      elseif (-not $script:UiInstalling) { $script:UiCancelled = $true; $script:Ui.Heading.Text = 'Cancelling'; $script:Ui.Secondary.Enabled = $false }
+    })
     # Closing cancels while nothing is placed. Once files are moving it waits: they finish or are put back.
-    $form.add_FormClosing({ param($s, $e) if ($script:UiInstalling) { $e.Cancel = $true } else { $script:UiCancelled = $true } })
+    $form.add_FormClosing({ param($s, $e)
+      if ($script:UiInstalling) { $e.Cancel = $true; return }
+      $script:UiCancelled = $true
+      if ($script:UiMode -eq 'ask') { $script:UiAnswer = $false }
+    })
+    $form.add_FormClosed({ $script:UiClosed = $true })
     $form.Show()
     $form.Activate()
     [Windows.Forms.Application]::DoEvents()
-    $script:Ui = @{ Form = $form; Label = $label; Bar = $bar }
+    $script:Ui = @{ Form = $form; Sub = $sub; Heading = $heading; Detail = $detail; Bar = $bar; Fill = $fill; Timer = $timer; Pane = $pane; Box = $box; Primary = $primary; Secondary = $secondary }
+    $timer.Start()
   } catch { $script:Ui = $null }
+}
+
+# progress: heading, detail, bar and Cancel; ask and notice: heading, a text panel and buttons.
+function Set-UiMode([string]$Mode, [string]$Text = '') {
+  $ui = $script:Ui
+  $script:UiMode = $Mode
+  $working = $Mode -eq 'progress'
+  $ui.Detail.Visible = $working
+  $ui.Bar.Visible = $working
+  $ui.Pane.Visible = -not $working
+  $ui.Primary.Visible = -not $working
+  $ui.Secondary.Visible = $Mode -ne 'notice'
+  $ui.Secondary.Enabled = $true
+  $height = 320
+  if (-not $working) {
+    $ui.Box.Text = $Text -replace "`r?`n", "`r`n"
+    $ui.Box.SelectionLength = 0
+    # Tall enough for the text up to a limit, with a scroll bar only past it.
+    $flags = [Windows.Forms.TextFormatFlags]::WordBreak -bor [Windows.Forms.TextFormatFlags]::TextBoxControl
+    $need = [Windows.Forms.TextRenderer]::MeasureText($ui.Box.Text, $ui.Box.Font, (New-Object Drawing.Size ($ui.Box.Width - 4), 0), $flags).Height + 6
+    $max = 380
+    $ui.Box.ScrollBars = if ($need -gt $max) { 'Vertical' } else { 'None' }
+    $ui.Box.Height = [Math]::Max(40, [Math]::Min($need, $max))
+    $ui.Pane.Height = $ui.Box.Height + 24
+    $height = $ui.Pane.Top + $ui.Pane.Height + 76
+  }
+  $ui.Form.ClientSize = New-Object Drawing.Size 560, $height
+  $y = $height - 58
+  $ui.Primary.Location = New-Object Drawing.Point 378, $y
+  if ($working) { $ui.Secondary.Text = 'Cancel'; $ui.Secondary.Location = New-Object Drawing.Point 378, $y }
+  else { $ui.Secondary.Location = New-Object Drawing.Point 206, $y }
+}
+
+function Set-UiServer([string]$Name) {
+  if ($script:Ui -and $Name) { $script:Ui.Sub.Text = "Joining $Name" }
 }
 
 # Percent is 0-100; below 0 the bar just moves, for a step with no known length.
@@ -128,14 +266,12 @@ function Set-Status([string]$Text, [int]$Percent = -1) {
     Close-Window
     Fail 'you closed the window; nothing changed, game not started' 3
   }
-  if ($Text) { $script:Ui.Label.Text = $Text }
+  if ($Text) { $script:Ui.Heading.Text = $Text }
+  $script:Ui.Secondary.Enabled = -not $script:UiInstalling
   if ($Percent -ge 0) {
-    # Stepping back past the value makes Windows draw it at once instead of animating towards it.
-    $bar = $script:Ui.Bar
-    $bar.Style = 'Continuous'
-    $bar.Maximum = 101
-    $bar.Value = [Math]::Min(100, $Percent) + 1
-    $bar.Value = [Math]::Min(100, $Percent)
+    $script:Ui.Timer.Stop()
+    $script:Ui.Fill.Left = 0
+    $script:Ui.Fill.Width = [int]($script:Ui.Bar.Width * [Math]::Min(100, $Percent) / 100)
   }
   [Windows.Forms.Application]::DoEvents()
 }
@@ -143,16 +279,57 @@ function Set-Status([string]$Text, [int]$Percent = -1) {
 function Close-Window {
   if (-not $script:Ui) { return }
   $form = $script:Ui.Form
+  $script:UiTimer = $script:Ui.Timer
   $script:Ui = $null
   $script:UiInstalling = $false
+  try { $script:UiTimer.Stop() } catch { }
   try { $form.Close(); $form.Dispose() } catch { }
 }
 
-# A yes or no in front of the window, so it can't open behind anything.
-function Show-Question([string]$Text) {
-  Add-Type -AssemblyName System.Windows.Forms
-  if ($script:Ui) { return [Windows.Forms.MessageBox]::Show($script:Ui.Form, $Text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes' }
-  return [Windows.Forms.MessageBox]::Show($Text, 'Subnautica 2 mods', 'YesNo', 'Warning', 'Button2') -eq 'Yes'
+# Until a button is pressed or the window is closed.
+function Wait-UiAnswer {
+  $script:UiAnswer = $null
+  $script:Ui.Form.Activate()
+  while ($null -eq $script:UiAnswer -and -not $script:UiClosed) {
+    [Windows.Forms.Application]::DoEvents()
+    Start-Sleep -Milliseconds 25
+  }
+  return [bool]$script:UiAnswer
+}
+
+# A yes or no inside the window. Closing the window is a no.
+function Show-Question([string]$Text, [string]$Heading = 'Before you continue', [string]$Yes = 'Yes', [string]$No = 'No') {
+  if (-not $script:Ui -or $script:UiClosed) {
+    Add-Type -AssemblyName System.Windows.Forms
+    return [Windows.Forms.MessageBox]::Show($Text, 'Moonpool', 'YesNo', 'Question', 'Button2') -eq 'Yes'
+  }
+  $ui = $script:Ui
+  # The heading already asks, so a closing one-word question in the text is dropped.
+  Set-UiMode 'ask' ($Text -replace '\s*Install\?\s*$', '')
+  $ui.Heading.Text = $Heading
+  $ui.Primary.Text = $Yes
+  $ui.Secondary.Text = $No
+  $yes = Wait-UiAnswer
+  if ($script:Ui -and -not $script:UiClosed) { Set-UiMode 'progress' }
+  if ($yes) { $script:UiCancelled = $false }
+  return $yes
+}
+
+# A message the player reads once and closes: a failure, or what an uninstall did.
+function Show-Notice([string]$Heading, [string]$Text) {
+  if ($Text) { $Text = $Text.Substring(0, 1).ToUpperInvariant() + $Text.Substring(1) }
+  if ($script:UiClosed) { return }
+  Open-Window
+  if (-not $script:Ui) {
+    Add-Type -AssemblyName System.Windows.Forms
+    [void][Windows.Forms.MessageBox]::Show("$Heading`n`n$Text", 'Moonpool')
+    return
+  }
+  $script:UiInstalling = $false
+  Set-UiMode 'notice' $Text
+  $script:Ui.Heading.Text = $Heading
+  $script:Ui.Primary.Text = 'Close'
+  [void](Wait-UiAnswer)
 }
 
 # A failure the player should read as one plain line.
@@ -223,8 +400,7 @@ function Confirm-CodeSet($Config, [string]$ServerId, [string[]]$Lines) {
     $known = @(Get-ChildItem -LiteralPath $KitHome -Filter 'moonpool.json' -Recurse -ErrorAction SilentlyContinue | Where-Object {
       $_.Directory.Name -ne $ServerId -and (Get-Prop (Read-Json $_.FullName $null) 'address' '') -eq $where })
     if ($where -and $known) { $text = "WARNING: this address had a different server key before. It may not be the same server.`n`n" + $text }
-    Set-Status 'Waiting for your answer'
-    if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text }
+    if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text "Install mods from ${name}?" 'Install and play' 'Cancel' }
     if (-not $yes) { Fail 'you declined; nothing changed, game not started. The join page can join without mods.' 3 }
   }
   Write-Json $path @($Lines)
@@ -394,11 +570,13 @@ function Install-Launcher {
   New-Item -Path "$key\shell\open\command" -Force | Out-Null
   Set-ItemProperty -LiteralPath $key -Name '(default)' -Value 'URL:Subnautica 2 server'
   Set-ItemProperty -LiteralPath $key -Name 'URL Protocol' -Value ''
+  # The name a browser shows when it asks to open the link; without it Windows names conhost.
+  Set-ItemProperty -LiteralPath "$key\shell\open" -Name 'FriendlyAppName' -Value 'Moonpool'
   $run = Get-HiddenRun
   Set-ItemProperty -LiteralPath "$key\shell\open\command" -Name '(default)' -Value "`"$($run.Exe)`" $($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Link `"%1`""
 }
 
-function Install-ServerShortcuts($Config, [string]$ServerId) {
+function Install-ServerShortcuts($Config, [string]$ServerId, [string]$Game = '') {
   $dir = Join-Path $KitHome $ServerId
   New-Item -ItemType Directory -Path $dir -Force | Out-Null
   Write-Json (Join-Path $dir 'moonpool.json') $Config
@@ -406,6 +584,9 @@ function Install-ServerShortcuts($Config, [string]$ServerId) {
   $server = [string](Get-Prop $Config 'server_name' 'server') -replace '[\\/:*?"<>|\x00-\x1f]', '_'
   $folders = @(Get-ShortcutFolders)
   if ($NoShortcuts) { $folders = @() }
+  # The game's own icon, so a shortcut looks like Subnautica 2 rather than a PowerShell script.
+  $icon = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+  if ($Game -and (Test-Path -LiteralPath (Join-Path $Game 'Subnautica2.exe'))) { $icon = (Join-Path $Game 'Subnautica2.exe') + ',0' }
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     $links = @{ "Subnautica 2 ($server)" = "-Server $ServerId" }
@@ -415,7 +596,7 @@ function Install-ServerShortcuts($Config, [string]$ServerId) {
       $run = Get-HiddenRun
       $shortcut.TargetPath = $run.Exe
       $shortcut.Arguments = "$($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" $($links[$name])"
-      $shortcut.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+      $shortcut.IconLocation = $icon
       $shortcut.WorkingDirectory = $KitHome
       $shortcut.Save()
     }
@@ -685,7 +866,7 @@ function Confirm-Unscanned([string]$Archive, [string]$Label, [string]$ServerId) 
   $okayed = @(Read-Json $path @())
   if ($okayed -contains $sha) { return }
   $text = "${Label} could not be scanned by Windows Defender (not installed, or the scan failed).`n`nNothing says it is safe. Install it anyway?"
-  if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text }
+  if ($Approve) { $yes = & $Approve $text } else { $yes = Show-Question $text 'Windows Defender could not scan this' 'Install anyway' 'Cancel' }
   if (-not $yes) { Fail "${Label}: not scanned and you declined; nothing changed, game not started" 3 }
   Write-Json $path @($okayed + $sha)
 }
@@ -946,7 +1127,7 @@ function Invoke-Uninstall {
   if ($stayed.Count -gt 0) { $text += "`n`nStill there, holding files Moonpool never placed, such as a mod's own settings or log: " + ($stayed -join ', ') }
   $text += "`n`nA mod or loader of yours that Moonpool replaced with -Adopt is not put back. Steam's Verify integrity of game files restores any of the game's own files."
   Write-Host "moonpool: $text"
-  if (-not $env:SN2_JOIN_NO_DIALOG) { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show($text, 'Subnautica 2 mods') }
+  if (-not $env:SN2_JOIN_NO_DIALOG) { Show-Notice 'Moonpool is uninstalled' $text }
 }
 
 function Invoke-Join {
@@ -992,6 +1173,7 @@ function Invoke-Join {
     if ($cfg.address -like 'file:*') { $script:AllowLocal = $true }
     $serverId = Get-ServerId $cfg
     $script:ServerId = $serverId
+    Set-UiServer ([string](Get-Prop $cfg 'server_name' ''))
     $script:ManifestUrl = "$($cfg.address)/mods.json"
   }
 
@@ -1032,7 +1214,7 @@ function Invoke-Join {
   if ($loaderSpec) { $codeSet += "UE4SS loader|$(Get-Prop $loaderSpec 'asset' '')|sha256:$(Get-Prop $loaderSpec 'sha256' '')|$(@(Get-Prop $loaderSpec 'allowed_builds' @()) -join ',')|this server|native code" }
   $script:ServerId = $serverId
   Confirm-CodeSet $cfg $serverId $codeSet
-  if ($cfg) { Install-ServerShortcuts $cfg $serverId }
+  if ($cfg) { Install-ServerShortcuts $cfg $serverId $game }
 
   $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-' + [guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $script:Work | Out-Null
@@ -1214,11 +1396,12 @@ try {
   if ($_.Exception.Data.Contains('sn2code')) { $code = [int]$_.Exception.Data['sn2code'] }
   $script:UiCancelled = $false
   Write-Host "moonpool: $($_.Exception.Message)"
-  # A link or shortcut has no console left open to read this in.
-  if (($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
-    Add-Type -AssemblyName System.Windows.Forms
-    if ($script:Ui) { [void][Windows.Forms.MessageBox]::Show($script:Ui.Form, $_.Exception.Message, 'Subnautica 2 mods') }
-    else { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Subnautica 2 mods') }
+  # A link or shortcut has no console left open to read this in. Code 3 is the player's own
+  # choice (declined, or closed the window), which needs no message.
+  if ($code -ne 3 -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
+    $heading = "Couldn't start with mods"
+    if ($Uninstall) { $heading = "Couldn't uninstall Moonpool" } elseif ($DisableMoonpoolMods) { $heading = "Couldn't turn Moonpool's mods off" }
+    Show-Notice $heading $_.Exception.Message
   }
   exit $code
 } finally {
