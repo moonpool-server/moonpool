@@ -62,4 +62,14 @@ teardown() { rm -rf "$TMPROOT"; }
   [ "$status" -eq 0 ]
   [ ! -e "$mods/Big_P.pak" ] && [ ! -e "$mods/Big_P.utoc" ]
   [ "$(cat "$mods/Other_P.pak")" = 'theirs' ]
+  # A file replaced since it was copied is not removed, and a forged list cannot reach outside ~mods.
+  printf 'v2' >"$d/paks-local/Mine_P.pak"; apply; printf 'edited' >"$mods/Mine_P.pak"; rm "$d/paks-local/Mine_P.pak"
+  printf 'keep' >"$g/Subnautica2/Content/Paks/Engine.ini"
+  printf '%s ../Engine.ini\n' "$(printf keep | sha256sum | cut -d' ' -f1)" >>"$d/run/paks-local.list"
+  apply
+  [ "$(cat "$mods/Mine_P.pak")" = 'edited' ]
+  [ "$(cat "$g/Subnautica2/Content/Paks/Engine.ini")" = 'keep' ]
+  # A link already sitting in ~mods under a pak's name is not written through.
+  ln -s "$TMPROOT/secret" "$mods/Big_P.pak"; printf 'v3' >"$d/paks-local/Big_P.pak"; apply
+  [ "$(cat "$TMPROOT/secret")" = 'secret' ]
 }

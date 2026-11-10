@@ -1385,6 +1385,9 @@ function Invoke-Join {
           continue
         }
       }
+      if ($desired.ContainsKey($key) -and [string]$desired[$key].mod -ne $ModName) {
+        Fail "the server's mods $($desired[$key].mod) and $ModName both install $target; ask the admin to keep one, nothing changed, game not started"
+      }
       $desired[$key] = @{ sha256 = $f.Sha256; server = $serverId; mod = $ModName }
       if (-not $same) { $plan.Add([pscustomobject]@{ Path = $f.Path; Target = $target }) }
     }
