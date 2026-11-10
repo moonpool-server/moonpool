@@ -8,9 +8,7 @@ nobody_aboard: "Nobody aboard right now."
 # placeholders: {when}
 last_aboard: " Last aboard {when}."
 # placeholders: {min}
-not_hosting: >-
-  The game has run for {min} min without the hosting mod reporting in, so the world is not open. The
-  host's log says why.
+not_hosting: "The game has run for {min} min without opening its world. Nobody can join until it does."
 # placeholders: {scans}
 scanned: "Scanned lately: {scans}"
 # placeholders: {n}, {url}

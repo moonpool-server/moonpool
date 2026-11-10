@@ -49,7 +49,7 @@ TEXT = {
     "aboard_title": "**Aboard**",
     "nobody_aboard": "Nobody aboard right now.",
     "last_aboard": " Last aboard {when}.",
-    "not_hosting": "The game has run for {min} min without the hosting mod reporting in, so the world is not open. The host's log says why.",
+    "not_hosting": "The game has run for {min} min without opening its world. Nobody can join until it does.",
     "scanned": "Scanned lately: {scans}",
     "mods": "• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins",
     "how_to_join": "### How to join",
@@ -253,23 +253,29 @@ def game_age(pid):
     return int(out) if out.isdigit() else 0
 
 
+GAME_AGE = {"s": 0}  # sampled once per run, so the state and the minutes on the card agree
+
+
 def not_open(pid):
     """Starting while the game is young; after STARTING_MAX seconds (default 600) a game that
     still has not opened its world is reported as not hosting, so the card stops promising."""
-    return "waiting" if game_age(pid) > int(E.get("STARTING_MAX") or 600) else "starting"
+    GAME_AGE["s"] = game_age(pid)
+    return "waiting" if GAME_AGE["s"] > int(E.get("STARTING_MAX") or 600) else "starting"
 
 
 def detected_state():
-    ts = status().get("ts")
-    ts = int(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else 0
     pid = game_pid()
     if not pid:
         return "down"
-    if ts == 0 or now() - ts > int(E.get("STATUS_MAX_AGE") or 90):
-        return not_open(pid)
+    # The launcher removes the last run's readiness.json, and the mod writes a new one each poll;
+    # until it says hosted the world is not open, whatever the leftover status.json says.
     readiness = read_json(CONTROL / "readiness.json", None)
-    if isinstance(readiness, dict) and readiness.get("hosted") is not True:
+    if not (isinstance(readiness, dict) and readiness.get("hosted") is True):
         return not_open(pid)  # open means joinable: the Host call was made, not only that the game runs
+    ts = status().get("ts")
+    ts = int(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else 0
+    if ts == 0 or now() - ts > int(E.get("STATUS_MAX_AGE") or 90):
+        return "starting"  # hosted once, but the mod has gone quiet: not claimed open, not claimed shut
     return "up"
 
 
@@ -410,8 +416,8 @@ def world_container():
                           "accessory": {"type": 2, "style": 5, "url": join, "disabled": kind != "up",
                                         "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Not open" if kind == "waiting" else "Starting…"}}
     components = [head_component, {"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
-    if kind == "waiting":
-        components.append({"type": 10, "content": clamp(T["not_hosting"].format(min=game_age(game_pid()) // 60), 400)})
+    if kind == "waiting" and GAME_AGE["s"]:
+        components.append({"type": 10, "content": clamp(T["not_hosting"].format(min=GAME_AGE["s"] // 60), 400)})
     if now_line:
         components.append({"type": 10, "content": now_line})
     if scans:

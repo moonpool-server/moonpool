@@ -239,18 +239,27 @@ PY
 echo 4242
 ' >"$fake/pgrep"; chmod +x "$fake/pgrep"
   printf '{"ts":1700000000,"world_name":"Deep Blue","players":[]}' >"$CONTROL_DIR/status.json"
+  # A fresh status.json left by the last run and no readiness.json yet (the launcher removes it) is Starting, not Open.
+  rm -f "$CONTROL_DIR/readiness.json"
+  body=$(PATH="$fake:$PATH" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Starting**'* ]]
   printf '{"hosted":false}' >"$CONTROL_DIR/readiness.json"
   body=$(PATH="$fake:$PATH" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Starting**'* ]]
   [ "$(jq -r '.components[0].components[0].accessory.disabled' <<<"$body")" = true ]
-  # Past STARTING_MAX seconds of game run time the card stops saying Starting and says why nobody can join.
+  # Past STARTING_MAX seconds of game run time the card stops saying Starting and says nobody can join.
   printf '#!/usr/bin/env bash
 echo 1500
 ' >"$fake/ps"; chmod +x "$fake/ps"
   body=$(PATH="$fake:$PATH" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Not hosting**'* ]]
   [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Not open true' ]
-  [[ $(jq -r '.components[0].components[3].content' <<<"$body") == 'The game has run for 25 min without the hosting mod reporting in, so the world is not open. The host'"'"'s log says why.' ]]
+  [[ $(jq -r '.components[0].components[3].content' <<<"$body") == 'The game has run for 25 min without opening its world. Nobody can join until it does.' ]]
+  # A hosted world whose mod has gone quiet is neither Open nor Not hosting: the card says Starting.
+  printf '{"hosted":true}' >"$CONTROL_DIR/readiness.json"
+  body=$(PATH="$fake:$PATH" SN2_NOW=1700000200 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Starting**'* ]]
+  printf '{"hosted":false}' >"$CONTROL_DIR/readiness.json"
   body=$(PATH="$fake:$PATH" STARTING_MAX=1800 SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Starting**'* ]]
   rm "$fake/ps"
