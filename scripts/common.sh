@@ -538,25 +538,36 @@ archive_previous_logs() {
 }
 
 # Pak mods the host runs: the .pak/.ucas/.utoc files in $PAKS_LOCAL are copied into the game's
-# Content/Paks/~mods before each launch. A file an earlier launch copied that is gone from
-# $PAKS_LOCAL is removed again; nothing else in ~mods is touched, and a link is never followed.
+# Content/Paks/~mods before each launch. Each copy is recorded with its sha256, and one whose source
+# is gone is removed only while it still has those bytes: nothing else in ~mods is touched. Names are
+# plain file names, and a link on either side is never followed.
+pak_name_ok() { case "$1" in */* | .* | "") return 1 ;; esac; printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_][A-Za-z0-9_ .()+-]*\.(pak|ucas|utoc)$'; }
 apply_local_paks() {
-  local mods="$GAME_DIR/Subnautica2/Content/Paks/~mods" list="$RUN_DIR/paks-local.list" f n
+  local mods="$GAME_DIR/Subnautica2/Content/Paks/~mods" list="$RUN_DIR/paks-local.list" f n sum
   if [ -f "$list" ]; then
-    while IFS= read -r n; do
-      [ -n "$n" ] && [ ! -f "$PAKS_LOCAL/$n" ] && rm -f "${mods:?}/$n"
+    while read -r sum n; do
+      pak_name_ok "$n" || continue
+      [ -f "$PAKS_LOCAL/$n" ] && continue
+      { [ -f "$mods/$n" ] && [ ! -L "$mods/$n" ]; } || continue
+      [ "$(sha256sum "$mods/$n" | cut -d' ' -f1)" = "$sum" ] && rm -f "$mods/$n"
     done <"$list"
   fi
   : >"$list.tmp"
   for f in "$PAKS_LOCAL"/*.pak "$PAKS_LOCAL"/*.ucas "$PAKS_LOCAL"/*.utoc; do
     { [ -f "$f" ] && [ ! -L "$f" ]; } || continue
-    mkdir -p "$mods"
     n=${f##*/}
-    cmp -s "$f" "$mods/$n" || cp -f "$f" "$mods/$n"
-    printf '%s\n' "$n" >>"$list.tmp"
+    pak_name_ok "$n" || { log "host pak mods: skipped $n (not a plain .pak/.ucas/.utoc name)"; continue; }
+    mkdir -p "$mods"
+    if [ -L "$mods/$n" ] || { [ -e "$mods/$n" ] && [ ! -f "$mods/$n" ]; }; then
+      log "host pak mods: skipped $n (a link or folder is in its place in ~mods)"; continue
+    fi
+    if ! cmp -s "$f" "$mods/$n"; then
+      cp -f "$f" "$mods/.$n.tmp" && mv -f "$mods/.$n.tmp" "$mods/$n"
+    fi
+    printf '%s %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$n" >>"$list.tmp"
   done
   mv -f "$list.tmp" "$list"
-  if [ -s "$list" ]; then log "host pak mods from $PAKS_LOCAL: $(tr '\n' ' ' <"$list")"; fi
+  if [ -s "$list" ]; then log "host pak mods from $PAKS_LOCAL: $(cut -d' ' -f2- "$list" | tr '\n' ' ')"; fi
 }
 
 # Create the volume layout; the control directory is private to this user.
