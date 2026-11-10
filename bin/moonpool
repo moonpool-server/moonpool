@@ -1,0 +1,1604 @@
+#!/usr/bin/env python3
+"""moonpool: admin commands for a Subnautica 2 headless host.
+
+On the Docker host it drives the container with docker compose; inside it (SN2_IN_CONTAINER=1)
+it talks to the SN2SlotFreeHost mod through the file-drop queue in the control folder.
+"""
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+import zipfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+E = os.environ
+HERE = Path(__file__).resolve().parent
+SERVICE = E.get("SN2_SERVICE") or "sn2"
+PROTOCOL_VERSION = 1
+REQUEST_MAX_BYTES, RESPONSE_MAX_BYTES, QUEUE_MAX_FILES = 4096, 65536, 128
+
+NEXT_PLAYERS = "Refresh the player list with: moonpool players, and use a name from it."
+NEXT_HOSTED = "Wait until moonpool status shows a hosted session, then retry."
+NEXT_PLAYERS_ONLINE = "Ask the players to leave, or run again with --force (owner only)."
+NEXT_WEATHER = "Choose a weather type from the loaded list: weather_types in status.json."
+NEXT_SETTING = "Fix the refused key in settings.yaml (the row names the reason) and apply again."
+NEXT_STALE = "Inspect the host's health (moonpool status) and wait for a fresh status write."
+NEXT_TIMEOUT = "Inspect the logs (moonpool logs game, moonpool status) before sending again; do not resubmit a mutating command blindly."
+NEXT_RETRY = "Retry after the current operation completes."
+NEXT_ENABLE = "Add the command to enabled_commands in sn2headless.json, recreate the host and retry."
+NEXT_BODY = "Wait until the player has a body in the world (a position in status.json), then retry."
+NEXT_CHOICE = "Pass the argument named under data.argument; the valid choices are under data.options."
+
+USAGE = """Usage: moonpool [--instance <slug>] [--json] <command> [args]
+
+Who is in
+  status                       container state and the mod's readiness
+  players                      who is connected (PlayerState names)
+  players kick <name>          the game's own KickPlayer <name>, run as the host
+  players invite <steamid64|profile link>
+                               allowlist them; then accept their friend request (by itself with AUTO_ACCEPT_FRIENDS=1)
+  players friends              the host's friend code and its friends, from Steam's files
+  ban add <name|steamid64> [reason]
+  ban remove <name|steamid64>  manage permanent access blocks
+  ban list                     list permanent access blocks
+
+The world
+  world                        the clock, the daylight hold, the weather and the loaded
+                               weather types, from status.json
+  world time <HH:MM>           set the clock (settings.yaml time_of_day, then apply)
+  world time frozen|normal     hold the clock, or let it run (daylight)
+  world weather <type>         set the weather to a loaded type (DA_ prefix optional)
+  settings apply               copy ./settings.yaml (beside .env) to the mod and re-read it
+  mods list                    the mods this server asks players for, as published
+  mods publish [plugins.yaml]  copy that file in (if given) and turn it into the signed manifest
+  mods pin <name> <archive>    record a hand-downloaded archive (Nexus) for one entry
+  mods enable|disable <name>   switch one entry on or off in plugins.yaml and republish
+  map where <player>           where that player is now, in game units, to line up a map
+  map bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>
+                               the bounds for map-background.json: a picture's size in
+                               pixels and two spots on it, each as pixel then game position
+
+A player
+  unlocks [player]             replay the starter set, the host's base-piece and
+                               scanned-tool unlocks (default: every connected player)
+
+The server
+  server start | stop [--now]  the container (on the Docker host, next to compose.yaml)
+  server restart [--now]       stop the game, then recreate the container so .env
+                               is re-read (compose up -d --force-recreate)
+  server arm | disarm          let the mod call the game's Host code once ready, or hold
+                               it off (AUTO_HOST=true arms by itself)
+  server saves                 list the saves: name, last played (UTC), size
+  server host [save] [--now]   restart the game on <save> (default SAVE_NAME, else the
+                               newest save, else a new world); it hosts once armed
+  server cancel                cancel a pending restart countdown
+  notify <text>                show a short operator announcement to online players
+  server slots <N>             N real player slots on the running session, no re-host
+  server backup                stage a copy of the saves now (backup-staging; offen
+                               archives that folder on its schedule)
+  server import <save.zip|folder|file.sav> [name]
+                               bring a world from a player's PC and host it; a save the game
+                               can't load is taken back out and the old world hosted again
+  server export [save] [file.zip]
+                               the world as a zip to drop into a player's SaveGames folder
+  server restore <backup.tar.gz> [save]
+                               stage the current saves, put the backup back, host on [save]
+  server save                  force an asynchronous world save on the host controller
+
+Looking inside
+  logs [game|steam|services|join_watch] [-f]
+                               tail a log from the volume (default: game)
+  diag verify-fresh            read-only check of its own logs that a fresh install hosted by itself
+  diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
+  diag viewer                  the viewer's address and password
+  diag console <player> <line...>
+                               one of the game's console commands, run server-side as
+                               that player (one line; ; | and newlines are refused).
+                               Off unless enabled_commands in sn2headless.json has player
+  diag screenshot <file.png>   what the viewer shows
+  welcome [--dry-run]          post the Discord "how to join" card, or edit it in place
+
+--json, before or after the command: one JSON object on stdout and nothing
+else: {schema_version, request_id, command, ok, state, code, message,
+next_action, data, started_at, completed_at, duration_ms}. The same exit
+codes apply without it.
+Environment: SN2_SERVICE (compose service, default sn2), SN2_TIMEOUT (seconds
+to wait for the mod, default 15), SN2_CONTROL_DIR (inside the container),
+SN2_REQUEST_ID (32 lowercase hex; made here when unset). Mutating commands
+serialize on control/moonpool.lock (SN2_LOCK_WAIT seconds, default 5, then refused).
+Exit codes: 0 ok/accepted/pending, 64 invalid_argument, 69 unavailable or
+not_implemented, 70 protocol_error or internal_error, 75 timeout or stale,
+77 refused, 78 partial_refusal, 79 not_observed.
+"""
+
+STATES = {"ok": ("verified", 0), "accepted": ("submitted", 0), "pending": ("pending", 0),
+          "invalid_argument": ("refused", 64), "not_implemented": ("failed", 69), "unavailable": ("failed", 69),
+          "refused": ("refused", 77), "partial_refusal": ("partial", 78), "not_observed": ("failed", 79),
+          "timeout": ("failed", 75), "stale": ("failed", 75), "protocol_error": ("failed", 70), "internal_error": ("failed", 70)}
+
+WORLD_USAGE = "usage: moonpool world [time <HH:MM|frozen|normal> | weather <type>]"
+MAP_USAGE = "usage: moonpool map where <player> | bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>"
+MODS_USAGE = "usage: moonpool mods list | publish [plugins.yaml] | pin <name> <archive.zip> | enable <name> | disable <name>"
+SERVER_USAGE = ("usage: moonpool server start | stop [--now] | restart [--now] | cancel | arm | disarm | saves | "
+                "host [save] [--now] | slots <N> | backup | import <save.zip> [name] | export [save] [file.zip] | restore <backup> [save] | save")
+
+# ---- the run's state ---------------------------------------------------------
+
+R = {"json": False, "command": "unknown", "human_done": False, "request_id": "", "instance": "", "word": "help", "words": []}
+STARTED_AT = E.get("SN2_STARTED_AT") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+START_MS = int(E.get("SN2_START_MS") or time.time() * 1000)
+_cfg = None
+_lock_fd = None
+
+
+def utc_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def dumps(value):
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+def in_container():
+    return E.get("SN2_IN_CONTAINER", "0") == "1"
+
+
+def bin_dir():
+    return E.get("SN2_BIN") or "/opt/sn2/bin"
+
+
+def common_sh():
+    path = E.get("SN2_COMMON") or "/opt/sn2/bin/common.sh"
+    return path if Path(path).is_file() else str(HERE.parent / "scripts" / "common.sh")
+
+
+def cfg():
+    """The paths every service agrees on, from the common.sh they source."""
+    global _cfg
+    if _cfg is None:
+        names = ["DATA_DIR", "CONTROL_DIR", "RUN_DIR", "LOG_DIR", "SAVE_DIR", "STEAM_DIR", "STAGING_DIR", "HOST_NAME",
+                 "STEAM_SESSION_DIR", "DISPLAY", "UE_LOG"]
+        script = ". '%s'; for n in %s; do printf '%%s=%%s\\0' \"$n\" \"${!n:-}\"; done" % (common_sh(), " ".join(names))
+        try:
+            out = subprocess.run(["bash", "-c", script], capture_output=True, timeout=30).stdout.decode("utf-8", "replace")
+            _cfg = dict(item.split("=", 1) for item in out.split("\0") if "=" in item)
+        except (OSError, subprocess.SubprocessError):
+            _cfg = {}
+        data = E.get("DATA_DIR") or _cfg.get("DATA_DIR") or "/data"
+        _cfg.setdefault("DATA_DIR", data)
+        for key, default in (("RUN_DIR", "run"), ("LOG_DIR", "logs"), ("CONTROL_DIR", "control"), ("STAGING_DIR", "backup-staging")):
+            _cfg[key] = _cfg.get(key) or f"{data}/{default}"
+        _cfg["HOST_NAME"] = _cfg.get("HOST_NAME") or "SN2 Host"
+    return _cfg
+
+
+def control_dir():
+    return E.get("SN2_CONTROL_DIR") or cfg()["CONTROL_DIR"]
+
+
+def run_dir():
+    return E.get("SN2_RUN_DIR") or cfg()["RUN_DIR"]
+
+
+def shell_fn(name, *args):
+    """One of common.sh's own checks, as it runs for the services: True when it exits 0."""
+    env = {**E, "CONTROL_DIR": control_dir()}
+    cmd = ". '%s'; %s \"$@\"" % (common_sh(), name)
+    try:
+        return subprocess.run(["bash", "-c", cmd, "_", *args], env=env, capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def session_up():
+    return shell_fn("session_up")
+
+
+# ---- the result envelope ------------------------------------------------------
+
+def finish(code, message, next_action="", data=None):
+    """Print the result and exit. DATA must be a JSON object; anything else is wrapped."""
+    if code not in STATES:
+        message, code = f"unknown result code {code}: {message}", "internal_error"
+    state, rc = STATES[code]
+    if not next_action:
+        next_action = {"timeout": NEXT_TIMEOUT, "stale": NEXT_STALE}.get(code, "")
+    if R["json"]:
+        data = data if isinstance(data, dict) else ({} if data is None else {"value": data})
+        print(dumps({"schema_version": 1, "request_id": R["request_id"], "command": R["command"], "ok": rc == 0,
+                     "state": state, "code": code, "message": message, "next_action": next_action or None, "data": data,
+                     "started_at": STARTED_AT, "completed_at": utc_now(), "duration_ms": int(time.time() * 1000) - START_MS}))
+    elif rc == 0:
+        if not R["human_done"]:
+            print(message)
+    else:
+        print(f"moonpool: {message}", file=sys.stderr)
+        if next_action:
+            print(f"moonpool: next: {next_action}", file=sys.stderr)
+    sys.stdout.flush()
+    sys.exit(rc)
+
+
+def usage_error(message):
+    finish("invalid_argument", message)
+
+
+def choose_error(message, argument, options):
+    """A missing or invalid argument with the valid choices under data.argument and data.options."""
+    finish("invalid_argument", message + (f" (choose one of: {', '.join(str(o) for o in options)})" if options else ""),
+           NEXT_CHOICE, {"argument": argument, "options": options})
+
+
+def unavailable(message):
+    finish("unavailable", message)
+
+
+def refuse(message):
+    finish("refused", message)
+
+
+def die(message):
+    finish("internal_error", message)
+
+
+# ---- the lock ------------------------------------------------------------------
+
+def take_lock():
+    """The one lock every mutating command runs under. A caller that already holds it says
+    SN2_LOCK_HELD=1 and hands it in on file descriptor 9: checked, never trusted."""
+    global _lock_fd
+    import fcntl  # Linux only; the lock is a flock in the data volume
+    lock = E.get("SN2_LOCK_FILE") or f"{control_dir()}/moonpool.lock"
+    if E.get("SN2_LOCK_HELD", "0") == "1":
+        try:
+            mine, theirs = os.fstat(9), os.stat(lock)
+            if (mine.st_dev, mine.st_ino) == (theirs.st_dev, theirs.st_ino):
+                fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _lock_fd = 9  # so this run's own helpers inherit it too
+                return
+        except OSError:
+            pass
+        finish("refused", f"SN2_LOCK_HELD=1, but file descriptor 9 does not hold {lock}; nothing was sent", NEXT_RETRY,
+               {"protocol_error": "lock_not_held"})
+    try:
+        _lock_fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    except OSError:
+        unavailable(f"cannot open the lock file {lock} (has the container started?)")
+    for _ in range(int(E.get("SN2_LOCK_WAIT") or 5) * 4 + 1):
+        try:
+            fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if _lock_fd != 9:  # hand it to children on fd 9, inheritable, as the contract says
+                os.dup2(_lock_fd, 9)
+                os.close(_lock_fd)
+                _lock_fd = 9
+            return
+        except OSError:
+            time.sleep(0.25)
+    finish("refused", f"another moonpool operation is running ({lock} is held); nothing was sent", NEXT_RETRY,
+           {"protocol_error": "lock_held"})
+
+
+# ---- the queue ------------------------------------------------------------------
+
+def new_nonce():
+    return os.urandom(16).hex()
+
+
+def build_request(request_id, cmd, args):
+    """One request line for the mod: {"v","id","cmd","args","ts"}, args as the mod expects them."""
+    body = {}
+    if cmd == "player":
+        body = {"player": args[0], "command": args[1]}
+    elif cmd == "kick":
+        body = {"player": args[0]}
+    elif cmd == "slots":
+        body = {"slots": int(args[0])}
+    elif cmd == "friend_code" and args[:1] == ["--force"]:
+        body = {"force": True}
+    elif cmd == "unlocks" and args[:1] and args[0]:
+        body = {"player": args[0]}
+    return dumps({"v": PROTOCOL_VERSION, "id": request_id, "cmd": cmd, "args": body, "ts": int(time.time())})
+
+
+def check_control_dir():
+    c = Path(control_dir())
+    if not (c.is_dir() and not c.is_symlink()):
+        unavailable(f"control queue is missing or is a symlink: {c}")
+    for d in ("inbox", "outbox", "tmp", "receipts"):
+        if not ((c / d).is_dir() and not (c / d).is_symlink()):
+            unavailable(f"control queue {d} must be a real directory, not a symlink or other file")
+    mode = oct(stat.S_IMODE(c.stat().st_mode))[2:]
+    if mode != "700":
+        refuse(f"refusing: {c} has mode {mode}, expected 700")
+
+
+def queue_housekeeping():
+    c = Path(control_dir())
+    for f in (c / "tmp").iterdir():  # a killed client can leave only a temp file; it was never submitted
+        try:
+            if f.is_file() and not f.name.startswith("mod-") and time.time() - f.stat().st_mtime > 300:
+                f.unlink()
+        except OSError:
+            pass
+    for d in ("inbox", "outbox"):
+        for f in (c / d).iterdir():
+            if f.name != ".pending" and (f.is_symlink() or not f.is_file()):
+                finish("protocol_error", f"control queue contains a symlink or non-regular file: {f}",
+                       "Remove that entry from the control volume and retry.")
+
+
+PROTOCOL_ERRORS = {"not_object", "bad_version", "bad_nonce", "nonce_filename_mismatch", "bad_timestamp", "stale", "bad_json",
+                   "invalid_utf8", "unreadable_or_too_large", "response_too_large", "non_regular_file", "replay",
+                   "not_allowlisted", "args_not_object", "bad_console_line"}
+
+
+def mod_protocol_error(err):
+    """The mod's own protocol check failed, so the request never ran."""
+    return err in PROTOCOL_ERRORS or err.split(":")[0] in ("unknown_arg", "missing_arg", "bad_arg_type", "bad_arg_length")
+
+
+def present_error(err):
+    """What a stable mod error means, and what to do next."""
+    table = {"unknown_player": (f"no connected player has that name ({err})", NEXT_PLAYERS),
+             "unknown_target": (f"no connected player has that name ({err})", NEXT_PLAYERS),
+             "host_controller_not_found": (f"no session is hosted yet, so the host has no controller to run it ({err})", NEXT_HOSTED),
+             "players_online": (f"players are in the world ({err})", NEXT_PLAYERS_ONLINE),
+             "disabled_by_config": (f"the command is disabled in the mod's config ({err})", NEXT_ENABLE),
+             "player_has_no_body": (f"the player has no body in the world yet ({err})", NEXT_BODY),
+             "target_has_no_body": (f"the player has no body in the world yet ({err})", NEXT_BODY)}
+    return table.get(err, (err, ""))
+
+
+def verdict_of(reply, request_id):
+    if not isinstance(reply, dict):
+        return "not an object"
+    if reply.get("v") is None:
+        return "missing protocol version (deploy the current mod before using this moonpool)"
+    if reply["v"] != PROTOCOL_VERSION:
+        return f"protocol version {reply['v']} is not supported; this moonpool supports {PROTOCOL_VERSION}"
+    if PROTOCOL_VERSION not in (reply.get("accepts") or []):
+        return f"the mod does not accept protocol version {PROTOCOL_VERSION}"
+    if reply.get("id") != request_id:
+        return f"answer id {reply.get('id')} is not the request id"
+    if not isinstance(reply.get("ok"), bool):
+        return "ok is not a boolean"
+    if not isinstance(reply.get("data"), dict):
+        return "data is not an object"
+    if reply["ok"] is False and not isinstance(reply.get("error"), str):
+        return "error is not a string"
+    meta = reply.get("meta") if isinstance(reply.get("meta"), dict) else {}
+    if not (isinstance(meta.get("game_build_id"), str) and isinstance(meta.get("mod_version"), str)):
+        return "missing game build id or mod version"
+    return "valid"
+
+
+def queue_call(cmd, args):
+    """Send one command through the queue and judge the answer: (code, message, next, data)."""
+    check_control_dir()
+    queue_housekeeping()
+    c = Path(control_dir())
+    rid = R["request_id"]
+    tmp, dest, out = c / "tmp" / f"{rid}.json", c / "inbox" / f"{rid}.json", c / "outbox" / f"{rid}.json"
+    queued = sum(1 for f in (c / "inbox").glob("*.json") if f.is_file())
+    if queued >= QUEUE_MAX_FILES:
+        finish("unavailable", f"control inbox is full ({queued} requests; limit {QUEUE_MAX_FILES})",
+               "Wait for the mod to drain the inbox, then retry.")
+    request = build_request(rid, cmd, args) + "\n"
+    if len(request.encode("utf-8")) > REQUEST_MAX_BYTES:
+        finish("protocol_error", f"request exceeds {REQUEST_MAX_BYTES} bytes")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(request)
+    os.replace(tmp, dest)
+    (c / "inbox" / ".pending").touch()
+    timeout = int(E.get("SN2_TIMEOUT") or 15)
+    for _ in range(timeout * 4):
+        if out.exists() or out.is_symlink():
+            break
+        time.sleep(0.25)
+    else:
+        dest.unlink(missing_ok=True)
+        finish("timeout", f"no answer from the mod within {timeout}s (is the game running with SN2SlotFreeHost loaded? see: moonpool status)")
+    if out.is_symlink() or not out.is_file():
+        out.unlink(missing_ok=True)
+        finish("protocol_error", "the mod answer is not a regular file")
+    if out.stat().st_size > RESPONSE_MAX_BYTES:
+        out.unlink()
+        finish("protocol_error", f"the mod answer exceeds {RESPONSE_MAX_BYTES} bytes")
+    raw = out.read_bytes()
+    out.unlink()
+    try:
+        text = raw.decode("utf-8")
+        reply = json.loads(text)
+        verdict = verdict_of(reply, rid)
+    except (UnicodeDecodeError, ValueError):
+        text, reply, verdict = raw.decode("utf-8", "replace"), None, "not JSON or not UTF-8"
+    if not R["json"]:
+        print(text.rstrip("\n"))
+        R["human_done"] = True
+    if verdict != "valid":
+        return ("protocol_error", f"the mod's answer is incompatible or malformed: {verdict}",
+                "Deploy matching copies of bin/moonpool and the SN2SlotFreeHost Lua files, then retry.",
+                {"protocol_error": verdict, "reply": text[:2000]})
+    command = R["command"]
+    if reply["ok"]:
+        if reply["data"].get("queued") is True:
+            return "accepted", f"{command}: queued by the mod for the game thread; its effect is not read back here", "", reply["data"]
+        return "ok", f"{command}: the mod answered ok", "", reply["data"]
+    err = reply["error"]
+    data = {**reply["data"], "protocol_error": err}
+    if mod_protocol_error(err):
+        return "protocol_error", f"the mod did not run {command}: {err}", "", data
+    what, nxt = present_error(err)
+    return "refused", f"{command} refused by the mod: {what}", nxt, data
+
+
+def queue_send(cmd, args=()):
+    finish(*queue_call(cmd, list(args)))
+
+
+def settings_verdict(result):
+    """The settings answer, one row per key: a refusal beside a call that ran is partial_refusal;
+    every key refused is refused; no key at all is ok."""
+    code, msg, nxt, data = result
+    if code != "ok":
+        return result
+    rows = [v for v in (data.get("values") or []) if isinstance(v, dict)]
+    ran = sum(1 for v in rows if v.get("applied") is True)
+    refused = [f"{v.get('key')} ({v.get('reason') or 'refused'})" for v in rows if v.get("applied") is False]
+    command = R["command"]
+    if not rows:
+        return "ok", f"{command}: the mod read the file; it names no setting to apply", "", data
+    if not refused:
+        return "accepted", f"{command}: {ran} call(s) ran as the host; the values are not read back here (status.json shows them)", "", data
+    code = "partial_refusal" if ran > 0 else "refused"
+    nxt = NEXT_WEATHER if any(v.get("applied") is False and v.get("key") == "weather" for v in rows) else NEXT_SETTING
+    return code, f"{command}: {ran} ran, refused: {', '.join(refused)}", nxt, data
+
+
+# ---- small helpers --------------------------------------------------------------
+
+def valid_save(name):
+    return re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}", name) is not None
+
+
+def list_saves(folder, deep=False):
+    """Real save files only: the game's settings and cache .sav files are not worlds."""
+    files = Path(folder).rglob("*.sav") if deep else Path(folder).glob("*.sav")
+    return [f for f in files if f.is_file() and not f.name.endswith(("Settings.sav", "Cache.sav", "SavedState.sav"))]
+
+
+def player_line(words):
+    """The console line for a player command: the words as given, one line, no separators."""
+    if len(words) < 2:
+        usage_error("usage: moonpool diag console <player> <line...>")
+    line = " ".join(words[1:])
+    if any(ch in line for ch in ";|`\n"):
+        refuse("refusing: one console command, no ; | ` or newline")
+    return line
+
+
+def read_json(path, fallback=None):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return fallback
+
+
+def status_json():
+    return Path(control_dir()) / "status.json"
+
+
+def player_options():
+    st = read_json(status_json(), {})
+    host = E.get("SN2_HOST_NAME") or cfg()["HOST_NAME"]
+    return [p["name"] for p in (st.get("players") or []) if isinstance(p, dict) and p.get("name") != host] if isinstance(st, dict) else []
+
+
+def weather_options():
+    st = read_json(status_json(), {})
+    return list(st.get("weather_types") or []) if isinstance(st, dict) else []
+
+
+def install_file(src_text, dest):
+    """Write a file where the mod reads it, mode 600 like the rest of the control folder."""
+    tmp = Path(str(dest) + ".tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(src_text)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, dest)
+    except OSError:
+        die(f"could not write {dest}")
+
+
+def settings_set_key(key, value):
+    """Rewrite one top-level `key: value` line in the control folder's settings.yaml."""
+    f = Path(control_dir()) / "settings.yaml"
+    lines = f.read_text(encoding="utf-8").split("\n") if f.is_file() else []
+    if lines and lines[-1] == "":
+        lines.pop()
+    out, done = [], False
+    for line in lines:
+        if line.startswith(f"{key}:"):
+            if not done:
+                out.append(f"{key}: {value}")
+                done = True
+            continue
+        out.append(line)
+    if not done:
+        out.append(f"{key}: {value}")
+    install_file("\n".join(out) + "\n", f)
+
+
+def run_helper(name, *args, capture=True):
+    """One of the host's own scripts: (returncode, output)."""
+    path = f"{bin_dir()}/{name}"
+    cmd = [path, *args] if os.access(path, os.X_OK) else [sys.executable, path, *args]
+    try:  # a child keeps the lock it was handed on fd 9
+        r = subprocess.run(cmd, capture_output=capture, text=True, pass_fds=((9,) if _lock_fd == 9 else ()))
+        return r.returncode, ((r.stdout or "") + (r.stderr or "")) if capture else ""
+    except OSError as err:
+        return 127, str(err)
+
+
+def do_stop_game():
+    rd = Path(run_dir())
+    rd.mkdir(parents=True, exist_ok=True)
+    (rd / "stopped").touch()
+    pid = (rd / "game.pid").read_text().strip() if (rd / "game.pid").is_file() else ""
+    if pid.isdigit():
+        try:
+            os.kill(int(pid), 15)
+        except OSError:
+            pass
+
+
+def do_start_game():
+    for name in ("stopped", "idle-stopped"):
+        (Path(run_dir()) / name).unlink(missing_ok=True)
+
+
+def do_host(args):
+    """Restart the game on [save]: the supervisor relaunches it, and the mod hosts once armed."""
+    now = "--now" in args
+    save = next((a for a in args if a != "--now"), "")
+    if save:
+        if not valid_save(save):
+            usage_error("save names are letters, digits, _ and - only")
+        (Path(control_dir()) / "SAVE_SELECT").write_text(save + "\n", encoding="utf-8")
+    # Said first, so the watcher reads the stop as a planned restart, never an outage.
+    if not now and session_up():
+        rc, _ = run_helper("restart-warning.sh", "run", f"re-hosting on {save or 'the default save'}", capture=False)
+        if rc != 0:
+            finish("pending", "restart countdown was cancelled or another countdown is running")
+    do_stop_game()
+    time.sleep(float(E.get("SN2_RESTART_WAIT") or 5))
+    do_start_game()
+    finish("accepted", f"re-hosting on {save or 'the default save'}: the game restarts and hosts once armed (moonpool logs game); "
+           "the hosted session is not read back here", "", {"save": save or None})
+
+
+# ---- routing ----------------------------------------------------------------------
+
+# word -> {sub: (dotted command, handler, takes the lock, takes no arguments)} or a leaf
+# (sub ""). A sub of "*" is the usage line.
+TABLE = {
+    "status": {"": ("status", "status", False)},
+    "players": {"": ("players", "players", False), "kick": ("players.kick", "kick", True),
+                "invite": ("players.invite", "invite", True), "friends": ("players.friends", "friends", False, True),
+                "*": "usage: moonpool players [kick <name> | invite <steamid64|profile link> | friends]"},
+    "ban": {"add": ("ban.add", "ban_add", True), "remove": ("ban.remove", "ban_remove", True),
+            "list": ("ban.list", "ban_list", False, True),
+            "*": "usage: moonpool ban add <name|steamid64> [reason] | remove <name|steamid64> | list"},
+    "world": {"": ("world", "world", False), "time": ("world.time", "world_set", True),
+              "weather": ("world.weather", "world_set", True), "*": WORLD_USAGE},
+    "settings": {"": ("settings.apply", "settings", True)},
+    "map": {"where": ("map.where", "map_where", False), "bounds": ("map.bounds", "map_bounds", False), "*": MAP_USAGE},
+    "mods": {"list": ("mods.list", "mods_list", False, True), "publish": ("mods.publish", "mods_publish", True),
+             "pin": ("mods.pin", "mods_pin", True), "enable": ("mods.enable", "mods_toggle", True),
+             "disable": ("mods.disable", "mods_toggle", True), "*": MODS_USAGE},
+    "unlocks": {"": ("unlocks", "unlocks", True)},
+    "server": {**{s: (f"server.{s}", s, True, True) for s in ("start", "arm", "disarm", "backup", "save")},
+               **{s: (f"server.{s}", s, False, True) for s in ("cancel", "saves")},
+               "stop": ("server.stop", "stop", False), "restart": ("server.restart", "restart", False),
+               "host": ("server.host", "host", False), "slots": ("server.slots", "slots", True),
+               "restore": ("server.restore", "restore", True), "import": ("server.import", "import", True),
+               "export": ("server.export", "export", False), "*": SERVER_USAGE},
+    "logs": {"": ("logs", "logs", False)},
+    "notify": {"": ("notify", "notify", True)},
+    "diag": {"verify-fresh": ("diag.verify_fresh", "verify_fresh", False, True),
+             "screenshot": ("diag.screenshot", "screenshot", False),
+             "friend-code": ("diag.friend_code", "friend_code", False),
+             "viewer": ("diag.viewer", "viewer", False, True), "console": ("diag.console", "console", True),
+             "*": "usage: moonpool diag verify-fresh | friend-code [--force] | viewer | screenshot <file.png> | console <player> <line...>"},
+    "welcome": {"": ("welcome", "welcome", False)},
+    # Plumbing between the host copy and the container copy.
+    **{w: {"": (w, w, True)} for w in ("stop-game", "start-game", "restart-warning")},
+    **{w: {"": ("help", "help", False)} for w in ("help", "-h", "--help")},
+}
+
+
+def route(argv):
+    """The words typed -> the dotted command name, the handler, whether it takes the lock, and its arguments."""
+    r = {"cmd": "unknown", "op": "unknown", "lock": False, "usage": "", "argv": []}
+    words = list(argv) or ["help"]
+    R["word"], R["words"] = words[0], words
+    w, a = words[0], words[1:]
+    group = TABLE.get(w)
+    if group is None:
+        return {**r, "argv": a}
+    r["cmd"] = w
+    sub = a[0] if a else ""
+    if sub and sub in group:
+        entry, rest = group[sub], a[1:]
+    elif sub and "*" in group or "" not in group:
+        return {**r, "op": "usage", "usage": group.get("*", ""), "argv": a[1:]}
+    else:  # a leaf: every word after it is the handler's
+        entry, rest = group[""], a
+    cmd, op, lock, *noargs = entry
+    if noargs and rest:
+        return {**r, "cmd": cmd, "op": "usage", "usage": f"usage: moonpool {w} {sub}", "argv": rest}
+    # world time/weather: the handler sees the setting word too
+    r.update(cmd=cmd, op=op, lock=lock, argv=[sub, *rest] if op == "world_set" else rest)
+    return r
+
+
+# ---- inside the container ---------------------------------------------------------
+
+def inner(r):
+    op, a, c = r["op"], r["argv"], Path(control_dir())
+    n = len(a)
+    if op == "usage":
+        usage_error(r["usage"])
+    if op == "players":
+        queue_send(op)
+    if op == "console":
+        if not (n and a[0]):
+            choose_error("usage: moonpool diag console <player> <line...>", "player", player_options())
+        if n < 2:
+            usage_error("usage: moonpool diag console <player> <line...>")
+        queue_send("player", [a[0], player_line(a)])
+    if op == "slots":
+        if not (n == 1 and re.fullmatch(r"[0-9]{1,2}", a[0]) and 1 <= int(a[0]) <= 63):
+            usage_error("usage: moonpool server slots <1-63>   (real player slots; the host takes one more)")
+        queue_send("slots", [str(int(a[0]))])
+    if op == "mods_list":
+        mods_list(a)
+    if op == "mods_publish":
+        if n == 2 and a[0] == "--from":  # the admin's file, uploaded under this run's id
+            install_file(Path(a[1]).read_text(encoding="utf-8"), Path(control_dir()) / "plugins.yaml")
+            drop_staged(a[1])
+        elif n:
+            usage_error("usage: moonpool mods publish [plugins.yaml]")
+        rc, out = run_helper("mod-service.sh", "publish")
+        res = read_json_text(out) or {}
+        if rc != 0:
+            finish("refused", f"mod publish failed: {res.get('error') or 'unknown error'}", "Fix that entry in control/plugins.yaml and publish again.", res)
+        Path(run_dir()).mkdir(parents=True, exist_ok=True)
+        (Path(run_dir()) / "mod-publish.json").write_text(out, encoding="utf-8")
+        run_helper("join-page.py")
+        skipped = len(res.get("skipped") or [])
+        if res.get("enabled"):
+            msg = f"signed mod manifest published: {res.get('mods')} mod(s)" + (f"; {skipped} not published (moonpool mods list says why)" if skipped else "")
+        else:
+            msg = "no installable mods: nothing published" + (f"; {skipped} entries could not be resolved (moonpool mods list says why)" if skipped else "")
+        finish("ok", msg, "", res)
+    if op == "mods_pin":
+        name, file = (a[0] if n else ""), (a[1] if n > 1 else "")
+        from_host = n > 1 and a[1] == "--from"
+        if from_host:
+            file = a[2] if n > 2 else ""
+        if not (name and file):
+            usage_error("usage: moonpool mods pin <name> <archive.zip>")
+        if not Path(file).is_file():
+            usage_error(f"no such archive: {file}")
+        rc, out = run_helper("mod-service.sh", "pin", name, file)
+        if from_host:
+            drop_staged(file)
+        res = read_json_text(out) or {}
+        if rc != 0:
+            finish("refused", f"pin failed: {res.get('error') or 'unknown error'}", "", res)
+        republish()
+        finish("ok", f"pinned {name} to {res.get('file_name')} and republished", "", res)
+    if op == "mods_toggle":
+        verb = r["cmd"].split(".")[1]
+        if not (n == 1 and a[0]):
+            usage_error("usage: moonpool mods enable|disable <name>")
+        rc, out = run_helper("mod-service.sh", verb, a[0])
+        res = read_json_text(out) or {}
+        if rc != 0:
+            finish("refused", f"{verb} failed: {res.get('error') or 'unknown error'}", "", res)
+        republish()
+        finish("ok", f"{a[0]} {verb}d and the manifest republished", "", res)
+    if op == "settings":
+        if not (n and a[0] == "apply"):
+            usage_error("usage: moonpool settings apply")
+        if n == 3 and a[1] == "--from":  # uploaded under this run's id: install and apply in one locked run
+            install_settings(a[2])
+            drop_staged(a[2])
+        elif n != 1:
+            usage_error("usage: moonpool settings apply")
+        f = c / "settings.yaml"
+        if not f.is_file():
+            unavailable(f"no settings.yaml in {c}")
+        finish(*settings_verdict(queue_call("settings", [])))
+    if op == "map_where":
+        if not (n and a[0]):
+            choose_error("usage: moonpool map where <player>", "player", player_options())
+        st = read_json(status_json(), {}) or {}
+        spot = next(({"x": p["x"], "y": p["y"]} for p in (st.get("players") or []) if isinstance(p, dict)
+                     and p.get("name") == a[0] and p.get("x") is not None), None)
+        if not spot:
+            refuse(f"no position for {a[0]} in status.json: are they in the world?")
+        finish("ok", f"{a[0]} is at {spot['x']} {spot['y']}", "", spot)
+    if op == "map_bounds":
+        if n != 10 or not all(re.fullmatch(r"-?[0-9]+(\.[0-9]+)?", v) for v in a):
+            usage_error(MAP_USAGE)
+        w, h, p1, q1, x1, y1, p2, q2, x2, y2 = [float(v) for v in a]
+        if not (w > 0 and h > 0 and p1 != p2 and q1 != q2 and x1 != x2 and y1 != y2):
+            refuse("the picture needs a size, and the two spots must differ across and up and down, or the scale can't be worked out")
+        sx, sy = (x2 - x1) / (p2 - p1), (y2 - y1) / (q2 - q1)
+        left, top = x1 - p1 * sx, y1 - q1 * sy
+        bounds = [num(v) for v in (left, top, left + w * sx, top + h * sy)]
+        finish("ok", f"bounds for map-background.json: {dumps(bounds)}", "", {"bounds": bounds})
+    if op == "world":
+        if n:
+            usage_error(WORLD_USAGE)
+        if not status_json().is_file():
+            unavailable(f"no status.json yet in {c}: the mod has not written one (is the game running?)")
+        st = read_json(status_json())
+        if not isinstance(st, dict):
+            die("status.json is not JSON")
+        d = {k: st.get(k) for k in ("time_of_day", "day_fraction", "clock_frozen", "weather")}
+        d["weather_types"] = list(st.get("weather_types") or [])
+        d["settings"] = st.get("settings")
+        if not R["json"]:
+            print(f"time: {d['time_of_day'] if d['time_of_day'] is not None else 'unknown'} (day fraction {d['day_fraction'] if d['day_fraction'] is not None else 'unknown'})")
+            print(f"clock: {'frozen' if d['clock_frozen'] is True else 'running'}")
+            print(f"weather: {d['weather'] if d['weather'] is not None else 'unknown'}")
+            print(f"loaded weather types: {', '.join(str(t) for t in d['weather_types'])}")
+            R["human_done"] = True
+        finish("ok", "the world as status.json last wrote it", "", d)
+    if op == "world_set":
+        world_set(a)
+    if op == "kick":
+        if n > 1:
+            usage_error("usage: moonpool players kick <name>")
+        if not (n and a[0]):
+            choose_error("usage: moonpool players kick <name>", "player", player_options())
+        queue_send("kick", [a[0]])
+    if op == "ban_add":
+        ban_add(a)
+    if op == "ban_remove":
+        if n != 1:
+            usage_error("usage: moonpool ban remove <name|steamid64>")
+        check_control_dir()
+        f = c / "bans.txt"
+        if not f.is_file():
+            finish("ok", f"{a[0]} was not banned", "", {"removed": False})
+        rows = f.read_text(encoding="utf-8").split("\n")
+        if rows and rows[-1] == "":
+            rows.pop()
+        kept = [row for row in rows if row.split("\t")[0].lower() != a[0].lower()]
+        install_file("".join(row + "\n" for row in kept), f)
+        finish("ok", f"{a[0]} ban removed", "", {"removed": len(kept) != len(rows)})
+    if op == "ban_list":
+        check_control_dir()
+        bans = []
+        for row in (c / "bans.txt").read_text(encoding="utf-8").split("\n") if (c / "bans.txt").is_file() else []:
+            if row.strip() and not row.lstrip().startswith("#"):
+                ident, _, reason = row.partition("\t")
+                bans.append({"identifier": ident, "reason": reason})
+        if not R["json"]:
+            for b in bans:
+                print(b["identifier"] + (f" — {b['reason']}" if b["reason"] else ""))
+            R["human_done"] = True
+        finish("ok", f"{len(bans)} bans", "", {"bans": bans})
+    if op == "saves":
+        saves(a)
+    if op == "host":
+        if n > 2:
+            usage_error("usage: moonpool server host [save] [--now]")
+        do_host(a)
+    if op == "cancel":
+        run_helper("restart-warning.sh", "cancel", capture=False)
+        finish("accepted", "restart countdown cancellation requested")
+    if op == "notify":
+        if not n:
+            usage_error("usage: moonpool notify <text>")
+        message = " ".join(a)
+        if len(message) > 200:
+            usage_error("announcement is limited to 200 characters")
+        (c / "notify-request.json.tmp").write_text(dumps({"kind": "info", "header": "Server announcement", "text": message, "duration": 8}), encoding="utf-8")
+        os.replace(c / "notify-request.json.tmp", c / "notify-request.json")
+        finish("accepted", "announcement queued for online players")
+    if op == "backup":
+        rc, out = run_helper("save-stage.sh", "--now")
+        if rc != 0:
+            refuse(f"refused: the saves could not be staged: {out.rstrip().split(chr(10))[-1] if out.strip() else ''}")
+        staging = Path(E.get("SN2_STAGING_DIR") or cfg()["STAGING_DIR"])
+        latest = sorted(d.name for d in staging.iterdir() if d.is_dir() and d.name.startswith("20")) if staging.is_dir() else []
+        if not latest:
+            finish("not_observed", f"save-stage.sh returned ok, but no staged folder is in {staging}")
+        finish("ok", f"saves staged as {latest[-1]} (offen archives the staging folder on its schedule)", "", {"staged": latest[-1]})
+    if op == "restore":
+        restore(a)
+    if op == "import":
+        import_world(a)
+    if op == "export":
+        export_world(a)
+    if op == "arm":
+        (c / "HOST_DISARMED").unlink(missing_ok=True)
+        (c / "HOST_ARMED").touch()
+        finish("ok", "armed: the mod calls the game's Host code once, when ready", "", {"armed": True})
+    if op == "disarm":
+        (c / "HOST_ARMED").unlink(missing_ok=True)
+        (c / "HOST_DISARMED").touch()
+        finish("ok", "disarmed: the mod idles, and AUTO_HOST will not re-arm until: moonpool server arm", "", {"armed": False})
+    if op == "screenshot":
+        if n != 1:
+            usage_error("usage: moonpool diag screenshot <file.png>")
+        display = E.get("DISPLAY") or cfg().get("DISPLAY") or ":99"
+        try:
+            from PIL import ImageGrab
+            ImageGrab.grab(xdisplay=display).save(a[0], "PNG")
+        except Exception:  # noqa: BLE001  (any failure of the X grab is the one answer)
+            die(f"could not capture display {display}")
+        finish("ok", f"captured display {display} to {a[0]}", "", {"file": a[0]})
+    if op == "friends":
+        friends(a)
+    if op == "friend_code":
+        if not (n == 0 or (n == 1 and a[0] == "--force")):
+            usage_error("usage: moonpool diag friend-code [--force]")
+        queue_send("friend_code", a)
+    if op == "viewer":
+        bind = E.get("VIEWER_BIND") or "127.0.0.1"
+        port = E.get("NOVNC_PORT") or "8080"
+        try:
+            got = subprocess.run(["bash", "-c", ". '%s'; viewer_password" % common_sh()], env={**E, "CONTROL_DIR": control_dir()},
+                                 capture_output=True, text=True, timeout=30)
+            pw = got.stdout if got.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            pw = ""
+        if not pw.strip():
+            unavailable("no viewer password yet: the viewer makes one when it starts")
+        address = f"http://{bind}:{port}/vnc.html"
+        finish("ok", f"{address} password {pw.strip()}", "", {"address": address, "password": pw.strip(),
+               "bind": bind, "port": int(port) if port.isdigit() else port})
+    if op == "unlocks":
+        if n > 1:
+            usage_error("usage: moonpool unlocks [player]")
+        if n == 1 and not a[0]:
+            choose_error("usage: moonpool unlocks [player]", "player", player_options())
+        queue_send("unlocks", a)
+    if op == "invite":
+        if n != 1:
+            usage_error("usage: moonpool players invite <steamid64|profile link>")
+        m = re.fullmatch(r"(https?://(www\.)?steamcommunity\.com/profiles/)?(7656[0-9]{13})/?", a[0])
+        if not m:
+            usage_error("need a steamid64 or a steamcommunity.com/profiles/<id> link, not a custom /id/ link")
+        sid = m.group(3)
+        check_control_dir()
+        f = c / "allowlist.txt"
+        if not any(line.startswith(sid) for line in (f.read_text(encoding="utf-8").split("\n") if f.is_file() else [])):
+            with f.open("a", encoding="utf-8") as out:
+                out.write(sid + "\n")
+        nxt = "Moonpool accepts it within a minute" if E.get("AUTO_ACCEPT_FRIENDS", "0") == "1" else "accept it in the viewer"
+        finish("ok", f"{sid} is on the allowlist; when they send the host a friend request, {nxt}", "", {"steamid": sid})
+    if op == "save":
+        queue_send("save")
+    if op == "status":
+        url = public_url()
+        join = f"{url}/join" if url else None
+        f = Path(run_dir()) / "friend-requests.json"  # the watcher's minute check; None: not checked lately
+        fr = read_json(f) if f.is_file() and time.time() - f.stat().st_mtime < 180 else None
+        if isinstance(fr, dict) and E.get("SHOW_PLAYER_NAMES", "true") != "true":
+            fr["names"] = []
+        if R["json"]:
+            finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join,
+                                                                "friend_requests": fr})
+        print(f"== join page: {join or 'no public address; port ' + (E.get('SN2_MODS_PORT') or '8081') + ' on this machine serves it, reachable as MODS_BIND allows'}")
+        print("== readiness (written by the mod every poll)")
+        print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
+        k = fr.get("count") if isinstance(fr, dict) else 0
+        if isinstance(k, int) and k > 0:
+            print(f"{k} friend request{'s' * (k > 1)} waiting: accept {'them' if k > 1 else 'it'} in the viewer"
+                  + (f" {json.dumps(fr.get('names'), ensure_ascii=False)}" if fr.get("names") else ""))
+        sys.exit(0)
+    if op == "verify_fresh":
+        if R["json"]:
+            rc, out = run_helper("verify-fresh.sh", "--json")
+            res = read_json_text(out)
+            if not (isinstance(res, dict) and isinstance(res.get("stages"), list)):
+                die(f"verify-fresh.sh gave no JSON (exit {rc})")
+            if rc == 0:
+                finish("ok", "verify-fresh: every check passed", "", res)
+            failed = ", ".join(s.get("name", "") for s in res["stages"] if s.get("status") != "PASS")
+            finish("unavailable", f"verify-fresh: {failed} failed", "Read the failed stages (moonpool diag verify-fresh) and the logs they name before going on.", res)
+        rc, _ = run_helper("verify-fresh.sh", capture=False)
+        sys.exit(rc)
+    if op == "welcome":
+        if not (n == 0 or (n == 1 and a[0] == "--dry-run")):
+            usage_error("usage: moonpool welcome [--dry-run]")
+        if R["json"]:
+            rc, out = run_helper("discord-notify.py", *a, "welcome")
+            if rc != 0:
+                die(f"discord-notify.py welcome exited {rc}: {out[:500]}")
+            finish("accepted", f"welcome card {'(dry run) ' if n else ''}sent to discord-notify.py; Discord's answer is in its log", "",
+                   {"dry_run": n == 1, "output": out})
+        rc, _ = run_helper("discord-notify.py", *a, "welcome", capture=False)
+        sys.exit(rc)
+    if op == "logs":
+        logs(a)
+    if op == "stop-game":
+        do_stop_game()
+        finish("accepted", "game stop requested")
+    if op == "restart-warning":
+        run_helper("restart-warning.sh", "run", " ".join(a) or "restart requested", capture=False)
+        finish("accepted", "restart warning completed")
+    if op == "start-game":
+        do_start_game()
+        finish("accepted", "game start allowed; the supervisor launches it within 10s")
+    if op == "help":
+        print(USAGE, end="")
+        sys.exit(0)
+    if not R["json"]:
+        print(USAGE, end="", file=sys.stderr)
+    usage_error(f"unknown command: {R['word']}")
+
+
+def num(v):
+    return int(v) if float(v).is_integer() else v
+
+
+def public_url():
+    """The address players reach the join page at, worked out like the server does (common.sh public_url)."""
+    url = (E.get("SN2_PUBLIC_URL") or "").rstrip("/")
+    if url or E.get("TUNNEL", "off") != "quick":
+        return url
+    try:
+        with urllib.request.urlopen(E.get("TUNNEL_METRICS_URL") or "http://tunnel:20241/quicktunnel", timeout=2) as r:
+            host = str(json.loads(r.read().decode("utf-8")).get("hostname") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return f"https://{host}" if host.endswith(".trycloudflare.com") else ""
+
+
+def read_json_text(text):
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        return None
+
+
+def republish():
+    Path(run_dir()).mkdir(parents=True, exist_ok=True)
+    rc, out = run_helper("mod-service.sh", "publish")
+    (Path(run_dir()) / "mod-publish.json").write_text(out, encoding="utf-8")
+
+
+def drop_staged(path):
+    """A file the host copied in with docker compose cp lands owned by root in /tmp, which this
+    user may not delete; it is small and /tmp is the container's own, so a refusal is not an error."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def install_settings(path):
+    if not Path(path).is_file():
+        usage_error(f"no such settings file: {path}")
+    check_control_dir()
+    install_file(Path(path).read_text(encoding="utf-8"), Path(control_dir()) / "settings.yaml")
+
+
+def mods_list(a):
+    manifest = Path(cfg()["DATA_DIR"]) / "public" / "mods.json"
+    pub = read_json(Path(run_dir()) / "mod-publish.json")
+    pub = pub if isinstance(pub, dict) else {}
+    if manifest.is_file():
+        m = read_json(manifest)
+        if not isinstance(m, dict):
+            die("published mods.json is not JSON")
+        data = {"schema": m.get("schema"), "game": m.get("game"), "session": m.get("session"),
+                "ue4ss": (m.get("ue4ss") or {}).get("asset"),
+                "mods": [{"name": x.get("name"), "version": x.get("version"), "required": x.get("required"), "kind": x.get("kind"),
+                          "folder": x.get("folder"), "source": (x.get("source") or {}).get("type"), "page": (x.get("source") or {}).get("page"),
+                          "automatic": (x.get("source") or {}).get("url") != ""} for x in m.get("mods") or []],
+                "skipped": pub.get("skipped") or [], "linked": pub.get("linked") or []}
+    else:
+        data = {"schema": None, "mods": [], "skipped": pub.get("skipped") or [], "linked": pub.get("linked") or []}
+    if not R["json"]:
+        for x in data["mods"]:
+            how = "installed by the launcher" if x["automatic"] else f"player downloads it from {x['page']}"
+            print(f"{x['name']} {x['version']}  {'required' if x['required'] else 'optional'}  {x['kind']} -> {x['folder']}  {how}")
+        for name in data["linked"]:
+            print(f"{name} (link only: no install block)")
+        for s in data["skipped"]:
+            print(f"NOT PUBLISHED {s.get('name')}: {s.get('reason')}")
+        if not data["mods"]:
+            print("no installable mods published (add install: blocks to control/plugins.yaml)")
+        R["human_done"] = True
+    finish("ok", "published mod list read", "", data)
+
+
+def world_set(a):
+    """world time <HH:MM|frozen|normal> and world weather <type>: the value goes into
+    settings.yaml, the mod re-reads it, and this key's own row decides."""
+    if len(a) > 2:
+        usage_error(WORLD_USAGE)
+    setting, value = a[0], (a[1] if len(a) > 1 else "")
+    if setting == "time":
+        if value in ("frozen", "normal"):
+            key = "daylight"
+        else:
+            if not re.fullmatch(r"([01][0-9]|2[0-3]):[0-5][0-9]", value):
+                choose_error(f"world time needs a 24-hour HH:MM, frozen or normal, not '{value}'", "time", ["HH:MM", "frozen", "normal"])
+            key, value = "time_of_day", f'"{value}"'
+    else:
+        types = weather_options()
+        if not re.fullmatch(r"[A-Za-z0-9_]+", value):
+            choose_error("world weather needs a loaded weather type", "weather", types)
+        lowered = [str(t).lower() for t in types]
+        if types and value.lower() not in lowered and "da_" + value.lower() not in lowered:
+            choose_error(f"no loaded weather type is named {value}", "weather", types)
+        key = "weather"
+    check_control_dir()
+    settings_set_key(key, value)
+    code, msg, nxt, data = settings_verdict(queue_call("settings", []))
+    if code in ("accepted", "partial_refusal", "refused"):
+        rows = [v for v in (data.get("values") or []) if isinstance(v, dict)]
+        row = next((v for v in rows if v.get("key") == key), None)
+        others = ", ".join(str(v.get("key")) for v in rows if v.get("applied") is False and v.get("key") != key)
+        if row and row.get("applied") is False:
+            code, msg = "refused", f"{R['command']}: {key} not applied: {row.get('reason') or 'refused'}"
+            nxt = NEXT_WEATHER if key == "weather" else NEXT_SETTING
+        elif row:
+            code, nxt = "accepted", ""
+            msg = f"{R['command']}: {key} set to {value} as the host; status.json shows when it took (moonpool world)" + \
+                  (f"; still refused in settings.yaml: {others}" if others else "")
+    finish(code, msg, nxt, data)
+
+
+def ban_add(a):
+    if not a:
+        usage_error("usage: moonpool ban add <name|steamid64> [reason]")
+    ident, reason = a[0], " ".join(a[1:])
+    if not ident or "\t" in ident or "\n" in ident or len(ident) > 128:
+        usage_error("ban identifier must be one name or Steam ID64 (no tabs or newlines)")
+    if "\n" in reason or len(reason) > 512:
+        usage_error("ban reason must be at most 512 characters on one line")
+    check_control_dir()
+    f = Path(control_dir()) / "bans.txt"
+    rows = f.read_text(encoding="utf-8").split("\n") if f.is_file() else []
+    rows = [row for row in rows if row and row.split("\t")[0].lower() != ident.lower()]
+    rows.append(f"{ident}\t{reason}")
+    install_file("".join(row + "\n" for row in rows), f)
+    if re.fullmatch(r"7656[0-9]{13}", ident) and E.get("AUTO_ACCEPT_FRIENDS", "0") == "1":
+        session = Path(E.get("STEAM_SESSION_DIR") or cfg()["STEAM_SESSION_DIR"] or f"{cfg()['DATA_DIR']}/steam-session/local-appdata")
+        try:
+            helper = f"{bin_dir()}/friend-accept.py"
+            r = subprocess.run(([helper] if os.access(helper, os.X_OK) else [sys.executable, helper]) + ["--remove", ident], capture_output=True, text=True,
+                               env={**E, "STEAM_HTMLCACHE": str(session / "htmlcache")})
+            rc, out = r.returncode, (r.stdout + r.stderr)
+        except OSError as err:
+            rc, out = 127, str(err)
+        if rc != 0:
+            finish("refused", f"{ident} is banned, but Steam friend removal could not complete: {out[:160]}. The minute watcher will retry while the ID stays banned.")
+    said = f"{ident} is banned; a matching in-game name is removed"
+    if re.fullmatch(r"7656[0-9]{13}", ident):
+        said = f"{ident} is banned; their friend request is refused and they are off the host's friends list"
+    if re.fullmatch(r"7656[0-9]{13}", ident) and E.get("AUTO_ACCEPT_FRIENDS", "0") != "1":
+        said = f"{ident} is on the ban list, but stays the host's Steam friend and can still join until you remove them in the viewer"
+    finish("ok", said, "",
+           {"identifier": ident, "reason": reason})
+
+
+def saves(a):
+    d = E.get("SN2_SAVE_DIR") or cfg().get("SAVE_DIR") or ""
+    if not d or not Path(d).is_dir():
+        unavailable(f"no save folder yet: {d}")
+    rows = sorted(((int(f.stat().st_mtime), f.stat().st_size, f) for f in list_saves(d)), key=lambda r: r[0], reverse=True)
+    if R["json"]:
+        finish("ok", "saves listed", "", {"saves": [{"name": f.name[:-4], "last_played_utc": datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                                      "bytes": s} for t, s, f in rows]})
+    print("%-24s %-20s %s" % ("SAVE", "LAST_PLAYED_UTC", "BYTES"))
+    for t, s, f in rows:
+        print("%-24s %-20s %s" % (f.name[:-4], datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), s))
+    R["human_done"] = True
+    finish("ok", f"{len(rows)} saves")
+
+
+def world_files(folder, name):
+    """A save and the game's numbered backups of it."""
+    return [f for f in Path(folder).iterdir() if f.is_file() and (f.name == f"{name}.sav" or re.fullmatch(rf"{re.escape(name)}_\d+\.bak", f.name))]
+
+
+def log_mark():
+    """Where the game log stands now, so only what is written after it is read."""
+    log = Path(E.get("SN2_UE_LOG") or cfg().get("UE_LOG") or "")
+    try:
+        st = log.stat()
+        return log, st.st_ino, st.st_size, st.st_mtime_ns
+    except OSError:
+        return log, None, 0, 0
+
+
+def load_result(mark, name, wait=240):
+    """The game's own word on loading a save after the mark: LoadGameSucceeded, LoadGameFailed, or ''."""
+    log, ino, size, mtime = mark
+    until = time.time() + wait
+    while time.time() < until:
+        time.sleep(5)
+        try:
+            with log.open("rb") as fh:
+                st = os.fstat(fh.fileno())
+                if st.st_ino == ino and st.st_size > size:
+                    fh.seek(size)
+                elif st.st_ino == ino and st.st_mtime_ns == mtime:
+                    continue
+                # Otherwise the game emptied and rewrote its log on the restart, so all of it is new.
+                text = fh.read().decode("utf-8", "replace")
+        except OSError:
+            continue
+        at = text.rfind(f"Loading save slot: {name}")
+        hit = re.search(r"Save system initialize with result: \((\w+)\)", text[at:]) if at >= 0 else None
+        if hit:
+            return hit.group(1)
+    return ""
+
+
+def hosted_after(since, wait=120):
+    """True once the mod reports a hosted session written after `since`."""
+    until = time.time() + wait
+    while time.time() < until:
+        r = read_json(Path(control_dir()) / "readiness.json") or {}
+        if r.get("hosted") is True and (r.get("ts") or 0) >= since:
+            return True
+        time.sleep(5)
+    return False
+
+
+def import_world(a):
+    if not 1 <= len(a) <= 2:
+        usage_error("usage: moonpool server import <save.zip|folder|file.sav> [name]")
+    if len(a) == 2 and not valid_save(a[1]):
+        usage_error("save names are letters, digits, _ and - only")
+    given = Path(a[0])
+    x = Path(tempfile.mkdtemp())
+    try:
+        import_from(given, x, a[1] if len(a) == 2 else "")
+    finally:
+        shutil.rmtree(x, ignore_errors=True)
+        if given.is_file():
+            drop_staged(given)
+
+
+def import_from(given, x, wanted):
+    if given.is_dir():
+        src = given
+    elif given.suffix.lower() == ".sav" and given.is_file():
+        src = given.parent
+    elif given.suffix.lower() == ".zip" and given.is_file():
+        try:
+            with zipfile.ZipFile(given) as z:
+                members = [m for m in z.infolist() if not m.is_dir() and Path(m.filename).name.endswith((".sav", ".bak"))]
+                names = [Path(m.filename).name for m in members]
+                if len(members) > 64 or sum(m.file_size for m in members) > 512 * 1024 * 1024:
+                    usage_error(f"{given.name} holds more than one world's worth of files")
+                if len(set(names)) != len(names):
+                    usage_error(f"{given.name} holds two files with the same name; zip one SaveGames folder")
+                for m in members:
+                    (x / Path(m.filename).name).write_bytes(z.read(m))
+        except (OSError, zipfile.BadZipFile) as err:
+            usage_error(f"cannot read {given.name}: {err}")
+        src = x
+    else:
+        usage_error("import takes a .zip, a folder or a .sav file")
+    found = sorted(list_saves(src, deep=False), key=lambda f: f.stat().st_mtime, reverse=True)
+    if given.suffix.lower() == ".sav":
+        found = [f for f in found if f.name == given.name] or found
+    if not found:
+        refuse(f"refused: {given.name} holds no world (.sav)")
+    old = found[0].stem
+    name = wanted or old
+    if not valid_save(name):
+        refuse(f"refused: {old} is not a save name this host can select; give one: moonpool server import <file> <name>")
+    save_dir = Path(E.get("SN2_SAVE_DIR") or cfg()["SAVE_DIR"])
+    if (save_dir / f"{name}.sav").exists():
+        refuse(f"refused: this server already has a world called {name}; give the import another name")
+    rc, _ = run_helper("save-stage.sh", "--now", capture=False)
+    if rc != 0:
+        refuse("refused: could not snapshot the current saves first")
+    if session_up():
+        rc, _ = run_helper("restart-warning.sh", "run", f"bringing in the world {name}", capture=False)
+        if rc != 0:
+            finish("pending", "import countdown was cancelled or another countdown is running")
+    sel = Path(control_dir()) / "SAVE_SELECT"
+    before = sel.read_text(encoding="utf-8").strip() if sel.is_file() else ""
+    placed = []
+    for f in world_files(found[0].parent, old):
+        dest = save_dir / (f.name.replace(old, name, 1))
+        shutil.copyfile(f, dest)
+        placed.append(dest)
+    mark, since = log_mark(), time.time()
+    do_stop_game()
+    time.sleep(float(E.get("SN2_RESTART_WAIT") or 5))
+    sel.write_text(name + "\n", encoding="utf-8")
+    do_start_game()
+    result = load_result(mark, name)
+    if result == "LoadGameSucceeded":
+        hosted = hosted_after(since)
+        finish("ok", f"{name} loaded" + (" and is hosted" if hosted else "; not hosted yet (moonpool status)"), "",
+               {"save": name, "files": len(placed), "hosted": hosted})
+    for f in placed:
+        f.unlink(missing_ok=True)
+    do_stop_game()
+    time.sleep(float(E.get("SN2_RESTART_WAIT") or 5))
+    if before:
+        sel.write_text(before + "\n", encoding="utf-8")
+    else:
+        sel.unlink(missing_ok=True)
+    do_start_game()
+    refuse(f"refused: the game could not load {name} ({result or 'no answer in 4 minutes'}); a save from an older game "
+           "build or another branch does not load. It was taken out and the previous world is hosted again")
+
+
+def export_world(a):
+    if len(a) > 2:
+        usage_error("usage: moonpool server export [save] [file.zip]")
+    save_dir = Path(E.get("SN2_SAVE_DIR") or cfg()["SAVE_DIR"])
+    sel = Path(control_dir()) / "SAVE_SELECT"
+    name = (a[0] if a and a[0] else "") or (sel.read_text(encoding="utf-8").strip() if sel.is_file() else "")
+    if not name:
+        newest = sorted(list_saves(save_dir), key=lambda f: f.stat().st_mtime, reverse=True)
+        name = newest[0].stem if newest else ""
+    if not (name and (save_dir / f"{name}.sav").is_file()):
+        refuse(f"refused: no world called {name or '(none)'} on this server (moonpool server saves)")
+    # From a staged copy, taken once the game has stopped writing, never the live folder.
+    rc, _ = run_helper("save-stage.sh", "--now", capture=False)
+    staging = Path(E.get("SN2_STAGING_DIR") or cfg()["STAGING_DIR"])
+    stamped = sorted(d for d in staging.glob("20*") if (d / "SaveGames" / f"{name}.sav").is_file()) if rc == 0 and staging.is_dir() else []
+    if not stamped:
+        refuse("refused: could not stage a quiet copy of the saves; try again in a minute")
+    files = world_files(stamped[-1] / "SaveGames", name)
+    out = Path(a[1]) if len(a) == 2 else Path(cfg()["DATA_DIR"]) / "exports" / f"{name}.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    part = out.with_name(out.name + ".part")
+    with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            z.write(f, f.name)
+    os.replace(part, out)
+    finish("ok", f"{name} written to {out}", "", {"save": name, "file": str(out), "files": len(files)})
+
+
+def restore(a):
+    if not (a and Path(a[0]).is_file()):
+        usage_error("restore needs a backup .tar.gz that exists")
+    if len(a) > 2:
+        usage_error("usage: moonpool server restore <backup.tar.gz> [save]")
+    if len(a) == 2 and not valid_save(a[1]):
+        usage_error("save names are letters, digits, _ and - only")
+    x = Path(tempfile.mkdtemp())
+    try:
+        with tarfile.open(a[0], "r:gz") as tar:
+            tar.extractall(x, filter="data")
+    except (OSError, tarfile.TarError, ValueError):
+        usage_error(f"cannot read {a[0]}")
+    stamped = sorted(d for d in x.rglob("*") if d.is_dir() and re.fullmatch(r"20\d{6}T\d{6}Z", d.name))
+    src = stamped[-1] / "SaveGames" if stamped else None
+    if not (src and src.is_dir()):
+        found = list_saves(x, deep=True)
+        src = found[0].parent if found else None
+    if not src or not list_saves(src):
+        refuse(f"refused: {a[0]} holds no save (.sav) file")
+    if len(a) == 2 and not (src / f"{a[1]}.sav").is_file():
+        refuse(f"refused: {a[0]} has no {a[1]}.sav")
+    rc, _ = run_helper("save-stage.sh", "--now", capture=False)
+    if rc != 0:
+        refuse("refused: could not snapshot the current saves first")
+    if session_up():
+        rc, _ = run_helper("restart-warning.sh", "run", f"restoring {os.path.basename(a[0])}", capture=False)
+        if rc != 0:
+            finish("pending", "restore countdown was cancelled or another countdown is running")
+    do_stop_game()
+    time.sleep(float(E.get("SN2_RESTART_WAIT") or 5))
+    save_dir = Path(E.get("SN2_SAVE_DIR") or cfg()["SAVE_DIR"])
+    safety = Path(f"{save_dir}.pre-restore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
+    if safety.exists():
+        safety = Path(f"{safety}-{os.getpid()}")
+    try:
+        shutil.move(str(save_dir), str(safety))
+        save_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, save_dir, dirs_exist_ok=True)
+    except (OSError, shutil.Error) as err:
+        die(f"restore could not put the saves in place: {err}; the current saves are at {safety}")
+    if not R["json"]:
+        print(f"restored from {a[0]} (the current saves were staged first and kept at {safety})")
+    do_host(["--now", a[1] if len(a) == 2 else ""])
+
+
+def friends(a):
+    sd = E.get("SN2_STEAM_DIR") or cfg().get("STEAM_DIR") or ""
+    m = re.search(r'"(7656\d{13})"', Path(sd, "config", "loginusers.vdf").read_text(encoding="utf-8", errors="replace")) if Path(sd, "config", "loginusers.vdf").is_file() else None
+    if not m:
+        unavailable(f"no signed-in account in {sd}/config/loginusers.vdf (sign in on the viewer page)")
+    code = str(int(m.group(1)) - 76561197960265728)
+    lc = Path(sd) / "userdata" / code / "config" / "localconfig.vdf"
+    if not lc.is_file():
+        unavailable(f"no friends list yet: {lc}")
+    import vdf
+    try:
+        tree = vdf.loads(lc.read_text(encoding="utf-8", errors="replace"))
+    except (SyntaxError, ValueError):
+        tree = {}
+
+    def find_friends(node):
+        if isinstance(node, dict):
+            if "friends" in node and isinstance(node["friends"], dict):
+                return node["friends"]
+            for v in node.values():
+                hit = find_friends(v)
+                if hit:
+                    return hit
+        return None
+
+    rows = [{"id": k, "name": str(v.get("name"))} for k, v in (find_friends(tree) or {}).items()
+            if k.isdigit() and isinstance(v, dict) and "name" in v]
+    if R["json"]:
+        finish("ok", f"host friend code: {code}", "", {"friend_code": code, "friends": rows})
+    print(f"host friend code: {code}")
+    print("friends (account id, name), from Steam's localconfig.vdf:")
+    for row in rows:
+        print(f"  {row['id']}  {row['name']}")
+    R["human_done"] = True
+    finish("ok", f"{len(rows)} friends")
+
+
+def logs(a):
+    which, follow = "game", False
+    for arg in a:
+        if arg == "-f":
+            follow = True
+        else:
+            which = arg
+    if which not in ("game", "steam", "services", "join_watch"):
+        usage_error(f"unknown log: {which}")
+    f = Path(E.get("SN2_LOG_DIR") or cfg()["LOG_DIR"]) / f"{which}.log"
+    if not f.is_file():
+        unavailable(f"no log at {f} yet")
+    if R["json"]:
+        if follow:
+            usage_error("logs -f streams; it has no JSON form")
+        lines = f.read_text(encoding="utf-8", errors="replace").split("\n")
+        if lines and lines[-1] == "":
+            lines.pop()
+        finish("ok", f"last 200 lines of {which}.log", "", {"log": which, "lines": lines[-200:]})
+    sys.stdout.flush()
+    rc = subprocess.run(["tail", "-n", "200"] + (["-F"] if follow else []) + [str(f)]).returncode
+    sys.exit(rc)
+
+
+# ---- on the Docker host --------------------------------------------------------------
+
+def compose_base():
+    """docker compose, run in the recipe folder so .env is found, with the instance's project when one is named."""
+    root = E.get("SN2_REPO_ROOT") or ""
+    cwd = root if (not R["instance"] and root and Path(root, "compose.yaml").is_file()) else "."
+    args = []
+    if R["instance"]:
+        args = ["-p", f"sn2-{R['instance']}", "--env-file", f"{root}/instances/{R['instance']}/.env", "-f", f"{root}/compose.yaml"]
+    try:
+        if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0:
+            return ["docker", "compose", *args], cwd
+    except OSError:
+        pass
+    die("docker compose not found")
+
+
+def compose(*args, capture=False):
+    base, cwd = compose_base()
+    try:
+        r = subprocess.run([*base, *args], cwd=cwd, capture_output=capture, text=True)
+        return r.returncode, ((r.stdout or "") + (r.stderr or "")) if capture else ""
+    except OSError as err:
+        return 127, str(err)
+
+
+def container_running():
+    rc, out = compose("ps", "-q", SERVICE, capture=True)
+    cid = out.strip().split("\n")[0] if out.strip() else ""
+    if not cid:
+        return False
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", cid], capture_output=True, text=True)
+    except OSError:
+        return False
+    return r.stdout.strip() == "true"
+
+
+def exec_args():
+    return ["exec", "-T", "-e", f"SN2_REQUEST_ID={R['request_id']}", "-e", f"SN2_STARTED_AT={STARTED_AT}",
+            "-e", f"SN2_START_MS={START_MS}", SERVICE, "moonpool"]
+
+
+def forward(words):
+    """The same words in the container, with this run's id; the container copy prints the result."""
+    if not container_running():
+        unavailable(f"the {SERVICE} container is not running (moonpool start)")
+    sys.stdout.flush()
+    rc, _ = compose(*exec_args(), *(["--json"] if R["json"] else []), *words)
+    sys.exit(rc)
+
+
+def forward_quiet(*words):
+    """Plumbing into the container: never --json, output discarded; a container that is not running is a plain failure."""
+    rc, _ = compose(*exec_args(), *words, capture=True)
+    return rc == 0
+
+
+def run_compose(*args):
+    rc, out = compose(*args, capture=R["json"])
+    if rc != 0:
+        finish("internal_error", f"docker compose {args[0]} failed (exit {rc})", "", {"output": out[-2000:]})
+
+
+def outer(r):
+    op, a = r["op"], r["argv"]
+    n = len(a)
+    if op == "start":
+        run_compose("up", "-d", SERVICE)
+        if not forward_quiet("start-game"):
+            unavailable(f"the container did not come up (docker compose ps {SERVICE})")
+        finish("accepted", "container started; the game launches within 10s and hosts once armed (moonpool status)")
+    if op == "stop":
+        if not (n == 0 or (n == 1 and a[0] == "--now")):
+            usage_error("usage: moonpool server stop [--now]")
+        if a[:1] != ["--now"] and not forward_quiet("restart-warning", "container stopping"):
+            finish("pending", "stop countdown was cancelled or another countdown is running")
+        forward_quiet("stop-game")
+        run_compose("stop", SERVICE)
+        finish("accepted", "stop requested: the game was told to stop and compose stop returned")
+    if op == "restart":
+        if not (n == 0 or (n == 1 and a[0] == "--now")):
+            usage_error("usage: moonpool server restart [--now]")
+        if not a and not forward_quiet("restart-warning", "container restarting"):
+            finish("pending", "restart countdown was cancelled or another countdown is running")
+        forward_quiet("stop-game")
+        run_compose("up", "-d", "--force-recreate", SERVICE)
+        if not forward_quiet("start-game"):
+            unavailable(f"the container did not come up (docker compose ps {SERVICE})")
+        finish("accepted", "container recreated; the game launches within 10s and hosts once armed (moonpool status)")
+    if op == "status":
+        if not R["json"]:
+            compose("ps", SERVICE)
+        forward(["status", *a])
+    if op == "mods_publish" and n:
+        if n != 1 or not Path(a[0]).is_file():
+            usage_error("usage: moonpool mods publish [plugins.yaml]  (a file on this host)")
+        staged = f"/tmp/sn2-plugins-{R['request_id']}.yaml"
+        run_compose("cp", a[0], f"{SERVICE}:{staged}")
+        forward(["mods", "publish", "--from", staged])
+    if op == "import":
+        if not 1 <= n <= 2 or not Path(a[0]).exists():
+            usage_error("usage: moonpool server import <save.zip|folder|file.sav> [name]  (a path on this host)")
+        staged = f"/tmp/sn2-import-{R['request_id']}{'' if Path(a[0]).is_dir() else Path(a[0]).suffix.lower()}"
+        run_compose("cp", a[0], f"{SERVICE}:{staged}")
+        forward(["server", "import", staged, *a[1:]])
+    if op == "export":
+        if n > 2:
+            usage_error("usage: moonpool server export [save] [file.zip]")
+        out = Path(a[1] if n == 2 else "")
+        staged = f"/tmp/sn2-export-{R['request_id']}.zip"
+        rc, text = compose(*exec_args(), "--json", "server", "export", a[0] if n else "", staged, capture=True)
+        if rc != 0:
+            sys.stdout.write(text)
+            sys.exit(rc)
+        name = json.loads(text.strip().splitlines()[-1]).get("data", {}).get("save") or "world"
+        out = out if n == 2 else Path(f"{name}.zip")
+        run_compose("cp", f"{SERVICE}:{staged}", str(out))
+        finish("ok", f"{name} exported to {out}: put the files in a player's Subnautica2\\Saved\\SaveGames folder", "",
+               {"save": name, "file": str(out)})
+    if op == "mods_pin":
+        if n != 2:
+            usage_error("usage: moonpool mods pin <name> <archive.zip>")
+        if not Path(a[1]).is_file():
+            usage_error(f"pin needs the downloaded archive on this host: {a[1]}")
+        staged = f"/tmp/sn2-pin-{R['request_id']}-{os.path.basename(a[1])}"
+        run_compose("cp", a[1], f"{SERVICE}:{staged}")
+        forward(["mods", "pin", a[0], "--from", staged])
+    if op == "settings":
+        if not (n == 1 and a[0] == "apply"):
+            usage_error("usage: moonpool settings apply")
+        f = E.get("SN2_SETTINGS_FILE") or "./settings.yaml"
+        if not Path(f).is_file():
+            unavailable(f"no settings file: {f} (copy settings.example.yaml beside .env)")
+        staged = f"/tmp/sn2-settings-{R['request_id']}.yaml"
+        run_compose("cp", f, f"{SERVICE}:{staged}")
+        forward(["settings", "apply", "--from", staged])
+    if op == "screenshot":
+        if n != 1:
+            usage_error("usage: moonpool diag screenshot <file.png>")
+        shot = f"/tmp/sn2-screenshot-{R['request_id']}.png"
+        if not forward_quiet("screenshot", shot):
+            die("the container could not capture its display (moonpool logs services)")
+        run_compose("cp", f"{SERVICE}:{shot}", a[0])
+        finish("ok", f"saved {a[0]}", "", {"file": a[0]})
+    if op == "restore":
+        if not 1 <= n <= 2:
+            usage_error("usage: moonpool server restore <backup.tar.gz> [save]")
+        if not Path(a[0]).is_file():
+            usage_error("restore needs a backup file on this host")
+        if n == 2 and not valid_save(a[1]):
+            usage_error("save names are letters, digits, _ and - only")
+        staged = f"/tmp/sn2-restore-{R['request_id']}.tar.gz"
+        run_compose("cp", a[0], f"{SERVICE}:{staged}")
+        forward(["server", "restore", staged, *a[1:]])
+    if op == "save":
+        forward(["server", "save"])
+    if op == "usage":
+        usage_error(r["usage"])
+    if op == "help":
+        print(USAGE, end="")
+        sys.exit(0)
+    if op == "unknown":
+        if not R["json"]:
+            print(USAGE, end="", file=sys.stderr)
+        usage_error(f"unknown command: {R['word']}")
+    forward(R["words"])
+
+
+# ---- entry ------------------------------------------------------------------------------
+
+def main(argv):
+    rest, expect_instance, instance = [], False, ""
+    for arg in argv:
+        if expect_instance:
+            instance, expect_instance = arg, False
+        elif arg == "--json":
+            R["json"] = True
+        elif arg == "--instance":
+            expect_instance = True
+        else:
+            rest.append(arg)
+    rid = E.get("SN2_REQUEST_ID") or ""
+    if not re.fullmatch(r"[0-9a-f]{32}", rid):
+        bad, rid = rid, new_nonce()
+        R["request_id"] = rid
+        if bad:
+            usage_error(f"SN2_REQUEST_ID '{bad}' is not 32 lowercase hex characters")
+    R["request_id"] = rid
+    E["SN2_REQUEST_ID"] = rid
+    if expect_instance:
+        usage_error("--instance needs a slug")
+    if instance:
+        if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", instance):
+            usage_error("instance slugs use lowercase letters, digits and single hyphens")
+        E.setdefault("SN2_REPO_ROOT", str(HERE.parent))
+        if not Path(E["SN2_REPO_ROOT"], "instances", instance, ".env").is_file():
+            usage_error(f"instance '{instance}' does not exist")
+        R["instance"] = instance
+    r = route(rest)
+    R["command"] = r["cmd"]
+    if in_container():
+        if r["lock"]:
+            take_lock()
+        inner(r)
+    else:
+        outer(r)
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    main(sys.argv[1:])

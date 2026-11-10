@@ -1,0 +1,7 @@
+{
+  "poll_ms": 2000,
+  "host": {
+    "save_slot": "Slot1",
+    "max_players": 4
+  }
+}

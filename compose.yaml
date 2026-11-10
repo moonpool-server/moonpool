@@ -1,0 +1,164 @@
+# Subnautica 2 headless session host: s6-overlay supervises, so it runs the same
+# on Docker Desktop and Linux Docker.
+#   docker compose up -d --build     (optional: cp .env.example .env, then edit)
+# First start: open the noVNC page (http://127.0.0.1:${NOVNC_PORT}/vnc.html)
+# and sign the Windows Steam client in once; see docs/operating.md.
+---
+name: "${COMPOSE_PROJECT_NAME:-moonpool}"
+
+services:
+  # One-shot, before anything else: make the volume writable by the image's
+  # "container" user and create the backup staging folder up front, so the
+  # backup service never starts against a missing folder.
+  sn2-volume-init:
+    image: "${SN2_IMAGE:-moonpool:panel}"
+    pull_policy: never
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /home/container/backup-staging &&
+        chown container:container /home/container /home/container/backup-staging
+    restart: "no"
+    network_mode: none
+    volumes:
+      - sn2-data:/home/container
+
+  sn2:
+    build:
+      context: .
+      target: panel
+    # SN2_IMAGE names an image you built elsewhere; the default is this local build.
+    image: "${SN2_IMAGE:-moonpool:panel}"
+    container_name: "${SN2_CONTAINER_NAME:-moonpool}"
+    hostname: "${SN2_CONTAINER_NAME:-moonpool}"
+    restart: unless-stopped
+    stop_grace_period: "${STOP_GRACE_PERIOD:-240s}"
+    # Everything inside runs as one unprivileged user and needs no Linux capabilities.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Works with no .env. These behavior switches reach the container through the env file;
+    # only PRESET and RESTART_CRON get a default below, because a default would beat the
+    # preset: AUTO_ACCEPT_FRIENDS HIDE_HOST_BODY IDLE_FREEZE_MINUTES IDLE_STOP_HOURS
+    #   LIFEPOD_JOIN_HOLD PLAYER_SLOTS PRESET RESTART_CRON STORY_GOALS UNLOCK_REPLAY
+    #   HOST_PRUNE VOICE_WARN VOICE_RANGE_M
+    # A second world reads instances/<slug>/.env through SN2_ENV_FILE (moonpool-instance add).
+    env_file:
+      - path: ${SN2_ENV_FILE:-.env}
+        required: false
+    environment:
+      DATA_DIR: /home/container
+      SN2_CONTROL_DIR: /home/container/control
+      PRESET: "${PRESET:-friends}"  # friends = recipe defaults; stock = game-like defaults
+      UE4SS_CHANNEL: "${UE4SS_CHANNEL:-auto}"  # auto | pinned (your own layouts) | upstream-experimental
+      SAVE_NAME: "${SAVE_NAME:-}"  # empty = newest save, else a new world
+      UNLOCK_INTERVAL_MS: "${UNLOCK_INTERVAL_MS:-50}"  # ms between replayed Unlock lines
+      ALLOWLIST_ONLY: "${ALLOWLIST_ONLY:-true}"  # false = accept anyone who asks
+      HOST_NAME: "${HOST_NAME:-SN2 Host}"  # the Steam persona players see
+      ADMINS: "${ADMINS:-}"  # EOS player ids, space separated (see .env.example); empty disables in-game admin
+      ADMIN_PREFIX: "${ADMIN_PREFIX:-!}"
+      WORLD_NAME: "${WORLD_NAME:-Subnautica 2 server}"  # the session and save name
+      MOTD: "${MOTD:-}"  # greeting each player gets once on joining; empty = none
+      STEAM_BRANCH: "${STEAM_BRANCH:-public}"  # public | experimental
+      AUTO_UPDATE: "${AUTO_UPDATE:-true}"  # false = no validation asked; Steam can still update
+      RESTART_CRON: "${RESTART_CRON:-}"  # empty = no scheduled restart
+      RESTART_WARNING_SECONDS: "${RESTART_WARNING_SECONDS:-120}"
+      RESTART_SAVE_WAIT_SECONDS: "${RESTART_SAVE_WAIT_SECONDS:-60}"
+      # Room for the 120 s warning, the 60 s save wait and 30 s margin; Docker allows 30 s more.
+      S6_SERVICES_GRACETIME: "${S6_SERVICES_GRACETIME:-210000}"
+      S6_KILL_GRACETIME: "${S6_KILL_GRACETIME:-5000}"
+      SHOW_PLAYER_NAMES: "${SHOW_PLAYER_NAMES:-true}"  # false = "Player 1", "a player" on Discord
+      SN2_MODS_PORT: "${SN2_MODS_PORT:-8081}"
+      SN2_PUBLIC_URL: "${SN2_PUBLIC_URL:-}"
+      VIEWER_BIND: "${VIEWER_BIND:-127.0.0.1}"
+      TUNNEL: "${TUNNEL:-off}"
+      CLIENT_BUILDS: "${CLIENT_BUILDS:-}"
+      DISCORD_ALERT_ROLE_ID: "${DISCORD_ALERT_ROLE_ID:-}"
+      TUNNEL_TOKEN: ""  # the tunnel's secret, never the game's
+      # CURSEFORGE_API_KEY comes from .env only; it is a secret.
+      # DISCORD_WEBHOOK_URL comes from .env only; it is a secret.
+    # Healthy means Steam and the game process run, not that a world is hosted (moonpool status).
+    healthcheck:
+      test: ["CMD", "/opt/sn2/bin/healthcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 15m
+    shm_size: 2gb
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 524288
+    ports:
+      # noVNC viewer for the one-time Steam sign-in; it controls the signed-in Steam.
+      # Local by default: reach it with ssh -L, or set VIEWER_BIND=0.0.0.0 and
+      # VNC_PASSWORD for your LAN. The service inside listens on NOVNC_PORT too.
+      - "${VIEWER_BIND:-127.0.0.1}:${NOVNC_PORT:-8080}:${NOVNC_PORT:-8080}/tcp"
+      # The join page and signed mod files; unlike noVNC this cannot control Steam.
+      - "${MODS_BIND:-0.0.0.0}:${SN2_MODS_PORT:-8081}:${SN2_MODS_PORT:-8081}/tcp"
+    volumes:
+      # The one persistent volume: Wine prefix, Windows Steam client and its
+      # session, the game as Steam downloaded it, UE4SS, logs, control queue.
+      # A native Docker volume on purpose; never bind-mount a Steam library.
+      - sn2-data:/home/container
+    depends_on:
+      sn2-volume-init:
+        condition: service_completed_successfully
+
+  # Save backups by offen/docker-volume-backup (open source; it rotates).
+  # It archives ONLY the staging folder the container fills with quiet copies
+  # of the saves and the host's Steam userdata, never the live save folder.
+  backup:
+    build:
+      context: .
+      target: backup
+    image: moonpool:backup
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      sn2-volume-init:
+        condition: service_completed_successfully
+    env_file:
+      - path: ./backup.env
+        required: false
+    environment:
+      BACKUP_CRON_EXPRESSION: "${BACKUP_CRON:-*/30 * * * *}"
+      BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-7}"
+      BACKUP_FILENAME: "sn2-saves-%Y-%m-%dT%H-%M-%S.tar.gz"
+      BACKUP_PRUNING_PREFIX: "sn2-saves-"
+      BACKUP_SKIP_UNCHANGED: "${BACKUP_SKIP_UNCHANGED:-true}"
+      BACKUP_MAX_TOTAL_MB: "${BACKUP_MAX_TOTAL_MB:-}"
+    volumes:
+      - type: volume
+        source: sn2-data
+        target: /backup/sn2-staging
+        read_only: true
+        volume:
+          subpath: backup-staging
+      # Point BACKUP_DIR at any mount (NAS, second disk); default ./backups.
+      - "${BACKUP_DIR:-./backups}:/archive"
+
+  # Opt-in quick HTTPS address: TUNNEL=quick and COMPOSE_PROFILES=tunnel in .env.
+  # The origin is only lighttpd's read-only player root on 8081, never noVNC.
+  tunnel:
+    image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:20241", "--url", "http://sn2:${SN2_MODS_PORT:-8081}"]
+    depends_on:
+      - sn2
+
+  # Cloudflare named tunnel on your own domain. Configure the named tunnel's public hostname to
+  # http://sn2:8081 in Cloudflare, and put that hostname in SN2_PUBLIC_URL.
+  tunnel-token:
+    image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
+    profiles: ["tunnel-token"]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN:-}"
+    depends_on:
+      - sn2
+
+volumes:
+  sn2-data:

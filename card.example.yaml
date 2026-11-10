@@ -1,0 +1,38 @@
+# The Discord card's wording. Copy this file to card.yaml in the data volume and change
+# any line; a line you leave out keeps the shipped wording. {placeholders} are filled
+# by name, only the ones a line shows. Markdown as Discord reads it. Up to 400 characters.
+#   docker compose cp card.yaml sn2:/home/container/card.yaml
+
+aboard_title: "**Aboard**"
+nobody_aboard: "Nobody aboard right now."
+# placeholders: {when}
+last_aboard: " Last aboard {when}."
+# placeholders: {min}
+not_hosting: "The game has run for {min} min without opening its world. Nobody can join until it does."
+# placeholders: {scans}
+scanned: "Scanned lately: {scans}"
+# placeholders: {n}, {url}
+mods: >-
+  • **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it
+  installs them at the server's versions and joins
+how_to_join: "### How to join"
+steam_title: "**Steam**"
+# placeholders: {branch}
+steam_beta: "• Right-click **Subnautica 2** › **Properties** › **Betas** › pick **{branch}**"
+# placeholders: {accepts}
+steam_add: "• Add the world's host as a friend with its code above; {accepts}"
+accepts_auto: "it accepts within a minute"
+accepts_invite: "an admin has to invite you first"
+accepts_manual: "the host accepts it by hand"
+steam_join: "• Press **Join**, or **Friends** › right-click the host › **Join Game**"
+# placeholders: {n}
+friend_requests: "-# Friend requests waiting for the host: {n}"
+xbox_title: "**Xbox / PC Game Pass**"
+xbox_beta: "• Join the Subnautica 2 preview in **Xbox Insider Hub**"
+xbox_add: >-
+  • In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game
+  friends list. No Xbox code above? Ask the host to run moonpool diag friend-code
+tip: >-
+  -# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you
+  alt-tab
+footer: "-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve"

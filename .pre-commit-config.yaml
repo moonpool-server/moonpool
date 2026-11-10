@@ -1,0 +1,93 @@
+# Run locally:  pre-commit install   (then every commit is checked)
+#               pre-commit run --all-files
+# CI runs exactly this file (see .github/workflows/ci.yml).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-json
+      - id: check-yaml
+        args: [--unsafe]  # compose files use !override (Docker Compose merge tags)
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: [--config, .hadolint.yaml]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [-x]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [--strict]
+
+  - repo: local
+    hooks:
+      # luacheck's own hook needs luarocks; this uses the luacheck on PATH
+      # (CI installs it from the Ubuntu package lua-check).
+      - id: luacheck
+        name: luacheck
+        entry: luacheck
+        language: system
+        types: [lua]
+      - id: repo-policy
+        name: no game-derived files or credentials
+        entry: python3 scripts/check_repo_policy.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: repo-policy-test
+        name: repo policy test (game files, images, donations, contact)
+        entry: python3 tests/test_repo_policy.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/check_repo_policy\.py|tests/test_repo_policy\.py)$
+      - id: friend-accept-test
+        name: friend auto-accept (Wine DPAPI, cookie read, accept flow)
+        entry: uv run --no-project --with cryptography python tests/test_friend_accept.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/friend-accept\.py|tests/test_friend_accept\.py)$
+      - id: map-chart-test
+        name: map chart test
+        entry: uv run --no-project --with pillow python tests/test_map_chart.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/map-chart\.py|tests/test_map_chart\.py|web/map\.html)$
+      - id: curseforge-publisher-test
+        name: CurseForge publisher resolution and distribution policy
+        entry: uv run --no-project --with pyyaml --with cryptography --with vdf==3.4 python tests/test_publish_mods.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/publish-mods\.py|tests/test_publish_mods\.py)$
+      # bats from its official image, so no local install is needed. The tree
+      # is copied to the container's own /tmp first: the mode-700/600 checks
+      # need a native Linux filesystem, which a Windows or macOS mount is not.
+      # pre-commit runs the container as the caller's uid on Linux (not on
+      # Windows), and apk needs root, so the user is set back to root here.
+      - id: bats
+        name: shell behavior tests (bats)
+        entry: >-
+          --user 0:0 --entrypoint sh
+          bats/bats:1.11.0@sha256:e8f18e0acd4ea933bf019130b85033be75e8ce081db299e93578de83d7874e33 -c
+          'apk add -q --no-cache jq lua5.4 python3 py3-pip py3-pillow py3-jinja2 py3-requests py3-yaml py3-cryptography
+          py3-jsonschema openssl zip unzip >/dev/null &&
+          pip install -q --break-system-packages vdf==3.4 >/dev/null &&
+          cp -r . /tmp/w && cd /tmp/w && exec bats tests/*.bats'
+        language: docker_image
+        pass_filenames: false
+        files: |
+          (?x)^(bin/moonpool|docker/sn2-service\.sh|scripts/(common|verify-fresh)\.sh|scripts/discord-notify\.py
+          |mod/SN2SlotFreeHost/Scripts/.*\.lua|tests/.*)$

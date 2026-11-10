@@ -1,0 +1,74 @@
+moonpool
+Copyright (c) 2026 the moonpool contributors
+
+The files in this repository are licensed under the MIT License (see LICENSE),
+except where a file states otherwise. This repository contains no Steam, Wine,
+UE4SS or Subnautica 2 binaries, no game files and no prebuilt image; the
+project is unofficial and non-commercial. The container image built from it, and the
+volume it creates at run time, contain or download the third-party components
+below under their own licenses. The list is the parts this project fetches or
+serves itself and is not everything in the image: it also runs
+lighttpd, cloudflared (the tunnel profiles) and offen's docker-volume-backup
+(the backup profile) as published, and the Debian packages inside it carry
+their own notices under /usr/share/doc.
+
+------------------------------------------------------------------------------
+UE4SS (RE-UE4SS)
+  Project: https://github.com/UE4SS-RE/RE-UE4SS
+  License: MIT License, Copyright (c) the UE4SS contributors
+  Not included in this repository or the image. At install time
+  scripts/install-ue4ss.sh downloads the pinned release (from this project's
+  release mirror of the pinned builds, because the upstream tag moves, then from
+  https://github.com/UE4SS-RE/RE-UE4SS/releases; tag and asset named in that
+  script) into the operator's own volume and verifies its SHA-256. Layout files
+  for a build come only from the operator's own set, never from here. The loader
+  archive is served from the server's own web root to the player launcher in
+  client/. A mod listed from GitHub or CurseForge is downloaded by the player from
+  that site; only a mod the operator puts in client-mods/ is re-hosted. The release
+  archive carries its own LICENSE, which applies.
+
+------------------------------------------------------------------------------
+Wine and Wine Staging
+  Project: https://www.winehq.org/ and https://gitlab.winehq.org/wine/wine-staging
+  License: GNU Lesser General Public License v2.1 or later
+  Installed into the image from the distribution's packages by the Dockerfile.
+  Source is available from the projects above and from the distribution's
+  source packages for the installed version.
+
+------------------------------------------------------------------------------
+noVNC, x11vnc, Xvfb (panel target only)
+  noVNC: https://github.com/novnc/noVNC; mixed licences: the core JavaScript (core/, app/*.js)
+    MPL 2.0, the HTML and CSS 2-Clause BSD, the Orbitron font SIL OFL 1.1, app/images CC BY-SA 3.0,
+    vendor/pako MIT; the archive's own LICENSE.txt, at /usr/share/novnc/LICENSE.txt in the image, applies.
+    Its release archive, pinned by version and sha256 in the Dockerfile; not modified.
+  x11vnc: GNU GPL v2, Xvfb: MIT/X11 license
+  Installed from distribution packages; not modified.
+
+------------------------------------------------------------------------------
+s6-overlay and supercronic (process supervision and the backup schedule)
+  s6-overlay: https://github.com/just-containers/s6-overlay, ISC license
+  supercronic: https://github.com/aptible/supercronic, MIT License
+  Both are release binaries downloaded by the Dockerfile, pinned by version and
+  sha256; not modified.
+
+------------------------------------------------------------------------------
+Subnautica 2 is a trademark of its owners. This project is not affiliated with,
+endorsed by or authorized by Unknown Worlds, KRAFTON or Valve.
+
+Leaflet, Leaflet.heat and Leaflet.fullscreen (map page only)
+  Leaflet: https://leafletjs.com, BSD 2-Clause, version 1.9.4
+  Leaflet.heat: https://github.com/Leaflet/Leaflet.heat, BSD 2-Clause, version 0.2.0
+  Leaflet.fullscreen: https://github.com/brunob/leaflet.fullscreen, MIT, version 3.0.0
+  None is included here. web/map.html loads them from cdnjs.cloudflare.com, each
+  checked by its hash, into the viewer's browser.
+
+Map backgrounds
+  No map picture is included. map-background.example.json points at joric's
+  Subnautica 2 tileset (https://github.com/joric/subnautica2_tileset, Unlicense),
+  a community capture of the game loaded from joric's site by the viewer's browser.
+  That licence covers joric's work and can't speak for the game's own rights.
+
+SN2SlotFreeHost (this project's host mod)
+  mod/SN2SlotFreeHost is this project's own Lua mod, written for the first
+  working host on 2026-10-30. It is part of this repository and under its MIT
+  licence (LICENSE); it has no upstream.

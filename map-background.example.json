@@ -1,0 +1,14 @@
+{
+  "public": {
+    "url": "https://joric.github.io/subnautica2_tileset/tiles/capture_v2/{z}/{y}/{x}.webp",
+    "bounds": [-384375, 285937.5, -84375, 585937.5],
+    "max_zoom": 8,
+    "credit": "tiles by joric, github.com/joric/subnautica2_tileset (Unlicense), captured from the game"
+  },
+  "experimental": {
+    "url": "https://joric.github.io/subnautica2_tileset/tiles/capture_v2/{z}/{y}/{x}.webp",
+    "bounds": [-384375, 285937.5, -84375, 585937.5],
+    "max_zoom": 8,
+    "credit": "tiles by joric, github.com/joric/subnautica2_tileset (Unlicense), captured from the game"
+  }
+}

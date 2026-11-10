@@ -1,0 +1,2 @@
+#!/command/execlineb -P
+/opt/sn2/bin/sn2-service.sh mods

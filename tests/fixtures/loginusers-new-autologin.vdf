@@ -1,0 +1,13 @@
+"users"
+{
+	"76561190000000001"
+	{
+		"AccountName"		"example_host"
+		"PersonaName"		"SN2 Host"
+		"RememberPassword"		"1"
+		"WantsOfflineMode"		"0"
+		"SkipOfflineModeWarning"		"0"
+		"AutoLogin"		"1"
+		"timestamp"		"1793474343"
+	}
+}

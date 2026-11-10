@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moonpool.invalid/schema/response.schema.json",
+  "title": "SN2SlotFreeHost control response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "accepts", "id", "ok", "data", "meta"],
+  "properties": {
+    "v": {"const": 1},
+    "accepts": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+    "id": {"type": "string", "pattern": "^[0-9a-f]{16,64}$"},
+    "ok": {"type": "boolean"},
+    "data": {"type": "object"},
+    "error": {"type": "string", "minLength": 1},
+    "meta": {
+      "type": "object", "additionalProperties": false,
+      "required": ["game_build_id", "mod_version"],
+      "properties": {"game_build_id": {"type": "string", "minLength": 1}, "mod_version": {"type": "string", "minLength": 1}}
+    }
+  },
+  "allOf": [{"if": {"properties": {"ok": {"const": false}}}, "then": {"required": ["error"]}}]
+}

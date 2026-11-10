@@ -1,0 +1,71 @@
+# Mods this server asks players for. Copy to control/plugins.yaml.
+#
+# This is the one place you decide what joiners get. Leave it empty and players
+# just join with no mods. Every entry is ON unless it says `enabled: false`.
+#
+# An entry WITH an `install:` block is installed for players by the launcher
+# (the "Play with mods" button on the join page, which opens the launcher): the server
+# publishes a signed list with each mod's exact file and its hash, and the
+# launcher puts those files on the player's PC, keeps them current on every
+# start, removes what the server stops asking for, and joins. An entry WITHOUT
+# one is a link on the join page the player follows themselves.
+#
+# The short form: paste the download link and nothing else.
+#   install: { url: https://github.com/32Kallies/Subnautica2Mods/releases/download/v2.9/MoreQuickSlots.zip }
+#   install: { url: https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap/files/8164990 }
+#   install: { url: https://www.nexusmods.com/subnautica2/mods/196?tab=files&file_id=1234 }
+# The link says which site it is; the fields below are read from it. Spell them out only
+# to override one.
+#
+# Where a mod comes from (install.type):
+#   github      a release asset; fetched and hashed here, refused if the bytes
+#               ever change under the same tag (re-pin on purpose: moonpool mods pin)
+#   nexus       the player downloads it (Nexus needs their own sign-in); you pin
+#               the archive once: download it, then
+#               `moonpool mods pin "<name>" <that file>`
+#   curseforge  through the API with CURSEFORGE_API_KEY (an exact file_id, never
+#               "latest"); a project that allows distribution is fetched for the
+#               player, otherwise the player downloads it like a Nexus file
+#   local       your own mod from the data volume: client-mods/<name>/
+#
+# Each entry:
+#   name:     short display name
+#   summary:  one line on what it does
+#   source:   the mod's page (shown as the link)
+#   tier:     mandatory | optional   (default optional; optional ones install too; a player can
+#             leave one out: moonpool -Skip "name")
+#   (A mod the host itself runs is not listed here: it goes in ue4ss-local/Mods/<name>/
+#   in the data volume, see docs/operating.md)
+#   version:  what you call this version, shown to players
+#   enabled:  true | false            (default true)
+#   install:
+#     type:    github | nexus | curseforge | local
+#     kind:    ue4ss | pak            (default ue4ss: a folder under ue4ss/Mods;
+#              pak: a .pak/.ucas/.utoc trio under Content/Paks/~mods)
+#     folder:  which mod inside an archive that holds several, and the folder
+#              name on the player's PC (default: the one mod in the archive).
+#              Only that folder installs: other folders in the archive do not.
+#     github:     repo, tag, asset
+#     nexus:      mod_id, file_id      (+ file_name, sha256 written by `mods pin`)
+#     curseforge: project_id, file_id
+#
+# Example (delete these and add your own):
+#
+# plugins:
+#   - name: "Simple Minimap"
+#     summary: "A minimap in the top right. M for the big map, H hides it."
+#     source:  "https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap"
+#     tier:    optional
+#     version: "1.0"
+#     install: { url: https://www.curseforge.com/subnautica-2/ue4ss-mods/simple-minimap/files/8164990 }
+#   - name: "Bigger FoV"
+#     summary: "Wider field of view."
+#     source:  "https://www.nexusmods.com/subnautica2/mods/196"
+#     tier:    optional
+#     install: { type: nexus, mod_id: 196, file_id: 1234 }
+#   - name: "Our house rules"
+#     summary: "The server's own tweaks."
+#     tier:    mandatory
+#     install: { type: local }
+
+plugins: []
