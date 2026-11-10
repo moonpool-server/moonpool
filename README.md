@@ -142,7 +142,7 @@ Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). `p
 
 Moonpool's code is MIT licensed. That licence covers only this code. The game and Steam have their own terms, and owning the game doesn't override them. Read both before you run it. This isn't legal advice.
 
-The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is with KRAFTON. It limits the game to personal, non-commercial use. It bars modifying the game and using it with unauthorized software, bots or scripts, and it says breaking its terms can end your licence. Moonpool loads a mod into the game, so running it goes against those terms as written.
+The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is with KRAFTON. It limits the game to personal, non-commercial use. It bars modifying the game and using it with unauthorized software, bots or scripts, and it says breaking its terms can end your licence. Moonpool loads a mod into the game, so as we read them, running it goes against those terms as written.
 
 The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) applies too. Without Valve's written consent, section 2.G restricts modifying Steam content, and hosting or matchmaking through emulation, tunneling, added components or similar tools. Section 4.B restricts tampering with how Steam content runs, and section 4.C restricts scripts and bots that interact with Steam content. An unattended host, scripted clicks in the viewer and automatic friend accepting are the kind of automation those sections describe.
 

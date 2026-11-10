@@ -26,6 +26,21 @@ UE4SS (RE-UE4SS)
   client/. A mod listed from GitHub or CurseForge is downloaded by the player from
   that site; only a mod the operator puts in client-mods/ is re-hosted. The release
   archive carries its own LICENSE, which applies.
+  The two archives in this project's ue4ss-mirror release, UE4SS_v3.0.1-1188-gf885e8d2.zip
+  and UE4SS_v3.0.1-1190-gf673aac0.zip, are the same bytes as the same-named assets
+  of UE4SS's own "experimental" release: GitHub reports the same SHA-256 for each
+  (4a594fb5c6e1aa794b06a770730e072c53fb92b741f95a5f0601080d80f4a6c1 and
+  3ce35217fead1982e4563ef974364b7cfedf1dd6d28bb1193caf19877310364b), and those are
+  the values pinned in scripts/common.sh. Not modified.
+
+------------------------------------------------------------------------------
+Pillow
+  Project: https://python-pillow.github.io, License: MIT-CMU
+  Its PyPI wheel for CPython 3.13 on Linux, pinned by version and sha256 in the
+  Dockerfile and unpacked into the image; not modified. The wheel bundles image
+  libraries (libjpeg-turbo, libpng, libtiff, libwebp, OpenJPEG, FreeType, HarfBuzz,
+  LittleCMS, libavif, libxcb and others) whose licences are in its
+  dist-info/licenses/LICENSE.
 
 ------------------------------------------------------------------------------
 Wine and Wine Staging

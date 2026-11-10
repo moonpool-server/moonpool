@@ -40,12 +40,23 @@ RUN dpkg --add-architecture i386 \
       "wine-staging-amd64=${WINE_STAGING_DEB}" "wine-staging-i386=${WINE_STAGING_DEB}" \
  && apt-get install -y --no-install-recommends \
       apt libapt-pkg7.0 \
-      xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-pil python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
+      xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
  && apt-get purge -y ipp-usb avahi-daemon \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /tmp
 # noVNC from its own release: static files websockify serves. Debian's package would bring Node.js
 # along, which nothing here runs.
+# Pillow from its own wheel, pinned by sha256: it decodes the map's background pictures, which come
+# from addresses the host sets, and Debian's 11.1 carries decoder advisories Debian will not patch.
+# The wheel bundles its own image libraries; unpacking it is what pip would do, without adding pip.
+ARG PILLOW_WHEEL=pillow-13.0.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+ARG PILLOW_URL=https://files.pythonhosted.org/packages/ef/fe/f5cdaa2d1c4086e757430f368c271a58ee29cfe7378e7ae7b9d964015c25
+ARG PILLOW_SHA256=5f56499c1a74d2b862beb0c33b8016f99d095858455df9d21583bbbc1c15b582
+RUN curl -fsSL -o "${PILLOW_WHEEL}" "${PILLOW_URL}/${PILLOW_WHEEL}" \
+ && echo "${PILLOW_SHA256}  ${PILLOW_WHEEL}" | sha256sum -c - \
+ && unzip -q "${PILLOW_WHEEL}" -d /usr/local/lib/python3.13/dist-packages \
+ && rm -f "${PILLOW_WHEEL}" \
+ && python3 -c 'import PIL.Image, PIL.ImageGrab; assert PIL.__version__ == "13.0.0"'
 ARG NOVNC_VERSION=1.7.0
 ARG NOVNC_SHA256=b1003a11b6e6e8d8f7f5e5586daae7f8ca651d8aee0aa155ff9ac841c48f52c6
 RUN curl -fsSL -o novnc.tar.gz "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
