@@ -87,7 +87,13 @@ if [ -z "$layout_bad" ]; then
   if [ -n "$l" ]; then record layout 1 "$(line_time "$l")" "$l"
   elif [ -n "${set_dir:-}" ]; then
     record layout 1 "$(file_time "$UE4SS_DIR/MemberVariableLayout.ini")" "set ${set_dir##*/} applied (exe sha256 $hash; both ini files byte-equal)"
-  else record layout 1 "$(file_time "$exe")" "channel $(ue4ss_channel) needs no per-build layout for $GAME_EXE_NAME"; fi
+  else
+    local_layouts=""
+    for f in MemberVariableLayout.ini VTableLayout.ini; do [ -s "$UE4SS_LOCAL/$f" ] && local_layouts="$local_layouts $f"; done
+    if [ -n "$local_layouts" ]; then
+      record layout 1 "$(file_time "$UE4SS_LOCAL")" "channel $(ue4ss_channel) runs with layout files from $UE4SS_LOCAL:$local_layouts; they are not checked against $GAME_EXE_NAME"
+    else record layout 1 "$(file_time "$exe")" "channel $(ue4ss_channel) needs no per-build layout for $GAME_EXE_NAME"; fi
+  fi
 else record layout 0 unknown "${layout_bad# }"; fi
 
 # 5. UE4SS must get past its scan into mod startup and load ours.
