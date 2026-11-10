@@ -8,6 +8,8 @@ setup() {
   export RUN_DIR="$DATA_DIR/run" PUBLIC_DIR="$DATA_DIR/public"
   export CONTROL_DIR="$DATA_DIR/control" LOG_DIR="$DATA_DIR/logs" WORLD_NAME="Deep Blue"
   mkdir -p "$RUN_DIR" "$PUBLIC_DIR" "$CONTROL_DIR" "$LOG_DIR"
+  # The page build reads mod stats; a test never reaches GitHub or CurseForge.
+  export GITHUB_API_URL="file://$BATS_TEST_TMPDIR/no-api" CURSEFORGE_API_URL="file://$BATS_TEST_TMPDIR/no-api"
   rm -f "$RUN_DIR/mod-session.json"
 }
 
@@ -312,4 +314,42 @@ echo 1500
   run env SN2_NOW=1700000030 python3 "$ROOT/scripts/discord-notify.py" event up
   [ "$status" -eq 0 ]
   [ "$(cat "$DATA_DIR/discord/alerts.ids")" = alert-1 ]
+}
+
+@test "mod stats: GitHub and CurseForge numbers reach the page escaped, and a failed read keeps the last ones" {
+  api="$BATS_TEST_TMPDIR/api"; mkdir -p "$api/gh/repos/o" "$api/cf/mods"
+  printf '{"stargazers_count":1234,"pushed_at":"2026-05-28T10:00:00Z","owner":{"login":"<b>o</b>"}}' >"$api/gh/repos/o/r"
+  printf '{"data":{"downloadCount":27319,"dateModified":"2026-05-31T00:00:00Z","authors":[{"name":"jsthop3"}]}}' >"$api/cf/mods/42"
+  cat >"$CONTROL_DIR/plugins.yaml" <<'YAML'
+plugins:
+  - {name: A, summary: "Does a thing.", source: "https://github.com/o/r"}
+  - {name: B, install: {type: curseforge, project_id: 42, file_id: 1}}
+YAML
+  export GITHUB_API_URL="file://$api/gh" CURSEFORGE_API_URL="file://$api/cf" CURSEFORGE_API_KEY=k SN2_NOW=1700000000
+  python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
+  [ "$(jq -r '.mods.A.stars' "$RUN_DIR/mod-stats.json")" = 1234 ]
+  [ "$(jq -r '.mods.B.downloads' "$RUN_DIR/mod-stats.json")" = 27319 ]
+  out=$(python3 "$ROOT/scripts/plugins-section.py" "$CONTROL_DIR/plugins.yaml" "$PUBLIC_DIR" "$RUN_DIR/mod-stats.json")
+  [[ $out == *'Does a thing.<br>&#9733; 1,234 on GitHub &middot; updated 28 May 2026 &middot; by &lt;b&gt;o&lt;/b&gt;'* ]]
+  [[ $out == *'27,319 downloads on CurseForge &middot; updated 31 May 2026 &middot; by jsthop3'* ]]
+  [[ $out == *'not that its file is safe'* ]]
+  # Within the refresh window nothing is read; past it, an unreachable API keeps the last numbers.
+  rm "$api/gh/repos/o/r"
+  SN2_NOW=1700001000 python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
+  [ "$(jq -r '.ts' "$RUN_DIR/mod-stats.json")" = 1700000000 ]
+  SN2_NOW=1700100000 python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
+  [ "$(jq -r '.ts' "$RUN_DIR/mod-stats.json")" = 1700100000 ]
+  [ "$(jq -r '.mods.A.stars' "$RUN_DIR/mod-stats.json")" = 1234 ]
+  # The same name now points at another project: the old numbers are not shown beside it.
+  sed -i 's#github.com/o/r#github.com/o/other#' "$CONTROL_DIR/plugins.yaml"
+  SN2_NOW=1700200000 python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
+  [ "$(jq -r '.mods.A' "$RUN_DIR/mod-stats.json")" = null ]
+  # A hostile answer cannot reach the page as markup, nor break it.
+  printf '{"data":{"downloadCount":5,"dateModified":"<x>-05-01","authors":[{"name":"<script>"}]}}' >"$api/cf/mods/42"
+  SN2_NOW=1700300000 python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
+  out=$(python3 "$ROOT/scripts/plugins-section.py" "$CONTROL_DIR/plugins.yaml" "$PUBLIC_DIR" "$RUN_DIR/mod-stats.json")
+  [[ $out == *'5 downloads on CurseForge &middot; by &lt;script&gt;'* && $out != *'<x>'* && $out != *'<script>'* ]]
+  # The key goes to CurseForge's API host only.
+  CURSEFORGE_API_URL=https://evil.example/v1 SN2_NOW=1700400000 run python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
+  [[ $output == *'refusing to send the CurseForge key to https://evil.example'* ]]
 }
