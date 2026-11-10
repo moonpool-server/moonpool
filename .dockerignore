@@ -9,6 +9,7 @@
 !scripts/join-watch.sh
 !scripts/join-page.py
 !scripts/plugins-section.py
+!scripts/mod-stats.py
 !scripts/mod-service.sh
 !scripts/publish-mods.py
 !client/
