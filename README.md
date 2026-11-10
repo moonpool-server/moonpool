@@ -46,7 +46,13 @@ The Discord card and the join page, as players see them
 
 ![The Discord card: who is on, the codes to add, the map and a Join button](docs/images/discord-card.png)
 
-![The join page: Play with mods installs the list and joins, or join without them](docs/images/join-page.png)
+![The join page: Play with mods, then the server's mods, each with its summary and its GitHub stars or CurseForge downloads where those sites have them](docs/images/join-page.png)
+
+Play with mods opens the Moonpool launcher on the player's PC, installed once from this project's releases. Before anything new or changed goes in, it names those mods and the site each comes from and asks. It shows its progress in the same window and starts the game through Steam. When the game closes it turns the server's mods off again, and says so if a file was still in use; the player's own mods are left alone
+
+![The launcher asking to install Midnight Zone's mods, each with the site it downloads from](docs/images/launcher-install.png)
+
+![The launcher downloading a mod, with its progress bar and a Cancel button](docs/images/launcher-progress.png)
 
 ## Bring your world
 
