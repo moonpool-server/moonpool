@@ -1623,15 +1623,15 @@ stub_discord() {
   [[ $body != *depth* && $body != *mapgenie* && $body != *'"x"'* ]]
 }
 
-@test "one card names all four states and gives each a since time" {
+@test "one card names all five states and gives each a since time" {
   command -v jq >/dev/null || skip "jq not installed"
   welcome_env
-  for state in up starting updating down; do
+  for state in up starting waiting updating down; do
     printf '%s' "$state" >"$DATA_DIR/discord/override"
     printf 9999999999 >"$DATA_DIR/discord/override.expires"
     body=$(SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
     head=$(jq -r '.components[0].components[0] | (.content // .components[0].content)' <<<"$body")
-    case $state in up) word=Open ;; starting) word=Starting ;; updating) word=Updating ;; *) word=Down ;; esac
+    case $state in up) word=Open ;; starting) word=Starting ;; waiting) word="Not hosting" ;; updating) word=Updating ;; *) word=Down ;; esac
     [[ $head == *"**$word** since <t:1700000000:R>"* ]]
   done
 }

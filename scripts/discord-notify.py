@@ -42,13 +42,14 @@ URL = E.get("DISCORD_WEBHOOK_URL") or ""
 SILENT, V2 = 4096, 32768
 DRY = False
 
-LABEL = {"up": "Open", "starting": "Starting", "updating": "Updating", "down": "Down"}
+LABEL = {"up": "Open", "starting": "Starting", "waiting": "Not hosting", "updating": "Updating", "down": "Down"}
 # Every line a player reads on the card. card.yaml in the data volume overrides any key; the
 # layout and the buttons stay the project's. Only the named placeholders are filled.
 TEXT = {
     "aboard_title": "**Aboard**",
     "nobody_aboard": "Nobody aboard right now.",
     "last_aboard": " Last aboard {when}.",
+    "not_hosting": "The game has run for {min} min without the hosting mod reporting in, so the world is not open. The host's log says why.",
     "scanned": "Scanned lately: {scans}",
     "mods": "• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins",
     "how_to_join": "### How to join",
@@ -66,7 +67,7 @@ TEXT = {
     "tip": "-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab",
     "footer": "-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve",
 }
-PLACEHOLDERS = {"last_aboard": {"when"}, "scanned": {"scans"}, "mods": {"n", "url"}, "steam_beta": {"branch"}, "steam_add": {"accepts"}, "friend_requests": {"n"}}
+PLACEHOLDERS = {"last_aboard": {"when"}, "not_hosting": {"min"}, "scanned": {"scans"}, "mods": {"n", "url"}, "steam_beta": {"branch"}, "steam_add": {"accepts"}, "friend_requests": {"n"}}
 TEXT_MAX = 400
 
 
@@ -111,7 +112,7 @@ def card_text():
             continue
         text[key] = value
     return text
-ICON = {"up": "🟢", "starting": "🟡", "updating": "🟡", "down": "🔴"}
+ICON = {"up": "🟢", "starting": "🟡", "waiting": "⚪", "updating": "🟡", "down": "🔴"}
 SKY = {"DA_Clear": "Clear", "DA_ClearGameStart": "Clear", "DA_CloudyA": "Cloudy", "DA_CloudyB": "Cloudy",
        "DA_DistantStormy": "Storm nearby", "DA_Misty": "Misty", "DA_SparseClouds": "Light clouds",
        "DA_StormA": "Storm", "DA_StormB": "Storm", "DA_Storm_Quick": "Storm"}
@@ -243,16 +244,32 @@ def game_pid():
         return ""
 
 
+def game_age(pid):
+    """Seconds the game process has run, from ps; 0 when ps cannot say."""
+    try:
+        out = subprocess.run(["ps", "-o", "etimes=", "-p", pid], capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    return int(out) if out.isdigit() else 0
+
+
+def not_open(pid):
+    """Starting while the game is young; after STARTING_MAX seconds (default 600) a game that
+    still has not opened its world is reported as not hosting, so the card stops promising."""
+    return "waiting" if game_age(pid) > int(E.get("STARTING_MAX") or 600) else "starting"
+
+
 def detected_state():
     ts = status().get("ts")
     ts = int(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else 0
-    if not game_pid():
+    pid = game_pid()
+    if not pid:
         return "down"
     if ts == 0 or now() - ts > int(E.get("STATUS_MAX_AGE") or 90):
-        return "starting"
+        return not_open(pid)
     readiness = read_json(CONTROL / "readiness.json", None)
     if isinstance(readiness, dict) and readiness.get("hosted") is not True:
-        return "starting"  # open means joinable: the Host call was made, not only that the game runs
+        return not_open(pid)  # open means joinable: the Host call was made, not only that the game runs
     return "up"
 
 
@@ -391,8 +408,10 @@ def world_container():
     if join:
         head_component = {"type": 9, "components": [head_component],
                           "accessory": {"type": 2, "style": 5, "url": join, "disabled": kind != "up",
-                                        "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Starting…"}}
+                                        "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Not open" if kind == "waiting" else "Starting…"}}
     components = [head_component, {"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
+    if kind == "waiting":
+        components.append({"type": 10, "content": clamp(T["not_hosting"].format(min=game_age(game_pid()) // 60), 400)})
     if now_line:
         components.append({"type": 10, "content": now_line})
     if scans:
@@ -404,7 +423,7 @@ def world_container():
         components.append({"type": 12, "items": [{"media": {"url": f"{map_url}.png?v={still}"}, "description": "Bases and lifepods"}]})
     if map_url:
         components.append({"type": 1, "components": [{"type": 2, "style": 5, "label": "Map", "url": map_url}]})
-    colour = 3066993 if kind == "up" else 15105570 if kind in ("starting", "updating") else 15158332
+    colour = 3066993 if kind == "up" else 15105570 if kind in ("starting", "updating") else 9807270 if kind == "waiting" else 15158332
     return {"type": 17, "accent_color": colour, "components": components}
 
 
