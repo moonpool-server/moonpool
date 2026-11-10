@@ -89,9 +89,9 @@ def check_contact(root: Path, tagged: bool) -> list[str]:
     """README must carry a CONTACT line; the placeholder is refused once tagged."""
     readme = root / "README.md"
     text = readme.read_text(encoding="utf-8") if readme.is_file() else ""
-    if not any(line.startswith("CONTACT:") for line in text.splitlines()):
+    if not any(line.lower().startswith("contact:") for line in text.splitlines()):
         return ["README.md: no CONTACT: line for takedown requests or concerns"]
-    if tagged and CONTACT_PLACEHOLDER in text:
+    if tagged and CONTACT_PLACEHOLDER.lower() in text.lower():
         return ["README.md: CONTACT is still the placeholder; fill it before tagging a release"]
     return []
 
