@@ -7,6 +7,7 @@ and nothing joins by itself; otherwise the page hands off to Steam on its own.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,29 @@ def render_join(search, values):
     except TemplateError as err:
         print(f"join page: the template in {search[0]} did not render ({err}); using the shipped page", file=sys.stderr)
         return None
+
+
+BANNER_TYPES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+
+def publish_banner(templates, public):
+    """The host's own picture for the top of the page, templates/banner.<png|jpg|jpeg|webp|gif>, copied
+    into the web root; the name to show, or "" when there is none (and any old copy goes)."""
+    def plain(p):  # a regular file directly in templates, never a link to something else
+        return p.is_file() and not p.is_symlink() and p.resolve().parent == templates.resolve()
+    found = None if templates.is_symlink() else next((templates / f"banner{ext}" for ext in BANNER_TYPES if plain(templates / f"banner{ext}")), None)
+    for ext in BANNER_TYPES:
+        old = public / f"banner{ext}"
+        if old.is_file() and (found is None or old.name != found.name):
+            old.unlink()
+    if found is None:
+        return ""
+    target = public / found.name
+    if not target.is_file() or target.read_bytes() != found.read_bytes():
+        tmp = public / (found.name + ".tmp")
+        shutil.copyfile(found, tmp)
+        os.replace(tmp, target)
+    return found.name
 
 
 def main():
@@ -85,7 +109,8 @@ def main():
         refresh = "15"
     # The admin's own copy of the page, templates/join.html.j2 in the data volume, wins over the
     # shipped one. A copy that fails to render is said in the log and the shipped page is used.
-    values = dict(world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh,
+    banner = publish_banner(data / "templates", public)
+    values = dict(world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh, banner=banner,
                   modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:])
     shipped = str(HERE.parent / "web")
     html = render_join([str(data / "templates"), shipped], values)

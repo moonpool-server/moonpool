@@ -32,8 +32,10 @@
 #   name:     short display name
 #   summary:  one line on what it does
 #   source:   the mod's page (shown as the link)
-#   tier:     mandatory | optional   (default optional; optional ones install too; a player can
-#             leave one out: moonpool -Skip "name")
+#   tier:     mandatory | optional   (default optional; a player's launcher shows a box for each
+#             optional mod and installs the ticked ones; mandatory ones are always ticked)
+#   default:  true | false           (default true; false leaves an optional mod unticked the first
+#             time a player joins, until they tick it)
 #   (A mod the host itself runs is not listed here: it goes in ue4ss-local/Mods/<name>/
 #   in the data volume, see docs/operating.md)
 #   version:  what you call this version, shown to players

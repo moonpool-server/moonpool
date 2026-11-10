@@ -122,3 +122,23 @@ JSON
   run python3 "$ROOT/scripts/plugins-section.py" "$BATS_TEST_TMPDIR/p.yaml"
   [ "$status" -eq 0 ] && [[ "$output" == *Sneaky* ]] && [[ "$output" != *javascript:* ]]
 }
+
+@test "a banner in templates shows at the top of the page and goes when it is removed" {
+  command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
+  mkdir -p "$DATA_DIR/templates"
+  printf 'png bytes' >"$DATA_DIR/templates/banner.png"
+  run render
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'<main class="card"><img class="banner" src="banner.png" alt=""><h1>'* ]]
+  [ "$(cat "$DATA_DIR/public/banner.png")" = 'png bytes' ]
+  rm "$DATA_DIR/templates/banner.png"
+  run render
+  [[ "$output" != *'class="banner"'* ]]
+  [ ! -e "$DATA_DIR/public/banner.png" ]
+  # A link named banner is never followed: it could point at any file the host can read.
+  printf 'not for the web' >"$BATS_TEST_TMPDIR/secret"
+  ln -s "$BATS_TEST_TMPDIR/secret" "$DATA_DIR/templates/banner.png"
+  run render
+  [[ "$output" != *'class="banner"'* ]]
+  [ ! -e "$DATA_DIR/public/banner.png" ]
+}
