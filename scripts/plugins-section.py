@@ -137,9 +137,12 @@ def render(plugins: list, manifest: dict, address: str = "", stats: dict | None 
             f'so only accept a host you trust.</p>'
             '<script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),'
             'n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;'
-            'b.addEventListener("click",function(){o.hidden=false;n.hidden=true;clearTimeout(t);'
-            't=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);});'
-            'window.addEventListener("blur",function(){clearTimeout(t);});})();</script>') \
+            'function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}'
+            'b.addEventListener("click",function(){o.hidden=false;n.hidden=true;wait();});'
+            # Focus leaving pauses the wait (a window or prompt opened); coming back with nothing
+            # shown yet, such as after dismissing the browser's prompt, starts it again.
+            'window.addEventListener("blur",function(){clearTimeout(t);});'
+            'window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>') \
         if published and address else \
         '<div class="opt"><p class="fine">Mods this server asks for:</p>'
     tail = "" if published else "</div>"
