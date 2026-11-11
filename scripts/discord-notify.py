@@ -6,6 +6,7 @@ and outage alerts that come down again once the world is back. State lives in
 $DATA_DIR/discord. --dry-run prints what would be sent and sends nothing.
 """
 import base64
+import functools
 import getpass
 import hashlib
 import json
@@ -94,6 +95,7 @@ def text_problem(key, value):
     return ""
 
 
+@functools.cache  # read once a run, so a bad line in card.yaml is logged once
 def card_text():
     """TEXT with card.yaml's overrides; a bad line is logged and the shipped one kept."""
     text = dict(TEXT)
@@ -191,6 +193,7 @@ def read_json_text(text):
         return None
 
 
+@functools.cache
 def manifest():
     paths = [STEAM / "steamapps" / f"appmanifest_{APP}.acf"]
     try:

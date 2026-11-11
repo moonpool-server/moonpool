@@ -10,6 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#071923">
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/4.0.0/Control.FullScreen.min.css" integrity="sha512-Dww58CIezLb4kFGtZ8Zlr85kRDwJgyPhe3gVABsvnJruZuYn3xCTpLbE3iBT5hGbrfCytJnZ4aiI3MxN0p+NVQ==" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" integrity="sha512-ENrTWqddXrLJsQS2A86QmvA17PkJ0GVm1bqj5aTgpeMAfDKN2+SIOLpKG8R/6KkimnhTb+VW5qqUHB/r1zaRgg==" crossorigin="anonymous">
@@ -28,6 +29,8 @@ h1{margin:0;font-size:18px;flex:1}
 h2{margin:6px 14px 2px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6f97a6}
 ul{margin:0;padding:0 6px;list-style:none}
 li{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;cursor:pointer}
+li[hidden]{display:none}
+#find{box-sizing:border-box;width:calc(100% - 28px);margin:0 14px 4px;padding:5px 8px;border:1px solid #2a5266;border-radius:6px;background:#071923;color:#eaf7fb;font:inherit}
 li:hover,li.followed{background:#12384a}
 li.faded{opacity:.55}
 header .fa-solid{box-sizing:border-box;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:none}
@@ -51,6 +54,7 @@ header p{margin:8px 14px 10px;font-size:12px}
 <body>
 <header><details id="card" open>
 <summary><h1 id="title">{{WORLD}}</h1><span id="behind"></span></summary>
+<input id="find" type="search" placeholder="Find a player or place" aria-label="Find a player or place">
 <h2>Players</h2><ul id="players"></ul>
 <h2>Places</h2><ul id="places"></ul>
 <p id="about"></p>
@@ -164,6 +168,12 @@ function pin(kind, p, label, note, icon, fill, faded, mark) {
   document.getElementById(kind === 'players' ? 'players' : 'places').appendChild(row);
   return m;
 }
+var find = document.getElementById('find');
+function sift() {  // the card's rows narrowed to what is typed; the map keeps every marker
+  var q = find.value.trim().toLowerCase();
+  [].forEach.call(document.querySelectorAll('header li'), function (row) { row.hidden = row.textContent.toLowerCase().indexOf(q) < 0; });
+}
+find.oninput = sift;
 function draw(d) {
   every = d.refresh_seconds || 60;
   if (!map) setup(d.backgrounds || (d.background ? [d.background] : []));
@@ -206,6 +216,7 @@ function draw(d) {
       + (follow ? 'Following ' + follow + '; click them to stop.' : 'Click one to follow them.'))
     + ' Updated ' + new Date(d.updated * 1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})
     + ', checked every ' + every + ' seconds. Anyone with this link sees this page and its data.';
+  sift();
   var bare = !(d.backgrounds && d.backgrounds.length);
   if (!map.fitted && seen.length) {  // open on the players, or with none on everything marked
     map.fitBounds(crowd.length ? crowd : seen, {padding: [60, 60], maxZoom: bare ? 3 : 5});

@@ -246,7 +246,7 @@ def backdrop(bgs, public, cache, region=None):
             for x in range(x0, x1):
                 tile = fetch(bg["url"].format(z=zoom, x=x, y=y), cache)
                 if tile is not None:
-                    canvas.paste(tile, ((x - x0) * 512, (y - y0) * 512)); rows.add(y); cols.add(x)
+                    canvas.paste(tile, ((x - x0) * 512, (y - y0) * 512), tile); rows.add(y); cols.add(x)
         if region:
             px = 512 / w
             box = tuple(round(v) for v in ((region[0] - left) * px - x0 * 512, (region[1] - top) * (512 / h) - y0 * 512,
@@ -270,7 +270,8 @@ def backdrop(bgs, public, cache, region=None):
                 continue
             l, t, r, b = it["bounds"]
             box = (round((l - left) * px), round((t - top) * px), round((r - left) * px), round((b - top) * px))
-            canvas.paste(src.resize((max(1, box[2] - box[0]), max(1, box[3] - box[1]))), box[:2])
+            src = src.resize((max(1, box[2] - box[0]), max(1, box[3] - box[1])))
+            canvas.paste(src, box[:2], src)
         if region:
             box = tuple(round(v) for v in ((region[0] - left) * px, (region[1] - top) * px,
                                             (region[2] - left) * px, (region[3] - top) * px))
@@ -374,7 +375,7 @@ def main():
             write_atomic(public / "map.png", still(page_data, page_data["backgrounds"], public, cache))
             chart["still"] = sig
             write_json(store, chart)
-        except (OSError, ValueError) as err:
+        except (OSError, ValueError, Image.DecompressionBombError) as err:  # a picture too large to decode is no still, not a crash
             print("map-chart: no still: %s" % err, file=sys.stderr)
     return 0
 
