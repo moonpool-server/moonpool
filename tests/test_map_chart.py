@@ -64,7 +64,7 @@ def test_each_player_shows_where_they_were_after_the_delay_and_never_now() -> No
         moved = json.loads(run(tmp, 1900, [dict(alice, x=500000)]).read_text())
         assert moved["divers"] == [{"name": "Alice", "x": 1235, "y": -70, "depth": 90, "online": True, "left_minutes": None}]
         assert moved["explored"] == [[1200, -100]]  # her first square clears from the fog; the host never does
-        assert moved["lifepods"] == [[1000, 2000]] and moved["bases"] == []
+        assert moved["lifepods"] == [[1000, 2000]] and "bases" not in moved  # a base actor's position is not a base
         left = json.loads(run(tmp, 1900 + 1200, [], SHOW_PLAYER_NAMES="false").read_text())
         assert [(p["name"], p["x"], p["online"], p["left_minutes"]) for p in left["divers"]] == [("Player 1", 5000, False, 20)]
         assert "Alice" not in published.read_text()
@@ -93,17 +93,15 @@ def test_signals_show_after_the_delay_and_can_be_kept_off() -> None:
         assert at(1000 + 17 * 60, MAP_SIGNALS="false")["signals"] == []
 
 
-def test_players_and_bases_can_be_kept_off_the_map() -> None:
+def test_players_can_be_kept_off_the_map() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         alice = {"name": "Alice", "x": 500, "y": 500, "depth_m": 10}
-        base = '[{"x":70000,"y":80000}]'
-        run(tmp, 1000, [alice], BASES=base, MAP_DELAY_MINUTES="0")
-        shown = json.loads(run(tmp, 1001, [alice], BASES=base, MAP_DELAY_MINUTES="0").read_text())
-        assert shown["divers"] and shown["explored"] and shown["bases"]
-        hidden = json.loads(run(tmp, 1002, [alice], BASES=base, MAP_DELAY_MINUTES="0",
-                                MAP_PLAYERS="false", MAP_BASES="false").read_text())
-        assert hidden["divers"] == [] and hidden["explored"] is None and hidden["bases"] == []
+        run(tmp, 1000, [alice], MAP_DELAY_MINUTES="0")
+        shown = json.loads(run(tmp, 1001, [alice], MAP_DELAY_MINUTES="0").read_text())
+        assert shown["divers"] and shown["explored"]
+        hidden = json.loads(run(tmp, 1002, [alice], MAP_DELAY_MINUTES="0", MAP_PLAYERS="false").read_text())
+        assert hidden["divers"] == [] and hidden["explored"] is None
         assert "Alice" not in (tmp / "public" / "map.json").read_text()
 
 
@@ -123,15 +121,6 @@ def test_a_map_picture_comes_over_https_only() -> None:
     stay = chart._HttpsOnly()
     assert stay.redirect_request(req, None, 302, "Found", {}, "http://tiles.example/0/0/0.png") is None
     assert stay.redirect_request(req, None, 302, "Found", {}, "https://cdn.example/0.png") is not None
-
-
-def test_a_new_base_waits_out_the_delay_too() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        now = json.loads(run(tmp, 1000, [], BASES='[{"x":70000,"y":80000}]').read_text())
-        assert now["bases"] == []
-        later = json.loads(run(tmp, 1000 + 900, [], BASES='[{"x":70000,"y":80000}]').read_text())
-        assert later["bases"] == [[700, 800]]
 
 
 def test_the_map_file_gives_each_game_branch_its_own_background() -> None:
@@ -230,8 +219,8 @@ def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothin
 
 if __name__ == "__main__":
     test_each_player_shows_where_they_were_after_the_delay_and_never_now()
-    test_a_new_base_waits_out_the_delay_too()
-    test_players_and_bases_can_be_kept_off_the_map()
+    test_signals_show_after_the_delay_and_can_be_kept_off()
+    test_players_can_be_kept_off_the_map()
     test_a_map_picture_comes_over_https_only()
     test_the_map_file_gives_each_game_branch_its_own_background()
     test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits()

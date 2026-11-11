@@ -98,7 +98,7 @@ Releases come often while the project is young. Each one passes CI and carries t
 
 - **Port 8081** (`SN2_MODS_PORT`) serves the join page and the signed mod list. It listens on every interface by default, because players without a tunnel need it. The page shows the host account's Steam ID and the current lobby ID, which Steam already shows the host's friends. `MODS_BIND=127.0.0.1` closes it when you use the tunnel. `PUBLISH_CARD=true` adds `/card.json`, which holds what the Discord card shows, player names included.
 - **The first mod download.** The first time a player presses Play with mods, the launcher saves this server's signing key from that address and holds every later list to it. Over plain http that first fetch trusts the network, so the launcher allows http only on a private network. Anywhere else needs the tunnel or HTTPS.
-- **The map.** With `WEB_MAP=true`, the map page shows anyone with the link where each player was 15 minutes ago, and the bases. Player names are shown unless `SHOW_PLAYER_NAMES=false`.
+- **The map.** With `WEB_MAP=true`, the map page shows anyone with the link where each player was 15 minutes ago, and the PDA signals everyone in the game can see. Player names are shown unless `SHOW_PLAYER_NAMES=false`.
 - **The viewer on 8080** controls the signed-in Steam client, so it listens on this machine only unless you set `VIEWER_BIND` and a password. To reach it from elsewhere, use Tailscale or `ssh -L 8080:localhost:8080 <server>`, never a forwarded port.
 - **The data volume** holds the hosting account's Steam session. Keep it and your backups private.
 
@@ -109,7 +109,7 @@ Releases come often while the project is young. Each one passes CI and carries t
 - Admin from the shell with `bin/moonpool`, and in game by naming a PDA signal `!help`
 - Backups you can restore with one command
 - A Discord card showing who's on, with a Join button
-- An optional map of where everyone was a few minutes ago, with bases and lifepods
+- An optional map of where everyone was a few minutes ago, with lifepods and named signals
 - A game clock that stops while the world is empty
 - Your own wording for the join page, the map page and the card, set from the data volume
 

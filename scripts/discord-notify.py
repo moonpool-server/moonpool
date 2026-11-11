@@ -443,7 +443,7 @@ def world_container():
         components.append({"type": 10, "content": clamp("-# " + statline, 160)})
     components += [{"type": 14, "divider": False, "spacing": 2}, {"type": 10, "content": clamp("\n".join(codes), 420)}]
     if map_url and still:
-        components.append({"type": 12, "items": [{"media": {"url": f"{map_url}.png?v={still}"}, "description": "Bases and lifepods"}]})
+        components.append({"type": 12, "items": [{"media": {"url": f"{map_url}.png?v={still}"}, "description": "Lifepods and signals"}]})
     if map_url:
         components.append({"type": 1, "components": [{"type": 2, "style": 5, "label": "Map", "url": map_url}]})
     colour = 3066993 if kind == "up" else 15105570 if kind in ("starting", "updating") else 9807270 if kind == "waiting" else 15158332
