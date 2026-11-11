@@ -30,7 +30,7 @@ Players open the join page and fetch mods on port 8081; the game itself needs no
 
 - **Quick tunnel**, no setup: `TUNNEL=quick` and `COMPOSE_PROFILES=tunnel` in `.env`. The address is free and random and changes whenever the tunnel restarts, for example after a reboot. The Discord card and `bin/moonpool status` always show the current one, so send friends there rather than a saved link.
 - **Stable, no domain**: [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel) on the host, `tailscale funnel --bg http://127.0.0.1:8081`, then `SN2_PUBLIC_URL=https://<machine>.<tailnet>.ts.net`, `TUNNEL=off` and `MODS_BIND=127.0.0.1`. It's free and in beta, with bandwidth limits Tailscale doesn't state, so try a mod download through it.
-- **Your own domain** on Cloudflare: `TUNNEL=token` and `COMPOSE_PROFILES=tunnel-token` with the tunnel's token.
+- **Your own domain** on Cloudflare: the tunnel is free on Cloudflare's free plan; the domain is the cost. A domain bought elsewhere is added to Cloudflare on the free plan and its name servers set to the two Cloudflare gives. In Cloudflare's dashboard, under Networking, Tunnels, create a tunnel, choose Docker and copy the token from the command it shows. Add a route of type Published application with your hostname and the service `http://sn2:8081`. Then set `TUNNEL=token`, `COMPOSE_PROFILES=tunnel-token`, `TUNNEL_TOKEN=<the token>` and `SN2_PUBLIC_URL=https://<your hostname>` in `.env` and recreate the host. The token lets anyone run your tunnel, so keep it out of chat, screenshots and the repo
 - **Your own network only**: `http://<this machine's address>:8081/join`, nothing else needed.
 
 Never forward the viewer's port 8080, and don't put 8081 on the internet as plain http.

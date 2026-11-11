@@ -50,6 +50,7 @@ TEXT = {
     "nobody_aboard": "Nobody aboard right now.",
     "last_aboard": " Last aboard {when}.",
     "not_hosting": "The game has run for {min} min without opening its world. Nobody can join until it does.",
+    "loader_crashed": "The mod loader wrote a crash report during this run before its mods started. That usually means it doesn't fit this game build; the host's guide covers this under Updates.",
     "scanned": "Scanned lately: {scans}",
     "mods": "• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins",
     "how_to_join": "### How to join",
@@ -256,6 +257,20 @@ def game_age(pid):
 GAME_AGE = {"s": 0}  # sampled once per run, so the state and the minutes on the card agree
 
 
+def loader_crashed():
+    """True when UE4SS wrote a crash dump during this game run before logging that its mods started.
+    Usually the loader does not fit the game build; the card says only what was seen."""
+    folder = GAME_DIR / "Subnautica2" / "Binaries" / "Win64" / "ue4ss"
+    started = now() - GAME_AGE["s"]
+    try:
+        dumps = [p for p in folder.glob("crash_*.dmp") if p.stat().st_mtime >= started]
+        if not dumps:
+            return False
+        return "Starting mods" not in (folder / "UE4SS.log").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
 def not_open(pid):
     """Starting while the game is young; after STARTING_MAX seconds (default 600) a game that
     still has not opened its world is reported as not hosting, so the card stops promising."""
@@ -418,6 +433,8 @@ def world_container():
     components = [head_component, {"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
     if kind == "waiting" and GAME_AGE["s"]:
         components.append({"type": 10, "content": clamp(T["not_hosting"].format(min=GAME_AGE["s"] // 60), 400)})
+        if loader_crashed():
+            components.append({"type": 10, "content": clamp(T["loader_crashed"], 400)})
     if now_line:
         components.append({"type": 10, "content": now_line})
     if scans:
