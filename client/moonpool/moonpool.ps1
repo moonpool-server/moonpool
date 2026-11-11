@@ -479,8 +479,17 @@ function Get-KeyWarning($Config, [string]$ServerId) {
 # Where a mod's file really downloads from; the page only for a file the player fetches by hand.
 function Get-ModHost($Mod) {
   $from = [string](Get-Prop $Mod.Source 'url' ''); if (-not $from) { $from = [string](Get-Prop $Mod.Source 'page' '') }
-  if ($from -match '^https?://([^/:]+)') { return $Matches[1] }
-  return 'this server'
+  if (-not $from) { return 'this server' }
+  try {
+    $at = [Uri](Resolve-Url $ManifestUrl $from)
+    if ($at.Scheme -notmatch '^https?$') { return 'this server' }
+    if ($from -notmatch '^\s*https?:' -and $at.Host -eq ([Uri]$ManifestUrl).Host) { return 'this server' }
+    return $at.Host
+  } catch {
+    $at = $null
+    if ([Uri]::TryCreate($from, [UriKind]::Absolute, [ref]$at) -and $at.Scheme -match '^https?$') { return $at.Host }
+    return 'this server'
+  }
 }
 
 # Every field that decides what runs, one line per mod and the loader, so changing any of them asks again.
@@ -952,7 +961,7 @@ function Get-DefenderVerdict([string]$Path) {
 
 # An unscanned archive installs only on a yes, remembered per archive so it is asked once.
 function Confirm-Unscanned([string]$Archive, [string]$Label, [string]$ServerId) {
-  $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
+  $sha = Get-Sha256 $Archive
   $path = Join-Path $KitHome "$ServerId\unscanned.json"
   $okayed = @(Read-Json $path @())
   if ($okayed -contains $sha) { return }

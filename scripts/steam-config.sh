@@ -16,7 +16,7 @@ if [ "${1:-}" = --report ]; then
   exit 0
 fi
 
-if pgrep -f 'steam\.exe' >/dev/null; then log "steam-config: Steam is running; settings applied on next start"; exit 0; fi
+if steam_running; then log "steam-config: Steam is running; settings applied on next start"; exit 0; fi
 
 case $STEAM_BRANCH in
   public | experimental) ;;

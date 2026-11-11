@@ -120,7 +120,7 @@ JSON
 @test "a plugin link that is not http(s) renders as plain text" {
   printf 'plugins:\n  - name: Sneaky\n    source: "javascript:alert(1)"\n    install: { type: github, repo: a/b, tag: t, asset: a.zip }\n' >"$BATS_TEST_TMPDIR/p.yaml"
   run python3 "$ROOT/scripts/plugins-section.py" "$BATS_TEST_TMPDIR/p.yaml"
-  [ "$status" -eq 0 ] && [[ "$output" == *Sneaky* ]] && [[ "$output" != *javascript:* ]]
+  [ "$status" -eq 0 ]; [[ "$output" == *Sneaky* ]]; [[ "$output" != *javascript:* ]]
 }
 
 @test "a banner in templates shows at the top of the page and goes when it is removed" {

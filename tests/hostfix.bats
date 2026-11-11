@@ -60,7 +60,7 @@ teardown() { rm -rf "$TMPROOT"; }
   rm "$d/paks-local/Big_P.pak" "$d/paks-local/Big_P.ucas" "$d/paks-local/Big_P.utoc"
   apply
   [ "$status" -eq 0 ]
-  [ ! -e "$mods/Big_P.pak" ] && [ ! -e "$mods/Big_P.utoc" ]
+  [ ! -e "$mods/Big_P.pak" ]; [ ! -e "$mods/Big_P.utoc" ]
   [ "$(cat "$mods/Other_P.pak")" = 'theirs' ]
   # A file replaced since it was copied is not removed, and a forged list cannot reach outside ~mods.
   printf 'v2' >"$d/paks-local/Mine_P.pak"; apply; printf 'edited' >"$mods/Mine_P.pak"; rm "$d/paks-local/Mine_P.pak"

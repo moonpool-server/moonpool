@@ -255,6 +255,16 @@ class CurseForgeKeyTests(unittest.TestCase):
              self.assertRaisesRegex(ValueError, "refusing"):
             PUBLISH.fetch_with_cf_key(f"http://127.0.0.1:{first.server_port}/f.zip", Path(tmp) / "f.zip", "secret")
         self.assertEqual(seen, [])
+        # An API call follows no redirect at all, so the key stops at the first answer.
+        request = PUBLISH.urllib.request.Request(f"http://127.0.0.1:{first.server_port}/v1/mods/1", headers={"x-api-key": "secret"})
+        with self.assertRaisesRegex(PUBLISH.urllib.error.URLError, "refusing to follow a redirect"):
+            PUBLISH.urllib.request.build_opener(PUBLISH.NoRedirects).open(request, timeout=5)
+        self.assertEqual(seen, [])
+
+    def test_an_api_call_sends_the_key_to_curseforges_api_host_only(self):
+        for api in ("https://evil.example/v1", "http://api.curseforge.com/v1", "https://api.curseforge.com.evil.example/v1"):
+            with self.subTest(api), mock.patch.object(PUBLISH, "CF_API", api),                  mock.patch.object(PUBLISH.urllib.request.OpenerDirector, "open", side_effect=AssertionError("a request was made")),                  self.assertRaisesRegex(ValueError, "refusing to send the CurseForge key"):
+                PUBLISH.cf_get("/mods/1", "secret")
 
 
 class DownloadsAndLinks(unittest.TestCase):

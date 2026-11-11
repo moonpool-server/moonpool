@@ -60,6 +60,11 @@ noVNC, x11vnc, Xvfb (panel target only)
   Installed from distribution packages; not modified.
 
 ------------------------------------------------------------------------------
+logrotate (keeps the container's own logs to a fixed size)
+  https://github.com/logrotate/logrotate, GNU GPL v2 or later
+  Installed from the distribution's package; not modified.
+
+------------------------------------------------------------------------------
 s6-overlay and supercronic (process supervision and the backup schedule)
   s6-overlay: https://github.com/just-containers/s6-overlay, ISC license
   supercronic: https://github.com/aptible/supercronic, MIT License
@@ -70,12 +75,20 @@ s6-overlay and supercronic (process supervision and the backup schedule)
 Subnautica 2 is a trademark of its owners. This project is not affiliated with,
 endorsed by or authorized by Unknown Worlds, KRAFTON or Valve.
 
-Leaflet, Leaflet.heat and Leaflet.fullscreen (map page only)
+Libraries the map page loads (map page only)
   Leaflet: https://leafletjs.com, BSD 2-Clause, version 1.9.4
-  Leaflet.heat: https://github.com/Leaflet/Leaflet.heat, BSD 2-Clause, version 0.2.0
-  Leaflet.fullscreen: https://github.com/brunob/leaflet.fullscreen, MIT, version 3.0.0
-  None is included here. web/map.html loads them from cdnjs.cloudflare.com, each
-  checked by its hash, into the viewer's browser.
+  Leaflet.fullscreen: https://github.com/brunob/leaflet.fullscreen, MIT, version 4.0.0
+  Leaflet.markercluster: https://github.com/Leaflet/Leaflet.markercluster, MIT, version 1.5.3
+  Leaflet.FeatureGroup.SubGroup: https://github.com/ghybs/Leaflet.FeatureGroup.SubGroup,
+    BSD 2-Clause, version 1.0.2
+  chroma.js: https://github.com/gka/chroma.js, BSD 3-Clause and Apache 2.0, version 2.4.2
+  Font Awesome Free: https://fontawesome.com, icons CC BY 4.0, fonts SIL OFL 1.1,
+    code MIT, version 6.7.2
+  None is included here. web/map.html loads them into the viewer's browser from
+  cdnjs.cloudflare.com, and SubGroup from cdn.jsdelivr.net, each script and
+  stylesheet checked by its hash. Files those stylesheets name in turn, such as
+  the Font Awesome font and the fullscreen button's picture, load from cdnjs
+  without a hash check.
 
 Map backgrounds
   No map picture is included. map-background.example.json points at joric's

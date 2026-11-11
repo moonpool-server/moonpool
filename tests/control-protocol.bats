@@ -301,9 +301,9 @@ LogGameMode: Save system initialize with result: (%s)
   game_says savegame_2 LoadGameSucceeded
   printf '{"hosted":true,"ts":9999999999}' >"$SN2_CONTROL_DIR/readiness.json"
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
-  [ "$status" -eq 0 ] && [[ $output == *"savegame_2 loaded and is hosted"* ]]
-  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = world ] && [ -f "$SN2_SAVE_DIR/savegame_2_0.bak" ]
-  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = savegame_2 ] && [ "$(cat "$STAGED/Slot1.sav")" = old ]
+  [ "$status" -eq 0 ]; [[ $output == *"savegame_2 loaded and is hosted"* ]]
+  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = world ]; [ -f "$SN2_SAVE_DIR/savegame_2_0.bak" ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = savegame_2 ]; [ "$(cat "$STAGED/Slot1.sav")" = old ]
 }
 
 @test "import takes back out a world the game cannot load and hosts the previous one again" {
@@ -314,8 +314,8 @@ LogGameMode: Save system initialize with result: (%s)
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip" Reef
   [ "$status" -eq 77 ]
   [[ $output == *"could not load Reef (LoadGameFailed)"* ]]
-  [ ! -e "$SN2_SAVE_DIR/Reef.sav" ] && [ ! -e "$SN2_SAVE_DIR/Reef_0.bak" ]
-  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = Slot1 ] && [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = old ]
+  [ ! -e "$SN2_SAVE_DIR/Reef.sav" ]; [ ! -e "$SN2_SAVE_DIR/Reef_0.bak" ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = Slot1 ]; [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = old ]
 }
 
 @test "import refuses a name the server already has and changes nothing" {
@@ -323,7 +323,7 @@ LogGameMode: Save system initialize with result: (%s)
   echo old >"$SN2_SAVE_DIR/savegame_2.sav"
   world_zip "$BATS_TEST_TMPDIR/w.zip"
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
-  [ "$status" -eq 77 ] && [[ $output == *"already has a world called savegame_2"* ]]
+  [ "$status" -eq 77 ]; [[ $output == *"already has a world called savegame_2"* ]]
   [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = old ]
 }
 
@@ -712,7 +712,7 @@ policy_env() {
 @test "viewer password: VNC_PASSWORD wins, else one is made once at mode 600 and kept" {
   f="$BATS_TEST_TMPDIR/viewer-password"
   run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; VNC_PASSWORD=mine VIEWER_PASSWORD_FILE='$f' viewer_password"
-  [ "$output" = mine ] && [ ! -e "$f" ]
+  [ "$output" = mine ]; [ ! -e "$f" ]
   run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; VNC_PASSWORD= VIEWER_PASSWORD_FILE='$f' viewer_password"
   [ "$status" -eq 0 ] && [ "${#output}" -ge 12 ] && [ "$(stat -c %a "$f")" = 600 ]
   first=$output
@@ -1263,13 +1263,13 @@ c33() { env DATA_DIR="$1" bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; 
 @test "a stop flag is logged once per start and then hourly" {
   d="$BATS_TEST_TMPDIR/d34"; mkdir -p "$d/run"; f="$d/run/stopped"; st="$d/run/stopped-noted"
   run c33 "$d" "stopped_notice '$f' '$st' 0"
-  [ "$status" -eq 1 ] && [ -z "$output" ]
+  [ "$status" -eq 1 ]; [ -z "$output" ]
   TZ=UTC touch -t 202610312303.00 "$f"
   start=$(( $(date +%s) - 5 ))
   run c33 "$d" "stopped_notice '$f' '$st' $start"
   [ "$output" = "stopped by moonpool server stop at 2026-10-31 23:03 UTC; moonpool server start to run" ]
   run c33 "$d" "stopped_notice '$f' '$st' $start"
-  [ "$status" -eq 0 ] && [ -z "$output" ]
+  [ "$status" -eq 0 ]; [ -z "$output" ]
   echo $(( $(date +%s) - 3601 )) >"$st"
   run c33 "$d" "stopped_notice '$f' '$st' 0"
   [[ "$output" == "stopped by moonpool server stop at "* ]]
@@ -1278,7 +1278,7 @@ c33() { env DATA_DIR="$1" bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; 
   [[ "$output" == "stopped by moonpool server stop at "* ]]
   rm -f "$f"
   run c33 "$d" "stopped_notice '$f' '$st' 0"
-  [ "$status" -eq 1 ] && [ ! -e "$st" ]
+  [ "$status" -eq 1 ]; [ ! -e "$st" ]
 }
 
 # The engine's own log is where each executable writes it (the public
@@ -1314,6 +1314,29 @@ c33() { env DATA_DIR="$1" bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; 
   run c33 "$d" "vdf_get '$d/missing.acf' buildid"
   [ -z "$output" ]
   run ! grep -q '^vdf_get()' "$BATS_TEST_DIRNAME/../scripts/steam-config.sh"
+}
+
+@test "host_steamid is the account Steam signs in as, not the first one in the file" {
+  d="$BATS_TEST_TMPDIR/two"; mkdir -p "$d/config"
+  printf '"users"
+{
+	"76561190000000001"
+	{
+		"MostRecent"		"0"
+	}
+	"76561190000000002"
+	{
+		"MostRecent"		"1"
+	}
+}
+' >"$d/config/loginusers.vdf"
+  run c33 "$d" "host_steamid '$d'"
+  [ "$output" = 76561190000000002 ]
+  run c33 "$d" "host_steamid '$BATS_TEST_DIRNAME/fixtures/none'"
+  [ -z "$output" ]
+  mkdir -p "$d/one/config"; cp "$BATS_TEST_DIRNAME/fixtures/loginusers-new-autologin.vdf" "$d/one/config/loginusers.vdf"
+  run c33 "$d" "host_steamid '$d/one'"
+  [ "$output" = 76561190000000001 ]
 }
 
 # UE4SS_CHANNEL: which build installs and whether a shipped layout set is needed.
@@ -1385,9 +1408,9 @@ needs-layout')" ]
   d="$BATS_TEST_TMPDIR/ch5"; w="$d/w"; mkdir -p "$w/ue4ss"
   : >"$w/dwmapi.dll"; : >"$w/ue4ss/UE4SS.dll"
   run c33 "$d" "UE4SS_CHANNEL=pinned; ue4ss_missing '$w'"
-  [[ "$output" == *"signature:GNatives"* ]] && [[ "$output" == *"MemberVariableLayout.ini"* ]]
+  [[ "$output" == *"signature:GNatives"* ]]; [[ "$output" == *"MemberVariableLayout.ini"* ]]
   run c33 "$d" "UE4SS_CHANNEL=upstream-experimental; ue4ss_missing '$w'"
-  [[ "$output" != *"signature:"* ]] && [[ "$output" != *"Layout.ini"* ]]
+  [[ "$output" != *"signature:"* ]]; [[ "$output" != *"Layout.ini"* ]]
 }
 
 @test "held-back line reaches services.log" {
@@ -1905,7 +1928,7 @@ EOF
   SN2_LOCK_WAIT=60 "$CTL" --json server slots 7 >"$BATS_TEST_TMPDIR/b.json" &
   wait
   log="$SN2_CONTROL_DIR/fake.log"
-  [ "$(grep -c ' claim ' "$log")" -eq 2 ] && [ "$(grep -c ' answer ' "$log")" -eq 2 ]
+  [ "$(grep -c ' claim ' "$log")" -eq 2 ]; [ "$(grep -c ' answer ' "$log")" -eq 2 ]
   first_answer=$(grep ' answer ' "$log" | sort -n | head -1 | cut -d' ' -f1)
   second_claim=$(grep ' claim ' "$log" | sort -n | tail -1 | cut -d' ' -f1)
   awk -v a="$first_answer" -v c="$second_claim" 'BEGIN { exit !(c >= a) }'
@@ -2294,6 +2317,6 @@ container_start_with() {
   f="$BATS_TEST_DIRNAME/../scripts/install-ue4ss.sh"
   mirror=$(grep -n "fetch_pinned \"\${UE4SS_MIRROR:-" "$f" | cut -d: -f1)
   upstream=$(grep -n "fetch_pinned \"\$UE4SS_URL\"" "$f" | cut -d: -f1)
-  [ -n "$mirror" ] && [ -n "$upstream" ] && [ "$mirror" -lt "$upstream" ]
+  [ -n "$mirror" ]; [ -n "$upstream" ]; [ "$mirror" -lt "$upstream" ]
   grep -q 'releases/download/ue4ss-mirror' "$f"
 }

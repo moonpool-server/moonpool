@@ -69,7 +69,7 @@ make_zip() { # out.zip version path...
   openssl dgst -sha256 -verify "$DATA_DIR/mod-signing/public.pem" -signature "$DATA_DIR/public/mods.json.sig" "$m"
   jq -e '.manifest_url == "https://mods.example:8081/mods.json" and .public_key.modulus != "" and
          .host_steamid == "76561198000000000" and (.server_id | length) == 16' "$DATA_DIR/public/moonpool.json"
-  [ ! -e "$DATA_DIR/public/moonpool.ps1" ] && [ ! -e "$DATA_DIR/public/moonpool.cmd" ] && [ ! -e "$DATA_DIR/public/sn2-launcher.zip" ]
+  [ ! -e "$DATA_DIR/public/moonpool.ps1" ]; [ ! -e "$DATA_DIR/public/moonpool.cmd" ]; [ ! -e "$DATA_DIR/public/sn2-launcher.zip" ]
   [ "$(jq -r 'has("launcher")' "$m")" = false ]
 }
 
@@ -82,7 +82,7 @@ EOF
   [ "$status" -eq 0 ]
   [ "$(jq -r '.skipped[0].name' <<<"$output")" = "Cap Raiser" ]
   reason=$(jq -r '.skipped[0].reason' <<<"$output")
-  [[ "$reason" == *"side: host is not supported"* ]] && [[ "$reason" == *"ue4ss-local/Mods/<name>/"* ]]
+  [[ "$reason" == *"side: host is not supported"* ]]; [[ "$reason" == *"ue4ss-local/Mods/<name>/"* ]]
 }
 
 @test "off and link-only entries never reach players; link-only ones are reported" {
@@ -251,7 +251,7 @@ EOF
   run "$ROOT/scripts/mod-service.sh" publish
   [ "$status" -eq 0 ]
   [ "$(jq -r '.enabled' <<<"$output")" = false ]
-  [ ! -e "$DATA_DIR/public/mods.json" ] && [ ! -e "$DATA_DIR/public/moonpool.json" ]
+  [ ! -e "$DATA_DIR/public/mods.json" ]; [ ! -e "$DATA_DIR/public/moonpool.json" ]
   local_mod_yaml
   "$ROOT/scripts/mod-service.sh" publish >/dev/null
   printf 'plugins: []\n' >"$SN2_CONTROL_DIR/plugins.yaml"
@@ -267,10 +267,10 @@ EOF
 @test "a public address must be a plain URL, and plain http stays on a private network" {
   local_mod_yaml
   SN2_PUBLIC_URL="https://host/'; Start-Process calc; #" run "$ROOT/scripts/mod-service.sh" publish
-  [ "$status" -ne 0 ] && [[ "$output" == *'not a plain http(s) address'* ]]
+  [ "$status" -ne 0 ]; [[ "$output" == *'not a plain http(s) address'* ]]
   [ ! -e "$DATA_DIR/public/moonpool.json" ]
   SN2_PUBLIC_URL="http://mods.example:8081" run "$ROOT/scripts/mod-service.sh" publish
-  [ "$status" -ne 0 ] && [[ "$output" == *'must be https://'* ]]
+  [ "$status" -ne 0 ]; [[ "$output" == *'must be https://'* ]]
   SN2_PUBLIC_URL="http://192.168.0.10:8081" run "$ROOT/scripts/mod-service.sh" publish
   [ "$status" -eq 0 ] || { echo "$output"; false; }
 }
@@ -280,7 +280,7 @@ EOF
   mkdir -p "$DATA_DIR/public"; : >"$DATA_DIR/public/sn2-join.cmd"; : >"$DATA_DIR/public/sn2-join.ps1"; : >"$DATA_DIR/public/sn2-launcher.zip"
   run "$ROOT/scripts/mod-service.sh" publish
   [ "$status" -eq 0 ] || { echo "$output"; false; }
-  [ ! -e "$DATA_DIR/public/sn2-join.cmd" ] && [ ! -e "$DATA_DIR/public/sn2-join.ps1" ] && [ ! -e "$DATA_DIR/public/sn2-launcher.zip" ]
+  [ ! -e "$DATA_DIR/public/sn2-join.cmd" ]; [ ! -e "$DATA_DIR/public/sn2-join.ps1" ]; [ ! -e "$DATA_DIR/public/sn2-launcher.zip" ]
 }
 
 @test "a file off the list stops being served" {
@@ -290,5 +290,5 @@ EOF
   : >"$DATA_DIR/public/files/Removed.zip"
   run "$ROOT/scripts/mod-service.sh" publish
   [ "$status" -eq 0 ] || { echo "$output"; false; }
-  [ ! -e "$DATA_DIR/public/files/Removed.zip" ] && [ -e "$DATA_DIR/public/files/Loader.zip" ]
+  [ ! -e "$DATA_DIR/public/files/Removed.zip" ]; [ -e "$DATA_DIR/public/files/Loader.zip" ]
 }

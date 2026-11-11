@@ -49,7 +49,7 @@ def test_a_picture_over_the_size_cap_is_left_out_like_a_missing_tile() -> None:
         def read(self, n=-1): return b"x" * (n if n > 0 else chart.MAX_PICTURE_BYTES + 1)
         def __enter__(self): return self
         def __exit__(self, *a): return False
-    with tempfile.TemporaryDirectory() as d, mock.patch.object(chart.urllib.request, "urlopen", return_value=Big()):
+    with tempfile.TemporaryDirectory() as d, mock.patch.object(chart, "_OPEN", return_value=Big()):
         assert chart.fetch("https://tiles.example/0/0/0.png", Path(d)) is None
         cached = list(Path(d).iterdir())
         assert len(cached) == 1 and cached[0].stat().st_size == 0
@@ -217,14 +217,10 @@ def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothin
         assert not (tmp / "public" / "map.png").exists()
 
 
-if __name__ == "__main__":
-    test_each_player_shows_where_they_were_after_the_delay_and_never_now()
-    test_signals_show_after_the_delay_and_can_be_kept_off()
-    test_players_can_be_kept_off_the_map()
-    test_a_map_picture_comes_over_https_only()
-    test_the_map_file_gives_each_game_branch_its_own_background()
-    test_a_new_save_starts_its_own_chart_and_a_new_lifepod_waits()
-    test_a_branch_can_lay_several_pictures_side_by_side()
-    test_the_page_carries_link_preview_tags_and_a_still_is_drawn_without_a_background()
-    test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing()
-    print("map chart: ok")
+def test_the_page_is_told_how_often_to_check_and_never_under_ten_seconds() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        assert json.loads(run(tmp, 1000, []).read_text())["refresh_seconds"] == 60
+        assert json.loads(run(tmp, 1001, [], MAP_REFRESH_SECONDS="30").read_text())["refresh_seconds"] == 30
+        assert json.loads(run(tmp, 1002, [], MAP_REFRESH_SECONDS="1").read_text())["refresh_seconds"] == 10
+        assert json.loads(run(tmp, 1003, [], MAP_REFRESH_SECONDS="soon").read_text())["refresh_seconds"] == 60

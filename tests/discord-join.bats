@@ -161,8 +161,8 @@ footer: 12
 not_a_line: "x"
 YAML
   body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
-  [[ "$body" == *'Empty sea for now.'* ]] && [[ "$body" == *'House rule: no base griefing'* ]]
-  [[ "$body" != *'bad '* ]] && [[ "$body" == *'Unofficial and not affiliated'* ]]
+  [[ "$body" == *'Empty sea for now.'* ]]; [[ "$body" == *'House rule: no base griefing'* ]]
+  [[ "$body" != *'bad '* ]]; [[ "$body" == *'Unofficial and not affiliated'* ]]
   grep -q 'card.yaml mods: placeholders here are {n}, {url}' "$LOG_DIR/discord.log"
   grep -q 'card.yaml footer: must be text' "$LOG_DIR/discord.log"
   grep -q 'card.yaml not_a_line: not a card line' "$LOG_DIR/discord.log"

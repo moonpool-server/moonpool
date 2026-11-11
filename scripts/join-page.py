@@ -17,6 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
+from sn2files import write_atomic  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 
@@ -116,9 +117,7 @@ def main():
     html = render_join([str(data / "templates"), shipped], values)
     if html is None:
         html = render_join([shipped], values)
-    tmp = public / "join.html.tmp"
-    tmp.write_text(html, encoding="utf-8")
-    os.replace(tmp, public / "join.html")
+    write_atomic(public / "join.html", html)
     return 0
 
 

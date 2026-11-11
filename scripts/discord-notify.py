@@ -9,6 +9,7 @@ import base64
 import getpass
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -24,6 +25,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
+from sn2files import read_json, write_atomic  # noqa: E402
 
 E = os.environ
 HERE = Path(__file__).resolve().parent
@@ -135,13 +137,6 @@ def dumps(value):
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
-def read_json(path, default):
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return default
-
-
 def read_text(path):
     try:
         return Path(path).read_text(encoding="utf-8")
@@ -149,8 +144,7 @@ def read_text(path):
         return ""
 
 
-def write(path, text):
-    Path(path).write_text(text, encoding="utf-8")
+write = write_atomic
 
 
 def note(message):
@@ -182,7 +176,7 @@ def send(method, suffix, body):
             code, text = 0, ""
         if code != 429:
             break
-        wait = int(float((read_json_text(text) or {}).get("retry_after") or 1))
+        wait = math.ceil(float((read_json_text(text) or {}).get("retry_after") or 1))
         note(f"429; waiting {wait}s once")
         time.sleep(wait)
     write(STATE / "resp.json", text)
@@ -313,7 +307,7 @@ def since_for(st):
 
 
 def esc(s):
-    return re.sub(r"([\\*_`~|>#])", r"\\\1", s)
+    return re.sub(r"([\\*_`~|>#\[\]])", r"\\\1", s)
 
 
 def clamp(s, n):
@@ -325,8 +319,7 @@ def epoch(iso):
 
 
 def host_steamid():
-    m = re.search(r'"(7656\d{13})"', read_text(STEAM / "config" / "loginusers.vdf"))
-    return m.group(1) if m else ""
+    return steamfile.account(STEAM / "config" / "loginusers.vdf")
 
 
 def public_url():
@@ -480,8 +473,7 @@ def publish_card(container, world):
     try:
         PUBLIC.mkdir(parents=True, exist_ok=True)
         if E.get("PUBLISH_CARD") == "true":  # what the card shows, for another world's board; names included
-            write(PUBLIC / "card.json.tmp", dumps({"ts": now(), "world": world, "container": container}))
-            os.replace(PUBLIC / "card.json.tmp", PUBLIC / "card.json")
+            write(PUBLIC / "card.json", dumps({"ts": now(), "world": world, "container": container}))
         else:
             (PUBLIC / "card.json").unlink(missing_ok=True)
     except OSError:
@@ -509,7 +501,7 @@ def peer_containers():
         world = (body or {}).get("world") or "another world"
         ts = (body or {}).get("ts")
         seen = f" · last seen <t:{ts}:R>" if ts else ""
-        out.append({"type": 17, "accent_color": 9807270, "components": [{"type": 10, "content": f"## 🌊 {world}\n⚪ **Offline**{seen}"}]})
+        out.append({"type": 17, "accent_color": 9807270, "components": [{"type": 10, "content": f"## 🌊 {esc(world)}\n⚪ **Offline**{seen}"}]})
     return out
 
 

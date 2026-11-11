@@ -38,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
+from sn2files import write_atomic  # noqa: E402
 
 import yaml
 from cryptography.hazmat.primitives import serialization
@@ -63,12 +64,9 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.+()\[\]-]*$")
 SAFE_FOLDER = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
 
-def sha256(path):
-    h = hashlib.sha256()
+def sha256(path, algorithm="sha256"):
     with Path(path).open("rb") as src:
-        for block in iter(lambda: src.read(1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
+        return hashlib.file_digest(src, algorithm).hexdigest()
 
 
 def read_plugins(path):
@@ -85,9 +83,7 @@ def read_plugins(path):
 
 def write_plugins(path, plugins):
     text = yaml.safe_dump({"plugins": plugins}, sort_keys=False, allow_unicode=True)
-    tmp = path.with_suffix(".yaml.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    write_atomic(path, text)
 
 
 def put(path, data):
@@ -96,9 +92,7 @@ def put(path, data):
     path = Path(path)
     if path.is_file() and path.read_bytes() == data:
         return
-    tmp = path.with_name("." + path.name + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
+    write_atomic(path, data)
 
 
 def zip_bytes(members):
@@ -163,10 +157,21 @@ def fetch_with_cf_key(url, dest, key):
         raise ValueError(f"download failed for {url}: {exc}") from exc
 
 
+class NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.URLError(f"refusing to follow a redirect to {newurl}")
+
+
 def cf_get(path, key):
-    request = urllib.request.Request(f"{CF_API}{path}", headers={"x-api-key": key})
+    """One answer from the CurseForge API. The key goes to https://api.curseforge.com (or a local file,
+    for tests) and nowhere a redirect points: urllib would carry the key header along."""
+    url = f"{CF_API}{path}"
+    parts = urllib.parse.urlsplit(url)
+    if not ((parts.scheme == "https" and parts.hostname == "api.curseforge.com") or parts.scheme == "file"):
+        raise ValueError(f"refusing to send the CurseForge key to {parts.scheme}://{parts.hostname}")
+    request = urllib.request.Request(url, headers={"x-api-key": key})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.build_opener(NoRedirects).open(request, timeout=30) as response:
             return json.load(response)["data"]
     except (urllib.error.URLError, KeyError, json.JSONDecodeError) as exc:
         raise ValueError(f"CurseForge API request failed for {path}: {exc}") from exc
@@ -186,11 +191,7 @@ def cf_hashes(file_data):
 
 def verify_hashes(path, hashes):
     for expected in hashes:
-        digest = hashlib.new(expected["algorithm"])
-        with Path(path).open("rb") as source:
-            for block in iter(lambda: source.read(1024 * 1024), b""):
-                digest.update(block)
-        if digest.hexdigest().lower() != expected["value"]:
+        if sha256(path, expected["algorithm"]).lower() != expected["value"]:
             raise ValueError(f"{Path(path).name} failed its {expected['algorithm']} check")
 
 
@@ -574,7 +575,7 @@ def publish(args):
                 skipped.append({"name": mod["name"], "reason": f"another entry already installs the folder {mod['folder']}"})
                 continue
             mods.append(mod)
-    pins_path.write_text(json.dumps(pins, indent=2, sort_keys=True) + "\n")
+    write_atomic(pins_path, json.dumps(pins, indent=2, sort_keys=True) + "\n")
     if not mods and skipped:
         return {"enabled": False, "mods": 0, "linked": linked, "skipped": skipped}
     if not mods:
@@ -652,7 +653,7 @@ def pin(args):
     else:
         raise ValueError(f"{args.name}: only nexus and github entries are pinned by hand")
     pins[key] = {"sha256": digest, "size": archive.stat().st_size, "file_name": archive.name, "roots": roots}
-    pins_path.write_text(json.dumps(pins, indent=2, sort_keys=True) + "\n")
+    write_atomic(pins_path, json.dumps(pins, indent=2, sort_keys=True) + "\n")
     install["sha256"] = digest
     if source_type == "nexus":
         install["file_name"] = archive.name

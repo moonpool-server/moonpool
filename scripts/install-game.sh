@@ -20,7 +20,7 @@ if [ -f "$WIN64_DIR/$GAME_EXE_NAME" ]; then
       exit 0
     fi
     log "install-game: AUTO_UPDATE=true, Steam validates and updates app $GAME_APP_ID"
-    wine "$STEAM_EXE" "steam://validate/$GAME_APP_ID" >>"$LOG_DIR/steam.log" 2>&1 &
+    "${WITHOUT_SECRETS[@]}" wine "$STEAM_EXE" "steam://validate/$GAME_APP_ID" >>"$LOG_DIR/steam.log" 2>&1 &
   else
     log "install-game: game present; AUTO_UPDATE=false asks for no validation, but the Steam client can still update it"
   fi
@@ -29,10 +29,10 @@ fi
 
 if [ "$STEAM_BRANCH" != "public" ] && [ -n "${STEAM_BRANCH_PASSWORD:-}" ]; then
   # Handed to the client once; it stores what it needs. Never written by us.
-  wine "$STEAM_EXE" "steam://setbeta/$GAME_APP_ID/$STEAM_BRANCH/$STEAM_BRANCH_PASSWORD" >/dev/null 2>&1 &
+  "${WITHOUT_SECRETS[@]}" wine "$STEAM_EXE" "steam://setbeta/$GAME_APP_ID/$STEAM_BRANCH/$STEAM_BRANCH_PASSWORD" >/dev/null 2>&1 &
 fi
 log "install-game: asking Steam to install app $GAME_APP_ID (watch progress on the noVNC page)"
-wine "$STEAM_EXE" "steam://install/$GAME_APP_ID" >>"$LOG_DIR/steam.log" 2>&1 &
+"${WITHOUT_SECRETS[@]}" wine "$STEAM_EXE" "steam://install/$GAME_APP_ID" >>"$LOG_DIR/steam.log" 2>&1 &
 # The client shows its install (and maybe location and licence) windows; press
 # their default buttons on the client's display, every 10 s for up to 5 min.
 if "$(dirname "$0")/steam-install-confirm.sh"; then

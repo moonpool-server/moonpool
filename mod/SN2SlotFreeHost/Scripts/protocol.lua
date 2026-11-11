@@ -52,28 +52,10 @@ function M.new_seen(initial)
   }
 end
 
--- Strict UTF-8: no overlong encodings, surrogates, stray continuation bytes or code points past U+10FFFF.
+-- Strict UTF-8, by Lua 5.4's own utf8.len: no overlong encodings, surrogates, stray continuation bytes or
+-- code points past U+10FFFF.
 function M.valid_utf8(s)
-  if type(s) ~= 'string' then return false end
-  local i, n = 1, #s
-  while i <= n do
-    local a = s:byte(i)
-    if a < 0x80 then i = i + 1
-    elseif a >= 0xC2 and a <= 0xDF then
-      local b = s:byte(i + 1); if not b or b < 0x80 or b > 0xBF then return false end; i = i + 2
-    elseif a >= 0xE0 and a <= 0xEF then
-      local b, c = s:byte(i + 1), s:byte(i + 2)
-      if not b or not c or c < 0x80 or c > 0xBF or b < 0x80 or b > 0xBF
-        or (a == 0xE0 and b < 0xA0) or (a == 0xED and b > 0x9F) then return false end
-      i = i + 3
-    elseif a >= 0xF0 and a <= 0xF4 then
-      local b, c, d = s:byte(i + 1), s:byte(i + 2), s:byte(i + 3)
-      if not b or not c or not d or c < 0x80 or c > 0xBF or d < 0x80 or d > 0xBF
-        or b < 0x80 or b > 0xBF or (a == 0xF0 and b < 0x90) or (a == 0xF4 and b > 0x8F) then return false end
-      i = i + 4
-    else return false end
-  end
-  return true
+  return type(s) == 'string' and utf8.len(s) ~= nil
 end
 
 local function check_args(spec, args)

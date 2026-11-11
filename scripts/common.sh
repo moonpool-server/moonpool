@@ -194,6 +194,8 @@ ue4ss_channel() {
 }
 GAME_LOG="$LOG_DIR/game.log"
 GAME_PIDFILE="$RUN_DIR/game.pid"
+# Put in front of the Steam client and the game: they, and any mod the game loads, start without these.
+WITHOUT_SECRETS=(env -u DISCORD_WEBHOOK_URL -u CURSEFORGE_API_KEY -u VNC_PASSWORD -u STEAM_BRANCH_PASSWORD)
 STOP_FLAG="$RUN_DIR/stopped"
 MOD_SRC="${MOD_SRC:-/opt/sn2/mod}"
 # Steam's remembered-login token, kept outside the prefix so a rebuilt one keeps the sign-in.
@@ -372,7 +374,7 @@ SN2_STEAMFILE="$(dirname "${BASH_SOURCE[0]}")/steamfile.py"
 vdf_get() { python3 "$SN2_STEAMFILE" "$1" "$2"; }
 # The signed-in account's steamid64; $1 overrides the Steam folder.
 host_steamid() {
-  grep -oE '"7656[0-9]{13}"' "${1:-$STEAM_DIR}/config/loginusers.vdf" 2>/dev/null | head -1 | tr -d '"' || true
+  python3 "$SN2_STEAMFILE" --account "${1:-$STEAM_DIR}/config/loginusers.vdf" 2>/dev/null || true
 }
 
 # Container start as epoch seconds: boot time plus PID 1's start ticks. Not the mtime of /proc/1,

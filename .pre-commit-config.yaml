@@ -33,6 +33,18 @@ repos:
       - id: yamllint
         args: [--strict]
 
+  # Undefined names, unused imports and syntax errors only; no style rules.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        args: [--select, "F,E9"]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.9
+    hooks:
+      - id: actionlint-docker
+
   - repo: local
     hooks:
       # luacheck's own hook needs luarocks; this uses the luacheck on PATH
@@ -60,18 +72,24 @@ repos:
         language: system
         pass_filenames: false
         files: ^(scripts/friend-accept\.py|tests/test_friend_accept\.py)$
-      - id: map-chart-test
-        name: map chart test
-        entry: uv run --no-project --with pillow python tests/test_map_chart.py
+      - id: sn2files-test
+        name: whole-file writes and JSON reads shared by the scripts
+        entry: uv run --no-project --with pytest python -m pytest -q tests/test_sn2files.py
         language: system
         pass_filenames: false
-        files: ^(scripts/map-chart\.py|tests/test_map_chart\.py|web/map\.html)$
+        files: ^(scripts/sn2files\.py|tests/test_sn2files\.py)$
+      - id: map-chart-test
+        name: map chart test
+        entry: uv run --no-project --with pillow --with pytest python -m pytest -q tests/test_map_chart.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/(map-chart|sn2files)\.py|tests/test_map_chart\.py|web/map\.html)$
       - id: curseforge-publisher-test
         name: CurseForge publisher resolution and distribution policy
         entry: uv run --no-project --with pyyaml --with cryptography --with vdf==3.4 python tests/test_publish_mods.py
         language: system
         pass_filenames: false
-        files: ^(scripts/publish-mods\.py|tests/test_publish_mods\.py)$
+        files: ^(scripts/(publish-mods|sn2files)\.py|tests/test_publish_mods\.py)$
       # bats from its official image, so no local install is needed. The tree
       # is copied to the container's own /tmp first: the mode-700/600 checks
       # need a native Linux filesystem, which a Windows or macOS mount is not.

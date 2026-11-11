@@ -40,7 +40,7 @@ RUN dpkg --add-architecture i386 \
       "wine-staging-amd64=${WINE_STAGING_DEB}" "wine-staging-i386=${WINE_STAGING_DEB}" \
  && apt-get install -y --no-install-recommends \
       apt libapt-pkg7.0 \
-      xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd fonts-dejavu-core \
+      xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd logrotate fonts-dejavu-core \
  && apt-get purge -y ipp-usb avahi-daemon \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 WORKDIR /tmp
@@ -83,7 +83,7 @@ VOLUME ["/run"]
 COPY --chmod=0755 docker/sn2-service.sh docker/healthcheck.sh /opt/sn2/bin/
 COPY --chmod=0755 docker/s6-overlay/ /etc/s6-overlay/
 COPY --chmod=0755 scripts/common.sh scripts/launch-headless.sh scripts/restart-warning.sh scripts/install-game.sh \
-     scripts/install-ue4ss.sh scripts/install-msvc-runtime.sh scripts/join-watch.sh scripts/join-page.py scripts/friend-accept.py scripts/discord-notify.py scripts/save-stage.sh scripts/steam-config.sh scripts/restart-after-autosave.sh scripts/steam-install-confirm.sh scripts/verify-fresh.sh scripts/world-stats.py scripts/steamfile.py \
+     scripts/install-ue4ss.sh scripts/install-msvc-runtime.sh scripts/join-watch.sh scripts/join-page.py scripts/friend-accept.py scripts/discord-notify.py scripts/save-stage.sh scripts/steam-config.sh scripts/restart-after-autosave.sh scripts/steam-install-confirm.sh scripts/verify-fresh.sh scripts/world-stats.py scripts/steamfile.py scripts/sn2files.py \
      scripts/map-chart.py scripts/plugins-section.py scripts/mod-stats.py scripts/mod-service.sh scripts/publish-mods.py /opt/sn2/bin/
 COPY --chmod=0755 bin/moonpool /usr/local/bin/moonpool
 COPY mod/ /opt/sn2/mod/
@@ -108,7 +108,8 @@ ENV SN2_IN_CONTAINER=1 \
 HEALTHCHECK --interval=60s --timeout=10s --start-period=300s \
     CMD ["/opt/sn2/bin/healthcheck.sh"]
 # /init (s6-overlay) supervises every service. The command only shows the services log.
-# The tunnel token is for the tunnel container; the game, Steam and mods never see it.
+# The tunnel token is for the tunnel container; the game, Steam and mods never see it. The other secrets
+# are taken out where Steam and the game are started (WITHOUT_SECRETS in common.sh).
 ENTRYPOINT ["/usr/bin/env", "-u", "TUNNEL_TOKEN", "/init"]
 CMD ["/bin/bash", "-c", "mkdir -p \"$DATA_DIR/logs\" && touch \"$DATA_DIR/logs/services.log\" && exec tail -n +1 -F \"$DATA_DIR/logs/services.log\""]
 

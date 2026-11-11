@@ -19,6 +19,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sn2files import write_atomic  # noqa: E402  (beside this file)
+
 try:
     import yaml
 except ImportError:
@@ -140,9 +143,7 @@ def main():
         if found:
             found["project"] = ident
             fresh[name] = found
-    tmp = out.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"ts": now, "mods": fresh}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, out)
+    write_atomic(out, json.dumps({"ts": now, "mods": fresh}, indent=2, sort_keys=True) + "\n")
     return 0
 
 

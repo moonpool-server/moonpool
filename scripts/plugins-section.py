@@ -6,27 +6,23 @@ a manifest (public/mods.json), the launcher that installs it. Prints a "Play
 with mods" button when any mod is installable, then one list of the mods, each
 a link to its own page, with its summary and, from mod-stats.py's file, its
 public numbers. Prints nothing when the list is empty, so a bare server's join
-page stays a plain "Join now".
+page stays a plain "Join now". The HTML is web/mods.html.j2, rendered by Jinja2 with
+every value escaped.
 
 Usage: plugins-section.py <plugins.yaml> [<public dir>] [<mod stats file>]
 """
 import datetime
-import html
 import json
 import os
 import sys
+from pathlib import Path
 
 try:
     import yaml
+    from jinja2 import FileSystemLoader, StrictUndefined
+    from jinja2.sandbox import SandboxedEnvironment
 except ModuleNotFoundError:
-    sys.exit(0)  # no yaml available: render nothing rather than break the page
-
-
-def esc(value: object) -> str:
-    return html.escape(str(value or ""), quote=True)
-
-
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    sys.exit(0)  # no yaml or jinja2 available: render nothing rather than break the page
 
 
 def read_stats(path: str) -> dict:
@@ -38,28 +34,26 @@ def read_stats(path: str) -> dict:
     return mods if isinstance(mods, dict) else {}
 
 
-def stats_line(s: object) -> str:
-    """One line of a mod's public numbers: '★ 214 on GitHub · updated 8 Nov 2026 · by someone'."""
+def stats_of(s: object) -> dict | None:
+    """A mod's public numbers for the page ('★ 214 on GitHub · updated 8 Nov 2026 · by someone'), or None."""
     if not isinstance(s, dict):
-        return ""
-    parts = []
+        return None
     try:
         if s.get("site") == "github":
-            parts.append(f"&#9733; {int(s['stars']):,} on GitHub")
+            out = {"stars": f"{int(s['stars']):,}", "downloads": ""}
         elif s.get("site") == "curseforge":
-            parts.append(f"{int(s['downloads']):,} downloads on CurseForge")
+            out = {"stars": "", "downloads": f"{int(s['downloads']):,}"}
         else:
-            return ""
+            return None
     except (KeyError, TypeError, ValueError):
-        return ""
+        return None
     try:
         day = datetime.date.fromisoformat(str(s.get("updated") or ""))
-        parts.append(f"updated {day.day} {MONTHS[day.month - 1]} {day.year}")
+        out["updated"] = f"{day.day} {day:%b %Y}"
     except ValueError:
-        pass
-    if s.get("by"):
-        parts.append("by " + esc(s["by"]))
-    return " &middot; ".join(parts)
+        out["updated"] = ""
+    out["by"] = str(s.get("by") or "")
+    return out
 
 
 def read_manifest(public: str) -> dict:
@@ -93,15 +87,11 @@ def render(plugins: list, manifest: dict, address: str = "", stats: dict | None 
     if not shown:
         return ""
 
-    def row(p: dict) -> str:
+    def row(p: dict) -> dict:
         name = str(p.get("name"))
         pub = published.get(name) or {}
         source = pub.get("source") or {}
-        link = p.get("source") or source.get("page") or ""
-        text = f'<a href="{esc(link)}">{esc(name)}</a>' if link.lower().startswith(("https://", "http://")) else esc(name)
-        version = p.get("version") or pub.get("version")
-        if version:
-            text += f" {esc(version)}"
+        link = str(p.get("source") or source.get("page") or "")
         notes = []
         if str(p.get("tier", "optional")).lower() != "mandatory":
             notes.append("optional, off unless you tick it" if p.get("default", True) is False else "optional")
@@ -113,43 +103,14 @@ def render(plugins: list, manifest: dict, address: str = "", stats: dict | None 
             notes.append("install it yourself")
         elif not source.get("url"):
             notes.append("needs one download from its page")
-        about = [esc(p.get("summary") or pub.get("summary") or ""), stats_line(stats.get(name))]
-        about = "<br>".join(a for a in about if a)
-        about = f'<span class="about">{about}</span>' if about else ""
-        return f'<li>{text}{" (" + ", ".join(notes) + ")" if notes else ""}{about}</li>'
+        return {"name": name, "link": link if link.lower().startswith(("https://", "http://")) else "",
+                "version": str(p.get("version") or pub.get("version") or ""), "notes": notes,
+                "summary": str(p.get("summary") or pub.get("summary") or ""), "stats": stats_of(stats.get(name))}
 
-    # A page cannot tell whether the moonpool: link has a handler, so a click says at once what
-    # should happen, and if the page still has focus a few seconds later, what to do when it didn't.
-    head = (f'<a class="button" id="playmods" href="moonpool:{esc(address)}">Play with mods</a>'
-            f'<div class="notice" id="opening" hidden><strong>Opening Moonpool&hellip;</strong> '
-            f'If your browser asks, allow it to open Moonpool. Its window lists the mods and asks before installing anything.</div>'
-            f'<div class="notice warn" id="nothing" hidden><strong>Still waiting?</strong> '
-            f'If your browser is asking to open Moonpool, allow it. If nothing is asking and no Moonpool window opened, '
-            f'this PC doesn\'t have the launcher yet. It takes a minute, once:'
-            f'<ol><li>Download the launcher with the button below. It is one small file from the Moonpool project on GitHub.</li>'
-            f'<li>Run it. Windows may say it protected your PC, because the file isn\'t code-signed: '
-            f'choose More info, then Run anyway.</li>'
-            f'<li>Press Play with mods again.</li></ol>'
-            f'<a class="button get" href="{SETUP_URL}">Download the launcher</a></div>'
-            f'<p>First time on this PC? <a href="{SETUP_URL}">Get the launcher</a> once, then press Play with mods.</p>'
-            f'<p class="fine">Play with mods installs or updates this server\'s mods and turns them on only until '
-            f'Subnautica 2 closes; normal launches don\'t load them. Mods run with your Windows account\'s rights, '
-            f'so only accept a host you trust.</p>'
-            '<script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),'
-            'n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;'
-            'function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}'
-            'b.addEventListener("click",function(){o.hidden=false;n.hidden=true;wait();});'
-            # Focus leaving pauses the wait (a window or prompt opened); coming back with nothing
-            # shown yet, such as after dismissing the browser's prompt, starts it again.
-            'window.addEventListener("blur",function(){clearTimeout(t);});'
-            'window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>') \
-        if published and address else \
-        '<div class="opt"><p class="fine">Mods this server asks for:</p>'
-    tail = "" if published else "</div>"
-    if any(stats_line(stats.get(str(p.get("name")))) for p in shown):
-        tail = ('<p class="fine">Stars and downloads come from GitHub and CurseForge. They show how widely a mod '
-                'is used, not that its file is safe.</p>') + tail
-    return head + '<ul class="mods">' + "".join(row(p) for p in shown) + "</ul>" + tail
+    env = SandboxedEnvironment(loader=FileSystemLoader(Path(__file__).resolve().parent.parent / "web"), autoescape=True,
+                               undefined=StrictUndefined)
+    return env.get_template("mods.html.j2").render(launcher=bool(published and address), address=address, setup_url=SETUP_URL,
+                                                   mods=[row(p) for p in shown])
 
 
 def main() -> None:

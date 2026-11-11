@@ -510,6 +510,10 @@ try {
   Write-Manifest $w6 @($elsewhere) 'signed'; Sign-Manifest
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
   Check ($r.Code -eq 3 -and $r.Asked -match 'Foo .* from downloads\.example') "that host is the one the file downloads from, not the page the manifest names: $($r.Asked)"
+  $elsewhere.source.url = 'https://github.com:x@downloads.example/Foo.zip'
+  Write-Manifest $w6 @($elsewhere) 'signed'; Sign-Manifest
+  $r = Invoke-Join $w6 -Extra $at -Answer '$false'
+  Check ($r.Code -eq 3 -and $r.Asked -match 'Foo .* from downloads\.example' -and $r.Asked -notmatch 'from github') "a name before an @ in the address is not taken for the host: $($r.Asked)"
   Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo')) 'signed'; Sign-Manifest
   $r = Invoke-Join $w6 -Extra $at
   Check ($r.Code -eq 0 -and $r.Asked -and (Test-Path -LiteralPath (Join-Path $w6.Mods 'Foo\Scripts\main.lua'))) "accepting installs (got $($r.Code)): $($r.Out.Trim())"
