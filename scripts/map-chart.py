@@ -60,6 +60,20 @@ def points(rows):
             for r in rows if isinstance(r, dict) and number(r.get("x")) and number(r.get("y"))]
 
 
+def signal_keys(status, tracked=True):
+    """'x,y,name' for each PDA signal in status.json, so a renamed or moved signal is a new one.
+    tracked=False leaves out signals that follow something, such as a vehicle or a player."""
+    rows = status.get("signals")
+    keys = []
+    for r in rows if isinstance(rows, list) else []:
+        if not (isinstance(r, dict) and number(r.get("x")) and number(r.get("y")) and isinstance(r.get("name"), str) and r["name"]):
+            continue
+        if r.get("tracked") is not False and not tracked:
+            continue
+        keys.append("%d,%d,%s" % (round(r["x"] / UU_PER_M), round(r["y"] / UU_PER_M), r["name"][:60]))
+    return keys
+
+
 def record(chart, status, host, now):
     if not number(status.get("ts")) or now - status["ts"] > STALE_S:
         return
@@ -67,6 +81,9 @@ def record(chart, status, host, now):
         seen = chart.setdefault(kind, {})
         for x, y in points(status.get(kind)):
             seen.setdefault("%d,%d" % (x, y), now)
+    seen = chart.setdefault("signals", {})
+    for key in signal_keys(status):
+        seen.setdefault(key, now)
     cells = chart.setdefault("cells", {})
     divers = chart.setdefault("divers", {})
     players = status.get("players")
@@ -137,8 +154,13 @@ def published(chart, status, world, delay_s, now, names=True):
         current = {"%d,%d" % (x, y) for x, y in points(status.get(kind))}
         return sorted([int(v) for v in key.split(",")] for key, first in chart.get(kind, {}).items()
                       if key in current and now - first >= delay_s)
+    # A signal shows once it has stood unchanged for the delay, like everything else here.
+    # With player positions kept off the map, a signal that follows something could stand in for them.
+    current = set(signal_keys(status, tracked=os.environ.get("MAP_PLAYERS", "true") == "true"))
+    signals = sorted([int(k.split(",", 2)[0]), int(k.split(",", 2)[1]), k.split(",", 2)[2]]
+                     for k, first in chart.get("signals", {}).items() if k in current and now - first >= delay_s)
     return {"world": world, "delay_minutes": delay_s // 60, "updated": now, "cell_m": CELL_M, "explored": explored,
-            "divers": divers, "bases": settled("bases"), "lifepods": settled("lifepods")}
+            "divers": divers, "bases": settled("bases"), "lifepods": settled("lifepods"), "signals": signals}
 
 
 class _HttpsOnly(urllib.request.HTTPRedirectHandler):
@@ -331,6 +353,8 @@ def main():
         page_data["divers"], page_data["explored"] = [], None
     if os.environ.get("MAP_BASES", "true") != "true":
         page_data["bases"] = []
+    if os.environ.get("MAP_SIGNALS", "true") != "true":
+        page_data["signals"] = []
     write_json(store, chart)
     try:
         page_data["backgrounds"] = background(status, os.environ, data, public)

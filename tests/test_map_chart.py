@@ -71,6 +71,28 @@ def test_each_player_shows_where_they_were_after_the_delay_and_never_now() -> No
         assert json.loads(run(tmp, 1900 + 900 + 3600 + 60, []).read_text())["divers"] == []  # an hour after they left
 
 
+def test_signals_show_after_the_delay_and_can_be_kept_off() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        control = tmp / "control"
+        control.mkdir()
+
+        def at(now, **env):
+            (control / "status.json").write_text(json.dumps({"ts": now, "players": [], "bases": {}, "lifepods": [],
+                                                             "signals": [{"name": "Base <b>", "x": -341125, "y": 392321, "tracked": False},
+                                                                         {"name": "Tadpole", "x": -338747, "y": 390013, "tracked": True}]}))
+            full = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                        MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW=str(now), HOST_NAME="Host", WEB_MAP="true", **env)
+            subprocess.run([sys.executable, str(SCRIPT)], check=True, env=full)
+            return json.loads((tmp / "public" / "map.json").read_text())
+
+        assert at(1000)["signals"] == []
+        assert at(1000 + 15 * 60)["signals"] == [[-3411, 3923, "Base <b>"], [-3387, 3900, "Tadpole"]]
+        # Player positions kept off the map keep off what follows them too.
+        assert at(1000 + 16 * 60, MAP_PLAYERS="false")["signals"] == [[-3411, 3923, "Base <b>"]]
+        assert at(1000 + 17 * 60, MAP_SIGNALS="false")["signals"] == []
+
+
 def test_players_and_bases_can_be_kept_off_the_map() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)

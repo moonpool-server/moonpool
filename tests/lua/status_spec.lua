@@ -66,5 +66,29 @@ local built = status.build({ map = 'L_Bases' }, to_str).bases
 eq(#built, 1, "only a player's base with cells is listed")
 eq(built[1] and built[1].x or 0, 50000, 'at the position of the base actor')
 _G.FindAllOf = saved_find
+
+-- The signals everyone sees are listed with their positions; hidden ones and admin commands are not.
+local function guid(a) return { A = a, B = 0, C = 0, D = 0 } end
+local function arr(items)
+  return { ForEach = function(_, f) for i, v in ipairs(items) do f(i, { get = function() return v end }) end end }
+end
+local function sig(id, name, x, follows)
+  return { UniqueID = guid(id), DisplayName = { ToString = function() return name end },
+    Location = { X = x, Y = 20.4, Z = -30 }, bHasTrackingActor = follows == true }
+end
+local store = { DefaultHiddenPings = arr({ guid(2) }),
+  ActivePings = arr({ sig(1, 'Base', 10.6), sig(2, 'voice range', 11), sig(3, '!help', 12), sig(4, '', 13),
+    sig(5, string.rep('x', 80), 14, true) }) }
+local signals = status.signals(store, '!')
+eq(#signals, 2, 'the hidden signal, the admin command and the nameless one are left out')
+eq(signals[1].name .. '@' .. signals[1].x .. ',' .. signals[1].y .. ',' .. signals[1].z, 'Base@11,20,-30',
+  'a signal keeps its name and position')
+eq(#signals[2].name, 60, 'a long name is cut to 60 characters')
+eq(#status.signals(nil, '!'), 0, 'no signal store, no signals')
+eq(tostring(signals[1].tracked) .. ',' .. tostring(signals[2].tracked), 'false,true',
+  'a signal that follows something is marked')
+local unreadable = { ActivePings = store.ActivePings,
+  DefaultHiddenPings = setmetatable({}, { __index = function() error('cannot read') end }) }
+eq(#status.signals(unreadable, '!'), 0, 'an unreadable hidden list publishes nothing')
 if failures > 0 then os.exit(1) end
 print('status_spec: ok')
