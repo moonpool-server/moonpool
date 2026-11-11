@@ -108,10 +108,9 @@ function setup(bgs) {
   layers.fog = new Fog();
   if (bgs.length) layers.fog.addTo(map);
   layers.players = L.layerGroup().addTo(map);
-  layers.bases = L.layerGroup().addTo(map);
   layers.lifepods = L.layerGroup().addTo(map);
   layers.signals = L.layerGroup().addTo(map);
-  var shown = {'Players': layers.players, 'Bases': layers.bases, 'Lifepods': layers.lifepods, 'Signals': layers.signals};
+  var shown = {'Players': layers.players, 'Lifepods': layers.lifepods, 'Signals': layers.signals};
   if (bgs.length) shown = L.extend({'Fog': layers.fog}, shown);
   L.control.layers(null, shown, {position: 'topright'}).addTo(map);
 }
@@ -122,7 +121,7 @@ function pin(group, p, label, fill, faded) {
 }
 function draw(d) {
   if (!map) setup(d.backgrounds || (d.background ? [d.background] : []));
-  ['players', 'bases', 'lifepods', 'signals'].forEach(function (k) { layers[k].clearLayers(); });
+  ['players', 'lifepods', 'signals'].forEach(function (k) { layers[k].clearLayers(); });
   var seen = [], h = d.cell_m / 2;
   if (d.explored) {
     layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
@@ -133,9 +132,7 @@ function draw(d) {
     seen.push([p.y, p.x]);
   });
   d.lifepods.forEach(function (p) { pin(layers.lifepods, p, 'Lifepod', '#ff5a4f'); seen.push([p[1], p[0]]); });
-  // A base's marker is where it was started; its rooms can reach some way from it.
-  d.bases.forEach(function (p) { pin(layers.bases, p, 'Base (where it started)', '#7ee787'); seen.push([p[1], p[0]]); });
-  (d.signals || []).forEach(function (p) { pin(layers.signals, p, p[2], '#f2cc60'); });
+  (d.signals || []).forEach(function (p) { pin(layers.signals, p, p[2], '#f2cc60'); seen.push([p[1], p[0]]); });
   if (d.world) {
     document.title = d.world + ' map';
     document.getElementById('title').textContent = d.world;

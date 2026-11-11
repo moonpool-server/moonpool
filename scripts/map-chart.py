@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # Turns this host's own status.json into the data for its map page.
 """The map shows where each player was MAP_DELAY_MINUTES ago, the 50 m squares anyone has
-visited (the rest stays under fog), and the world's bases and lifepods, all from the game's own
-positions. Nothing is published sooner, so the page never shows where someone is now. A player
+visited (the rest stays under fog), the lifepods and the PDA signals everyone can see, all from
+the game's own positions. A base is not drawn from the game's base actor, whose position can be far
+from the rooms; a signal named at the base marks it. Nothing is published sooner, so the page never shows where someone is now. A player
 who left stays faded for an hour. Names follow SHOW_PLAYER_NAMES; one chart per branch and save.
 A still of the map (map.png) goes beside the page for link previews and the card.
 Off (WEB_MAP not true) withdraws the published files and keeps the chart.
@@ -26,7 +27,7 @@ from PIL import Image, ImageDraw, ImageFilter
 STILL_W = 1200  # the still's width in pixels; link previews want about this
 FOCUS_MIN_M = 800  # the still never shows less than this across
 FOCUS_PAD_M = 150  # room around the outermost dot
-STILL_VERSION = 4  # bump when the drawing changes, so a cached still is fetched again
+STILL_VERSION = 5  # bump when the drawing changes, so a cached still is fetched again
 STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
 KEEP_S = 3600  # how long a player's last spot stays, faded, after they leave
@@ -77,10 +78,9 @@ def signal_keys(status, tracked=True):
 def record(chart, status, host, now):
     if not number(status.get("ts")) or now - status["ts"] > STALE_S:
         return
-    for kind in ("bases", "lifepods"):
-        seen = chart.setdefault(kind, {})
-        for x, y in points(status.get(kind)):
-            seen.setdefault("%d,%d" % (x, y), now)
+    seen = chart.setdefault("lifepods", {})
+    for x, y in points(status.get("lifepods")):
+        seen.setdefault("%d,%d" % (x, y), now)
     seen = chart.setdefault("signals", {})
     for key in signal_keys(status):
         seen.setdefault(key, now)
@@ -160,7 +160,7 @@ def published(chart, status, world, delay_s, now, names=True):
     signals = sorted([int(k.split(",", 2)[0]), int(k.split(",", 2)[1]), k.split(",", 2)[2]]
                      for k, first in chart.get("signals", {}).items() if k in current and now - first >= delay_s)
     return {"world": world, "delay_minutes": delay_s // 60, "updated": now, "cell_m": CELL_M, "explored": explored,
-            "divers": divers, "bases": settled("bases"), "lifepods": settled("lifepods"), "signals": signals}
+            "divers": divers, "lifepods": settled("lifepods"), "signals": signals}
 
 
 class _HttpsOnly(urllib.request.HTTPRedirectHandler):
@@ -202,10 +202,10 @@ def union(items):
 
 
 def focus(page, world):
-    """Where the action is: the bases and lifepods with room around them, at least FOCUS_MIN_M
+    """Where the action is: the lifepods and signals with room around them, at least FOCUS_MIN_M
     across and twice as wide as tall, kept inside the world. None when there are none, so the
     still shows the whole world."""
-    pts = [(x, y) for kind in ("bases", "lifepods") for x, y in page[kind]]
+    pts = [(x, y) for x, y in page["lifepods"]] + [(s[0], s[1]) for s in page.get("signals", [])]
     if not pts:
         return None
     wl, wr = min(world[0], world[2]), max(world[0], world[2])
@@ -282,8 +282,8 @@ def backdrop(bgs, public, cache, region=None):
 
 
 def still(page, bg, public, cache):
-    """map.png: the backdrop around the action under the same fog as the page, with the bases and
-    lifepods on it."""
+    """map.png: the backdrop around the action under the same fog as the page, with the lifepods
+    and signals on it."""
     world = union(bg) if bg else [-2560, 2560, 2560, -2560]
     img, (left, top, right, bottom) = backdrop(bg, public, cache, focus(page, world))
     scale = STILL_W / img.width
@@ -303,10 +303,10 @@ def still(page, bg, public, cache):
         shroud = shroud.filter(ImageFilter.GaussianBlur(r * 0.25))
         img = Image.composite(Image.new(img.mode, img.size, (7, 25, 35) + ((255,) if img.mode == "RGBA" else ())), img, shroud)
     draw = ImageDraw.Draw(img)
-    for kind, fill in (("lifepods", (255, 90, 79)), ("bases", (126, 231, 135))):
-        for x, y in page[kind]:
-            px, py = at(x, y)
-            draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=fill, outline=(234, 247, 251), width=2)
+    marks = [(x, y, (255, 90, 79)) for x, y in page["lifepods"]] + [(s[0], s[1], (242, 204, 96)) for s in page.get("signals", [])]
+    for x, y, fill in marks:
+        px, py = at(x, y)
+        draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=fill, outline=(234, 247, 251), width=2)
     out = io.BytesIO()
     img.convert("RGB").save(out, "PNG", optimize=True)
     return out.getvalue()
@@ -351,8 +351,6 @@ def main():
                           os.environ.get("SHOW_PLAYER_NAMES", "true") == "true")
     if os.environ.get("MAP_PLAYERS", "true") != "true":  # no dots and no trace of where anyone went
         page_data["divers"], page_data["explored"] = [], None
-    if os.environ.get("MAP_BASES", "true") != "true":
-        page_data["bases"] = []
     if os.environ.get("MAP_SIGNALS", "true") != "true":
         page_data["signals"] = []
     write_json(store, chart)
@@ -362,8 +360,8 @@ def main():
         page_data["backgrounds"] = []
         print("map-chart: no background: %s" % err, file=sys.stderr)
     page_data["background"] = page_data["backgrounds"][0] if page_data["backgrounds"] else None
-    # The still only when what it shows changed: the explored places, bases, lifepods or backdrop.
-    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"], page_data["bases"], page_data["lifepods"],
+    # The still only when what it shows changed: the explored places, lifepods, signals or backdrop.
+    sig = hashlib.sha256(json.dumps([STILL_VERSION, page_data["explored"], page_data["signals"], page_data["lifepods"],
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)
