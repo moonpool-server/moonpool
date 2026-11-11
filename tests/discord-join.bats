@@ -257,6 +257,15 @@ echo 1500
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Not hosting**'* ]]
   [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Not open true' ]
   [[ $(jq -r '.components[0].components[3].content' <<<"$body") == 'The game has run for 25 min without opening its world. Nobody can join until it does.' ]]
+  [[ $(jq -r '.components[0].components[4].content' <<<"$body") != *'crash report'* ]]
+  # A crash dump from this run and no mods started: the card says the loader is why.
+  ue="$BATS_TEST_TMPDIR/game/Subnautica2/Binaries/Win64/ue4ss"; mkdir -p "$ue"
+  : >"$ue/crash_1.dmp"; printf 'Locating KismetStringLibrary...\n' >"$ue/UE4SS.log"
+  body=$(PATH="$fake:$PATH" GAME_DIR="$BATS_TEST_TMPDIR/game" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ $(jq -r '.components[0].components[4].content' <<<"$body") == 'The mod loader wrote a crash report during this run'* ]]
+  printf 'Starting mods (from enabled.txt)\n' >>"$ue/UE4SS.log"
+  body=$(PATH="$fake:$PATH" GAME_DIR="$BATS_TEST_TMPDIR/game" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ $body != *'crash report'* ]]
   # A hosted world whose mod has gone quiet is neither Open nor Not hosting: the card says Starting.
   printf '{"hosted":true}' >"$CONTROL_DIR/readiness.json"
   body=$(PATH="$fake:$PATH" SN2_NOW=1700000200 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')

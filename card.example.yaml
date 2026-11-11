@@ -9,6 +9,10 @@ nobody_aboard: "Nobody aboard right now."
 last_aboard: " Last aboard {when}."
 # placeholders: {min}
 not_hosting: "The game has run for {min} min without opening its world. Nobody can join until it does."
+# Added under not_hosting when the mod loader crashed during this game run.
+loader_crashed: >-
+  The mod loader wrote a crash report during this run before its mods started. That usually means
+  it doesn't fit this game build; the host's guide covers this under Updates.
 # placeholders: {scans}
 scanned: "Scanned lately: {scans}"
 # placeholders: {n}, {url}
