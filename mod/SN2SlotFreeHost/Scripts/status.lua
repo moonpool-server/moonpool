@@ -242,6 +242,12 @@ function M.build(info, to_str)
     or cache.map ~= info.map then
     search(info.map)
   end
+  -- The game makes its signal store a little after a world loads, so a search that ran too early
+  -- looks again here, at most once a minute, rather than waiting for the next refresh.
+  if not cache.signal_store and os.time() - (cache.store_tried or 0) >= 60 then
+    cache.store_tried = os.time()
+    cache.signal_store = M.object_path((FindAllOf('UWEPingSystemComponent') or {})[1])
+  end
   return {
     ts = os.time(),
     state = info.state,
