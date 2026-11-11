@@ -10,7 +10,10 @@ local POD_SKIP_UU = 8000      -- 80 m: pieces this close to a lifepod belong to 
 local BASE_PREFIX = 'BP_BaseModule_'
 local POD_PREFIX = 'BP_StaticLifepod_'
 
-local cache = { players = nil, bases = nil, pods = nil, found_at = 0, map = nil,
+local SIGNAL_MAX = 100        -- the most PDA signals put in status.json
+local SIGNAL_NAME_MAX = 60    -- characters of a signal's name kept
+
+local cache = { players = nil, bases = nil, pods = nil, signal_store = nil, found_at = 0, map = nil,
   dirty = true, world_start = nil }
 
 local function valid(o) return o ~= nil and o.IsValid ~= nil and o:IsValid() end
@@ -98,6 +101,43 @@ local function near_pod(p, pods)
   return false
 end
 
+local function guid_key(g)
+  return string.format('%d:%d:%d:%d', g.A, g.B, g.C, g.D)
+end
+
+-- The PDA signals everyone sees, with their names and exact positions, read from the game's
+-- signal store as plain properties. Signals hidden by default (story places not found yet, and
+-- each player's own, such as the voice-range ones this mod adds) and in-game admin commands are
+-- left out. It fails closed: no hidden list or no signal id read means nothing is listed.
+-- A signal that follows something (a vehicle, a player) is marked tracked.
+function M.signals(store, admin_prefix)
+  local list = {}
+  if not store then return list end
+  local hidden = {}
+  local read = pcall(function()
+    store.DefaultHiddenPings:ForEach(function(_, g) hidden[guid_key(g:get())] = true end)
+  end)
+  if not read then return {} end
+  local ok = pcall(function()
+    store.ActivePings:ForEach(function(_, el)
+      if #list >= SIGNAL_MAX then return end
+      local p = el:get()
+      local name, key, x, y, z, tracked
+      pcall(function() name = p.DisplayName:ToString() end)
+      pcall(function() key = guid_key(p.UniqueID) end)
+      pcall(function() local l = p.Location; x, y, z = l.X, l.Y, l.Z end)
+      pcall(function() tracked = p.bHasTrackingActor == true end)
+      if key and not hidden[key] and type(name) == 'string' and name ~= '' and type(x) == 'number'
+        and type(y) == 'number' and (admin_prefix == '' or name:sub(1, #admin_prefix) ~= admin_prefix) then
+        list[#list + 1] = { name = name:sub(1, SIGNAL_NAME_MAX), x = math.floor(x + 0.5), y = math.floor(y + 0.5),
+          z = math.floor((z or 0) + 0.5), tracked = tracked ~= false }
+      end
+    end)
+  end)
+  if not ok then return {} end
+  return list
+end
+
 local function search(map_name)
   local players = {}
   for _, ps in ipairs(FindAllOf('PlayerState') or {}) do
@@ -144,6 +184,8 @@ local function search(map_name)
       local p = cells > 0 and not level_actor(a) and loc(a)
       if p then built[#built + 1] = p end
     end
+    -- The signal store is found here, once a refresh, and read again on every status write.
+    cache.signal_store = M.object_path((FindAllOf('UWEPingSystemComponent') or {})[1])
     cache.bases, cache.pods, cache.found_at, cache.map = cluster(built), pods, os.time(), map_name
   end
   cache.dirty = false
@@ -211,6 +253,8 @@ function M.build(info, to_str)
     players = M.players(to_str, info.map),
     bases = cache.bases or {},
     lifepods = cache.pods or {},
+    signals = M.signals(cache.signal_store and StaticFindObject(cache.signal_store),
+      os.getenv('SN2_ADMIN_PREFIX') or '!'),
     day = nil, -- the in-game day is not read: no cheap source found yet
     time_of_day = info.time_of_day,
     day_fraction = info.day_fraction,
