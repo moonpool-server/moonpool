@@ -74,7 +74,7 @@ JSON
   [[ "$output" != *'http-equiv="refresh"'* && "$output" != *'location.href'* && "$output" != *'location.assign'* ]]
   # A click says at once what should open; the install steps show only if the page still has focus.
   [[ "$output" == *'id="opening" hidden'*'id="nothing" hidden'*'Still waiting?'* ]]
-  [[ "$output" == *'Voice</a></span><span class="ver">1.2</span><span class="tag req">required</span></div><span class="about">Voice chat.</span></li>'* ]]
+  [[ "$output" == *'Voice</a></span><span class="facts"><span class="ver">1.2</span><span class="tag req">required</span></span></div><span class="about">Voice chat.</span></li>'* ]]
   [[ "$output" == *'nexusmods.com'* && "$output" == *'<span class="tag">optional</span><span class="tag">download from its page</span>'* ]]
 }
 

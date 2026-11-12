@@ -6,9 +6,9 @@ Moonpool runs the real game under Wine in Docker, on a spare PC or a server. It 
 
 Moonpool is unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve. This repo contains no game files, and nothing here is for sale.
 
-![The join page of a demo server: Play with mods and the server's mods with their summaries](docs/images/join-page.png)
+![The join page of a demo server: the branch and build, Play with mods, the server's mods with their summaries, and a still of the live map with what it shows](docs/images/join-page.png)
 
-![The map page of the same demo, without a background picture: two players shown where they were 15 minutes ago, the lifepod and two PDA signals](docs/images/map.png)
+![The map page of the same demo, without a background picture: a 100 m grid, two players shown where they were 15 minutes ago, the lifepod and two PDA signals, and the panel listing them](docs/images/map.png)
 
 ## For your friends
 
