@@ -141,7 +141,7 @@ services:
   # Opt-in quick HTTPS address: TUNNEL=quick and COMPOSE_PROFILES=tunnel in .env.
   # The origin is only lighttpd's read-only player root on 8081, never noVNC.
   tunnel:
-    image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     profiles: ["tunnel"]
     restart: unless-stopped
     command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:20241", "--url", "http://sn2:${SN2_MODS_PORT:-8081}"]
@@ -151,7 +151,7 @@ services:
   # Cloudflare named tunnel on your own domain. Configure the named tunnel's public hostname to
   # http://sn2:8081 in Cloudflare, and put that hostname in SN2_PUBLIC_URL.
   tunnel-token:
-    image: cloudflare/cloudflared:2025.10.1@sha256:21f3607baf2384c54d592b0efe76dd5f548c0dbc083e62fa22c7fac3923d077f
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     profiles: ["tunnel-token"]
     restart: unless-stopped
     command: ["tunnel", "--no-autoupdate", "run"]
