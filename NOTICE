@@ -21,7 +21,9 @@ UE4SS (RE-UE4SS)
   release mirror of the pinned builds, because the upstream tag moves, then from
   https://github.com/UE4SS-RE/RE-UE4SS/releases; tag and asset named in that
   script) into the operator's own volume and verifies its SHA-256. Layout files
-  for a build come only from the operator's own set, never from here. The loader
+  for a build come only from the operator's own set, never from here. A host that
+  puts layout files in ue4ss-client/ serves them to its players inside the loader
+  download, from its public web root. The loader
   archive is served from the server's own web root to the player launcher in
   client/. A mod listed from GitHub or CurseForge is downloaded by the player from
   that site; only a mod the operator puts in client-mods/ is re-hosted. The release
@@ -97,6 +99,6 @@ Map backgrounds
   That licence covers joric's work and can't speak for the game's own rights.
 
 SN2SlotFreeHost (this project's host mod)
-  mod/SN2SlotFreeHost is this project's own Lua mod, written for the first
-  working host on 2026-10-30. It is part of this repository and under its MIT
+  mod/SN2SlotFreeHost is this project's own Lua mod. It is part of this
+  repository and under its MIT
   licence (LICENSE); it has no upstream.

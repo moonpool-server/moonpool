@@ -6,7 +6,7 @@ set -euo pipefail
 # shellcheck source=common.sh
 . /opt/sn2/bin/common.sh
 
-UE4SS_TAG="${UE4SS_TAG:-experimental-latest}"
+UE4SS_TAG="${UE4SS_TAG:-experimental}"
 UE4SS_CHANNEL="${UE4SS_CHANNEL:-auto}"
 
 # The settings into the ue4ss folder; the two layouts there and beside the exe.
@@ -63,7 +63,7 @@ zip="$UE4SS_CACHE/$UE4SS_ASSET"
 # dropped the pinned builds), then upstream.
 if ! fetch_pinned "${UE4SS_MIRROR:-https://github.com/moonpool-server/moonpool/releases/download/ue4ss-mirror}/$UE4SS_ASSET" "$zip" "$UE4SS_RELEASE_SHA256" \
   && ! fetch_pinned "$UE4SS_URL" "$zip" "$UE4SS_RELEASE_SHA256"; then
-  log "install-ue4ss: no verified $UE4SS_ASSET; the experimental-latest tag moves, so set UE4SS_ASSET and UE4SS_RELEASE_SHA256 together"
+  log "install-ue4ss: no verified $UE4SS_ASSET; the upstream experimental tag moves, so set UE4SS_ASSET and UE4SS_RELEASE_SHA256 together"
   exit 1
 fi
 

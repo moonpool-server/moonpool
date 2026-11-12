@@ -35,7 +35,7 @@ server.port = ${SN2_MODS_PORT:-8081}
 server.dir-listing = "disable"
 server.modules = ( "mod_redirect" )
 url.redirect = ( "^/$" => "/join.html", "^/join$" => "/join.html", "^/map$" => "/map.html" )
-mimetype.assign = ( ".html" => "text/html; charset=utf-8", ".json" => "application/json", ".sig" => "application/octet-stream", ".zip" => "application/zip", ".cmd" => "application/octet-stream", ".ps1" => "text/plain; charset=utf-8", ".png" => "image/png" )
+mimetype.assign = ( ".html" => "text/html; charset=utf-8", ".json" => "application/json", ".sig" => "application/octet-stream", ".zip" => "application/zip", ".png" => "image/png" )
 EOF
     lighttpd -D -f "$RUN_DIR/lighttpd-web.conf" >>"$LOG_DIR/web.log" 2>&1 & http_pid=$!
     trap 'kill "$http_pid" 2>/dev/null || true' EXIT

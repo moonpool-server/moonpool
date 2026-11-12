@@ -195,7 +195,7 @@ ue4ss_channel() {
 GAME_LOG="$LOG_DIR/game.log"
 GAME_PIDFILE="$RUN_DIR/game.pid"
 # Put in front of the Steam client and the game: they, and any mod the game loads, start without these.
-WITHOUT_SECRETS=(env -u DISCORD_WEBHOOK_URL -u CURSEFORGE_API_KEY -u VNC_PASSWORD -u STEAM_BRANCH_PASSWORD)
+WITHOUT_SECRETS=(env -u DISCORD_WEBHOOK_URL -u CURSEFORGE_API_KEY -u GITHUB_TOKEN -u VNC_PASSWORD -u STEAM_BRANCH_PASSWORD)
 STOP_FLAG="$RUN_DIR/stopped"
 MOD_SRC="${MOD_SRC:-/opt/sn2/mod}"
 # Steam's remembered-login token, kept outside the prefix so a rebuilt one keeps the sign-in.
