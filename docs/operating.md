@@ -193,7 +193,14 @@ The example points at [joric's Subnautica 2 tileset](https://github.com/joric/su
 
 What players see is yours to change, from the data volume, nothing to fork
 
-- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch`, `branch_label` and `map` (the map's still picture when the map page is on, else empty; the shipped page shows it beside the card on a wide screen, linking to the live map). A copy that fails to render is said in the log and the shipped page is used
+- The look: every colour, font, size and edge of the join page, the map page and the map's still picture comes from `theme.css`. Copy it out, change the values, put it back as `templates/theme.css`; the pages pick it up on their next refresh
+
+```sh
+docker compose cp sn2:/opt/sn2/web/theme.css theme.css
+docker compose cp theme.css sn2:/home/container/templates/theme.css
+```
+
+- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch`, `branch_label`, `map` (the map's still picture when the map page is on, else empty; the shipped page shows it beside the card on a wide screen, linking to the live map) and `map_facts` (what the map shows, as short items such as `15 min behind` and `2 players`). A copy that fails to render is said in the log and the shipped page is used
 
 ```sh
 docker compose cp sn2:/opt/sn2/web/join.html.j2 join.html.j2

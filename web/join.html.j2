@@ -1,49 +1,57 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 {%- if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif -%}
-<title>Join {{ world }}</title><meta property="og:title" content="Join {{ world }}"><meta property="og:type" content="website"><link rel="icon" href="data:,"><style>
-:root{color-scheme:dark;font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#071923;color:#eaf7fb;--line:#1f4b5c;--muted:#9fb9c3;--accent:#39b7d5}
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;box-sizing:border-box}
-.page{display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-start;justify-content:center;width:100%;max-width:76rem}
-.card{flex:1 1 24rem;max-width:34rem;padding:2rem;border:1px solid var(--line);border-radius:16px;background:#0c2835;box-shadow:0 20px 60px #0008}
-h1{margin:0;font-size:clamp(1.6rem,5vw,2.2rem);line-height:1.15}
-.chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.75rem 0 0}
-.chip{padding:.15rem .6rem;border:1px solid var(--line);border-radius:99px;font-size:.8rem;color:var(--muted)}
-.chip.warn{border-color:#e0a84a;color:#f0c27a}
-.hint{margin:.5rem 0 0;font-size:.85rem;color:var(--muted)}
-.button{display:block;margin:1.5rem 0 0;padding:.9rem 1.2rem;border-radius:10px;background:var(--accent);color:#04141c;font-weight:750;font-size:1.15rem;text-align:center;text-decoration:none}
-.button:hover{background:#70d5eb}
-.actions{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;justify-content:center;margin:.75rem 0 0;font-size:.9rem}
-a{color:#7bdcf2}
-.fine{margin:.75rem 0 0;font-size:.8rem;color:var(--muted);text-align:center}
-.notice{margin:1rem 0 0;padding:.8rem 1rem;border:1px solid var(--line);border-radius:10px;background:#0e3647;font-size:.9rem}
-.notice.warn{border-color:#e0a84a;background:#2b2412}
-.notice ol{margin:.5rem 0 0;padding-left:1.2rem}.notice li{margin:.2rem 0}
-.notice .button{margin:.8rem 0 0;padding:.6rem;font-size:1rem}
-.get{background:transparent;border:2px solid var(--accent);color:#9fe4f5}.get:hover{background:#0e3647}
-h2{margin:1.75rem 0 .5rem;font-size:.75rem;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.mods{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:.5rem}
-.mod{padding:.65rem .8rem;border:1px solid var(--line);border-radius:10px;background:#0a2230}
-.mod .top{display:flex;flex-wrap:wrap;align-items:baseline;gap:.35rem .5rem}
-.mod .name{font-weight:650}.mod .name a{text-decoration:none}.mod .name a:hover{text-decoration:underline}.mod .ver{font-size:.8rem;color:var(--muted)}
-.tag{padding:0 .45rem;border-radius:99px;background:#163d4c;font-size:.72rem;color:#cfe6ee}
-.tag.req{background:#1d5b6e;color:#eaf7fb}
-.about{display:block;margin:.25rem 0 0;font-size:.85rem;color:#cfe6ee}
-.meta{display:block;margin:.15rem 0 0;font-size:.75rem;color:var(--muted)}
-.lead{font-size:1.1rem;margin:1.25rem 0 0}
-.close{margin-top:1rem;padding:.5rem 1rem;border:1px solid var(--line);border-radius:8px;background:transparent;color:#b9d6df;font:inherit;cursor:pointer}
-.close:hover{color:#eaf7fb;border-color:var(--accent)}
-.banner{display:block;width:100%;height:auto;margin:0 0 1.25rem;border-radius:10px}
-.map{flex:1 1 26rem;max-width:42rem;display:flex;flex-direction:column;gap:.4rem;color:var(--muted);text-decoration:none;font-size:.85rem;text-align:center}
-.map img{width:100%;border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px #0008}
-.map:hover{color:#eaf7fb}
+<title>Join {{ world }}</title><meta property="og:title" content="Join {{ world }}"><meta property="og:type" content="website"><link rel="icon" href="data:,"><link rel="stylesheet" href="theme.css"><style>
+html{background:var(--ink);color:var(--text);font:var(--size-body)/var(--leading) var(--font-text)}
+body{margin:0;min-height:100vh;padding:clamp(var(--gap-4),5vw,var(--gap-6));box-sizing:border-box}
+.page{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--join-column)),1fr));gap:var(--gap-6);max-width:var(--page-max);margin:0 auto;align-items:start}
+.card{min-width:0;max-width:var(--join-column)}
+.readout{display:flex;flex-wrap:wrap;gap:var(--gap-1) var(--gap-4);margin:0;padding:0 0 var(--gap-2);border-bottom:var(--hair) solid var(--rule-strong);font:var(--size-small)/1.4 var(--font-data);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--dim)}
+.readout .warn{color:var(--warn)}
+h1{margin:var(--gap-4) 0 0;font-size:var(--size-title);line-height:1.08;font-weight:var(--weight-title);letter-spacing:var(--track-title)}
+.hint{margin:var(--gap-3) 0 0;font-size:var(--size-small);color:var(--dim)}
+.hint strong{color:var(--text)}
+.button{display:flex;justify-content:space-between;align-items:center;box-sizing:border-box;min-height:var(--control-height);margin:var(--gap-5) 0 0;padding:0 var(--gap-4);border-radius:var(--edge);background:var(--signal);color:var(--signal-ink);font-weight:700;font-size:var(--size-lead);text-decoration:none}
+.button::after{content:"→";font-family:var(--font-data)}
+.button:hover{background:var(--signal-hover)}
+.button:focus-visible,.map:focus-visible{outline:var(--hair) solid var(--text);outline-offset:var(--focus-offset)}
+.button.pressed{opacity:.6}
+.get{background:transparent;color:var(--signal);box-shadow:inset 0 0 0 var(--hair) var(--signal)}.get:hover{background:var(--hull-2)}
+.actions{display:flex;flex-wrap:wrap;gap:var(--gap-2) var(--gap-5);margin:var(--gap-4) 0 0;font-size:var(--size-small)}
+a{color:var(--link);text-underline-offset:var(--focus-offset)}
+.fine{margin:var(--gap-3) 0 0;font-size:var(--size-small);color:var(--dim)}
+.notice{margin:var(--gap-4) 0 0;padding:var(--gap-3) var(--gap-4);border-left:var(--edge) solid var(--link);background:var(--hull);font-size:var(--size-small)}
+.notice.warn{border-left-color:var(--warn)}
+.notice ol{margin:var(--gap-2) 0 0;padding-left:var(--gap-5)}.notice li{margin:var(--gap-1) 0}
+.notice .button{min-height:0;margin:var(--gap-3) 0 0;padding:var(--gap-2) var(--gap-3);font-size:var(--size-body)}
+h2{margin:var(--gap-6) 0 0;padding:0 0 var(--gap-2);border-bottom:var(--hair) solid var(--rule-strong);font:600 var(--size-small)/1 var(--font-data);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--dim)}
+.mods{margin:0;padding:0;list-style:none}
+.mod{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;column-gap:var(--gap-3);padding:var(--gap-3) 0;border-bottom:var(--hair) solid var(--rule)}
+.mod .top{display:contents}
+.mod .name{font-weight:650;grid-column:1}.mod .name a{color:var(--text);text-decoration:none}.mod .name a:hover{color:var(--link);text-decoration:underline}
+.mod .facts{grid-column:2;display:flex;gap:var(--gap-3);align-items:baseline;justify-content:flex-end;font:var(--size-meta) var(--font-data);color:var(--dim)}
+.tag{font:600 var(--size-tag) var(--font-data);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint)}
+.tag.req{color:var(--signal)}
+.about{grid-column:1/-1;display:block;margin:var(--gap-1) 0 0;font-size:var(--size-small);color:var(--dim)}
+.meta{grid-column:1/-1;display:block;margin:var(--gap-1) 0 0;font:var(--size-meta) var(--font-data);color:var(--faint)}
+.lead{font-size:var(--size-lead);margin:var(--gap-5) 0 0}
+.close{margin-top:var(--gap-4);padding:var(--gap-2) var(--gap-4);border:var(--hair) solid var(--rule-strong);border-radius:var(--edge);background:transparent;color:var(--dim);font:inherit;cursor:pointer}
+.close:hover{color:var(--text);border-color:var(--text)}
+.banner{display:block;width:100%;height:auto;margin:0 0 var(--gap-5);border-radius:var(--edge)}
+.map{display:flex;flex-direction:column;min-width:0;color:var(--dim);text-decoration:none}
+.map .bar{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--gap-1) var(--gap-4);padding:0 0 var(--gap-2);border-bottom:var(--hair) solid var(--rule-strong);font:var(--size-small)/1.4 var(--font-data);letter-spacing:var(--track-label);text-transform:uppercase}
+.map .bar b{font-weight:600;color:var(--text)}
+.map .facts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0 var(--gap-4)}
+.map img{display:block;width:100%;aspect-ratio:var(--map-ratio);object-fit:cover;margin:var(--gap-3) 0 0;border:var(--hair) solid var(--rule-strong);border-radius:var(--edge);background:var(--hull)}
+.map .go{margin:var(--gap-2) 0 0;font:var(--size-small) var(--font-data);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--link)}
+.map:hover img{border-color:var(--link)}.map:hover .bar b{color:var(--link)}
+@media (max-aspect-ratio:3/4){.map img{aspect-ratio:var(--map-ratio-narrow)}}
 </style></head>
-<body><div class="page"><main class="card">{% if banner %}<img class="banner" src="{{ banner }}" alt="">{% endif %}<h1>Join {{ world }}</h1>
-{%- if branch or build %}<div class="chips">{% if branch %}<span class="chip{% if branch != "public" %} warn{% endif %}">{{ branch_label }} branch</span>{% endif %}{% if build %}<span class="chip">Build {{ build }}</span>{% endif %}</div>
-{%- if branch != "public" %}<p class="hint">Your game must match: in Steam, Subnautica 2 &rsaquo; Properties &rsaquo; Betas &rsaquo; <strong>{{ branch }}</strong>.</p>{% endif %}{% endif -%}
+<body><div class="page"><main class="card">{% if banner %}<img class="banner" src="{{ banner }}" alt="">{% endif %}{%- if branch or build %}<p class="readout">{% if branch %}<span{% if branch != "public" %} class="warn"{% endif %}>{{ branch_label }} branch</span>{% endif %}{% if build %}<span>Build {{ build }}</span>{% endif %}</p>{% endif %}<h1>Join {{ world }}</h1>
+{%- if branch and branch != "public" %}<p class="hint">Your game must match: in Steam, Subnautica 2 &rsaquo; Properties &rsaquo; Betas &rsaquo; <strong>{{ branch }}</strong>.</p>{% endif -%}
 {%- if not join %}<p class="lead">The server is starting.</p><p class="hint">This page refreshes itself and is ready as soon as the world is open.</p>
 {%- elif mods_published %}{{ modnote|safe }}
 {%- else %}<div id="handoff"><p class="lead" id="lead">Opening Subnautica 2 through Steam…</p><a class="button" href="{{ join }}">Join now</a><p class="hint">Nothing happened? Use the button. Tick <strong>Always allow</strong> on the browser&rsquo;s &ldquo;Open Steam?&rdquo; prompt so later joins take one click.</p><div class="actions"><a href="{{ friend }}">Not friends with the host? Add them on Steam</a></div>{{ modnote|safe }}<p><button class="close" id="close" type="button" hidden>Close this tab</button></p></div><script>(function(){var c=document.getElementById("close");c.onclick=function(){window.close()};setTimeout(function(){document.getElementById("lead").innerHTML="Launching Subnautica 2 &middot; you can close this tab";c.hidden=false},4000);document.addEventListener("visibilitychange",function(){if(document.hidden){window.close()}})})()</script>
 {%- endif %}
 {%- if join and mods_published %}<div class="actions"><a href="{{ join }}">Join without mods</a><a href="{{ friend }}">Add the host on Steam</a></div>{% endif %}</main>
-{%- if map %}<a class="map" href="map.html"><img src="{{ map }}" alt="Map of {{ world }}: where players have been" loading="lazy">Open the live map</a>{% endif %}</div></body></html>
+{%- if map %}<a class="map" href="map.html"><span class="bar"><b>Live map</b>{%- if map_facts %}<span class="facts">{% for f in map_facts %}<span>{{ f }}</span>{% endfor %}</span>{% endif %}</span><img src="{{ map }}" alt="Map of {{ world }}: where players have been" loading="lazy"><span class="go">Open the map →</span></a>{% endif %}</div></body></html>

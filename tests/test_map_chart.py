@@ -8,6 +8,14 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def token(name):
+    """A colour token from the shipped web/theme.css, as the still uses it."""
+    import re
+    css = (ROOT / "web" / "theme.css").read_text(encoding="utf-8")
+    h = re.search(r"--" + name + r"\s*:\s*#([0-9a-fA-F]{6})", css).group(1)
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 SCRIPT = ROOT / "scripts" / "map-chart.py"
 
 
@@ -80,6 +88,24 @@ def test_the_map_numbers_players_unless_map_player_names_is_true() -> None:
         assert [p["name"] for p in json.loads(shown)["divers"]] == ["Player 1"] and "Bob" not in shown
         named = json.loads(run(tmp, 1960, [bob], MAP_PLAYER_NAMES="true").read_text())
         assert [p["name"] for p in named["divers"]] == ["Bob"]
+
+
+def test_without_a_background_the_still_shows_markers_far_from_the_centre() -> None:
+    # The view once clamped to a guessed +-2.5 km world, so a lifepod 4 km out was off the picture.
+    from PIL import Image
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        control = tmp / "control"
+        control.mkdir()
+        (control / "status.json").write_text(json.dumps({"ts": 1000, "players": [], "bases": {},
+                                                         "lifepods": [{"x": -337190, "y": 433407}]}))
+        env = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                   MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW="1000", HOST_NAME="Host", WEB_MAP="true",
+                   MAP_DELAY_MINUTES="0")
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=env)
+        still = Image.open(tmp / "public" / "map.png").convert("RGB")
+        assert token("life") in {still.getpixel((x, y)) for x in range(still.width) for y in range(still.height)}
+        assert (tmp / "public" / "theme.css").is_file()
 
 
 def test_signals_show_after_the_delay_and_can_be_kept_off() -> None:
@@ -208,7 +234,7 @@ def test_a_branch_can_lay_several_pictures_side_by_side() -> None:
         page = {"cell_m": 50, "explored": [[475, 475], [1475, 475]], "bases": [], "lifepods": []}
         still = Image.open(__import__("io").BytesIO(chart.still(page, data["backgrounds"], tmp / "public", tmp)))
         assert still.getpixel((300, 300))[:3] == (200, 50, 50) and still.getpixel((900, 300))[:3] == (50, 200, 50)
-        assert still.getpixel((300, 30))[:3] == (7, 25, 35) and still.getpixel((600, 300))[:3] == (7, 25, 35)
+        assert still.getpixel((300, 30))[:3] == token("ink") and still.getpixel((600, 300))[:3] == token("ink")
 
 
 def test_turning_the_map_off_withdraws_the_page_and_a_stale_status_charts_nothing() -> None:

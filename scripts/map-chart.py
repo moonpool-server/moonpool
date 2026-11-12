@@ -23,15 +23,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageColor, ImageDraw, ImageFilter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sn2files import read_json, write_atomic  # noqa: E402  (beside this file)
+from sn2files import publish_theme, read_json, write_atomic  # noqa: E402  (beside this file)
 
 STILL_W = 1200  # the still's width in pixels; link previews want about this
 FOCUS_MIN_M = 800  # the still never shows less than this across
 FOCUS_PAD_M = 150  # room around the outermost dot
-STILL_VERSION = 5  # bump when the drawing changes, so a cached still is fetched again
+STILL_VERSION = 6  # bump when the drawing changes, so a cached still is fetched again
 
 KEEP_S = 3600  # how long a player's last spot stays, faded, after they leave
 CELL_M = 50  # one square cleared from the fog
@@ -241,7 +241,7 @@ def backdrop(bgs, public, cache, region=None):
             y0, y1 = max(0, math.floor((region[1] - top) / h)), min(n, math.ceil((region[3] - top) / h))
         else:
             x0, x1, y0, y1 = 0, n, 0, n
-        canvas = Image.new("RGBA", (512 * (x1 - x0), 512 * (y1 - y0)), (7, 25, 35, 255))
+        canvas = Image.new("RGBA", (512 * (x1 - x0), 512 * (y1 - y0)), COLOURS["ink"] + (255,))
         rows, cols = set(), set()
         for y in range(y0, y1):
             for x in range(x0, x1):
@@ -262,7 +262,7 @@ def backdrop(bgs, public, cache, region=None):
     if bg:
         left, top, right, bottom = union(bgs)
         px = 2048 / (right - left)
-        canvas = Image.new("RGBA", (2048, max(1, round((bottom - top) * px))), (7, 25, 35, 255))
+        canvas = Image.new("RGBA", (2048, max(1, round((bottom - top) * px))), COLOURS["ink"] + (255,))
         for it in bgs:  # pictures only here; a tile set is the first entry or not at all
             if it["tiles"]:
                 continue
@@ -279,15 +279,34 @@ def backdrop(bgs, public, cache, region=None):
             return canvas.crop(box), region
         return canvas, [left, top, right, bottom]
     if region:
-        canvas = Image.new("RGBA", (1024, 512), (7, 25, 35, 255))
+        canvas = Image.new("RGBA", (1024, 512), COLOURS["ink"] + (255,))
         return canvas, region
-    return Image.new("RGBA", (1024, 1024), (7, 25, 35, 255)), [-2560, 2560, 2560, -2560]
+    return Image.new("RGBA", (1024, 1024), COLOURS["ink"] + (255,)), [-2560, 2560, 2560, -2560]
+
+
+# The still's colours, read from the published theme.css (the page's own tokens); these are only
+# what is used when a token is missing or unreadable.
+COLOURS = {"ink": (4, 18, 26), "rule": (28, 59, 71), "text": (233, 239, 232), "life": (255, 90, 79), "beacon": (242, 204, 96)}
+
+
+def load_colours(public):
+    try:
+        css = (Path(public) / "theme.css").read_text(encoding="utf-8")
+    except OSError:
+        return
+    for name in COLOURS:
+        m = re.search(r"--" + name + r"\s*:\s*(#[0-9a-fA-F]{3,8})\b", css)
+        if m:
+            try:
+                COLOURS[name] = ImageColor.getrgb(m.group(1))[:3]
+            except ValueError:
+                pass
 
 
 def still(page, bg, public, cache):
     """map.png: the backdrop around the action under the same fog as the page, with the lifepods
     and signals on it."""
-    world = union(bg) if bg else [-2560, 2560, 2560, -2560]
+    world = union(bg) if bg else [-10 ** 7, 10 ** 7, 10 ** 7, -10 ** 7]
     img, (left, top, right, bottom) = backdrop(bg, public, cache, focus(page, world))
     scale = STILL_W / img.width
     img = img.resize((STILL_W, round(img.height * scale)), Image.LANCZOS)
@@ -304,12 +323,20 @@ def still(page, bg, public, cache):
             px, py = at(x + page["cell_m"] / 2, y + page["cell_m"] / 2)
             hole.ellipse([px - r * 0.85, py - r * 0.85, px + r * 0.85, py + r * 0.85], fill=0)
         shroud = shroud.filter(ImageFilter.GaussianBlur(r * 0.25))
-        img = Image.composite(Image.new(img.mode, img.size, (7, 25, 35) + ((255,) if img.mode == "RGBA" else ())), img, shroud)
+        img = Image.composite(Image.new(img.mode, img.size, COLOURS["ink"] + ((255,) if img.mode == "RGBA" else ())), img, shroud)
     draw = ImageDraw.Draw(img)
-    marks = [(x, y, (255, 90, 79)) for x, y in page["lifepods"]] + [(s[0], s[1], (242, 204, 96)) for s in page.get("signals", [])]
+    if not bg:  # nothing behind the marks: a 100 m grid, so the picture reads as a chart
+        step = 100
+        for gx in range(math.ceil(min(left, right) / step) * step, int(max(left, right)) + 1, step):
+            draw.line([at(gx, top), at(gx, bottom)], fill=COLOURS["rule"], width=1)
+        for gy in range(math.ceil(min(top, bottom) / step) * step, int(max(top, bottom)) + 1, step):
+            draw.line([at(left, gy), at(right, gy)], fill=COLOURS["rule"], width=1)
+    marks = ([(x, y, COLOURS["life"]) for x, y in page["lifepods"]]
+             + [(s[0], s[1], COLOURS["beacon"]) for s in page.get("signals", [])])
+    r = max(8, img.width // 90)  # big enough to read once the picture is shown at half size or less
     for x, y, fill in marks:
         px, py = at(x, y)
-        draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=fill, outline=(234, 247, 251), width=2)
+        draw.ellipse([px - r, py - r, px + r, py + r], fill=fill, outline=COLOURS["text"], width=max(2, r // 4))
     out = io.BytesIO()
     img.convert("RGB").save(out, "PNG", optimize=True)
     return out.getvalue()
@@ -368,6 +395,8 @@ def main():
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)
+    publish_theme(data, public, Path(__file__).resolve().parent.parent / "web")
+    load_colours(public)
     write_atomic(public / "map.html", render_page(page.read_text(encoding="utf-8"), page_data, os.environ.get("MAP_PUBLIC_URL", "")))
     if chart.get("still") != sig or not (public / "map.png").exists():
         cache = data / "map-tiles"
