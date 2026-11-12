@@ -631,7 +631,7 @@ try {
   [IO.File]::WriteAllBytes($wx.Manifest + '.sig', $xrsa.SignData([IO.File]::ReadAllBytes($wx.Manifest), [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')))
   $r = Invoke-Join $wx -Extra "-Server '$(([Uri]$wx.Server).AbsoluteUri)'" -Shortcuts
   $links = @(Get-ChildItem -LiteralPath $env:MOONPOOL_SHORTCUTS -Filter '*.lnk' -Recurse)
-  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 4 -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, three shortcuts of its own and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
+  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 5 -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, four shortcuts of its own (one collects logs) and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
   Set-Content -LiteralPath (Join-Path $wx.Mods 'Foo\Scripts\lib.lua') -Value 'my edit' -NoNewline
   $r = Invoke-Join $wx -GameRunning -Extra '-Uninstall'
   Check ($r.Code -eq 2 -and $r.Out -match 'Subnautica 2 is running' -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and (Test-Path -LiteralPath (Join-Path $kit 'owned.json'))) "refused while the game runs, nothing changed (got $($r.Code)): $($r.Out.Trim())"
@@ -724,6 +724,28 @@ try {
   Check ($r.Code -eq 0 -and $r.Launched -and $r.Launched -ne 'self-update' -and (Sha $installed) -eq $kept) "an unreachable release keeps the installed copy (got: $($r.Out.Trim()))"
   Remove-Item Env:SN2_JOIN_UPDATE_URL
   $Script = $oldScript
+
+  Write-Host 'collect logs: one zip for the host, the user name taken out, no crash dumps'
+  $wl = New-World; $worlds += $wl
+  $saved = Join-Path $wl.Root 'Subnautica2\Saved'
+  New-Item -ItemType Directory -Path (Join-Path $saved 'Logs'), (Join-Path $saved 'Crashes\UECC-Windows-ABC'), (Join-Path $wl.Win64 'ue4ss') -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $saved 'Logs\Subnautica2.log') -Value "LogInit: user $env:USERNAME on $env:USERPROFILE`nLogNet: Join succeeded"
+  Set-Content -LiteralPath (Join-Path $saved 'Crashes\UECC-Windows-ABC\UEMinidump.dmp') -Value 'memory'
+  Set-Content -LiteralPath (Join-Path $wl.Win64 'ue4ss\UE4SS.log') -Value '[Lua] mod started'
+  $r = Invoke-Join $wl -Extra '-CollectLogs'
+  $zips = @(Get-ChildItem -LiteralPath $wl.Downloads -Filter 'Moonpool-logs-*.zip' -File)
+  Check ($r.Code -eq 0 -and $zips.Count -eq 1) "the zip is made (got $($r.Code), $($zips.Count) zip): $($r.Out.Trim())"
+  if ($zips.Count -eq 1) {
+    $out = Join-Path $wl.Root 'unzipped'
+    Expand-Archive -LiteralPath $zips[0].FullName -DestinationPath $out
+    $names = @(Get-ChildItem -LiteralPath $out -File -Recurse | ForEach-Object { $_.Name })
+    Check (($names -contains 'Subnautica2.log') -and ($names -contains 'UE4SS.log') -and ($names -contains 'summary.txt')) "it holds the game's and UE4SS's logs and a summary (got: $($names -join ', '))"
+    Check (-not ($names | Where-Object { $_ -like '*.dmp' })) 'a crash dump is never included'
+    $all = (Get-ChildItem -LiteralPath $out -File -Recurse | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
+    $summary = Get-Content -LiteralPath (Join-Path $out 'summary.txt') -Raw
+    Check ($summary -match 'Game build 4242 \(experimental\)' -and $summary -match 'UECC-Windows-ABC') "the summary names the build and the crash folder (got: $summary)"
+    Check ($env:USERNAME.Length -lt 3 -or $all -notmatch [regex]::Escape($env:USERNAME)) 'the Windows user name is taken out'
+  }
 } finally {
   foreach ($x in $worlds) { Remove-Item -LiteralPath $x.Root -Recurse -Force -ErrorAction SilentlyContinue }
   Remove-Item -Path 'HKCU:\Software\moonpool-tests' -Recurse -Force -ErrorAction SilentlyContinue
