@@ -207,6 +207,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 ## When something's wrong
 
 - Not sure the host is right: `bin/moonpool diag verify-fresh` checks each stage from Steam to the hosted save
+- Asking someone for help: `bin/moonpool diag bundle` saves one zip with the game's, UE4SS's and the services' logs, the status files, the last hour of `tick-report`, the Wine and sync in use, and a summary. The values of `DISCORD_WEBHOOK_URL`, `CURSEFORGE_API_KEY`, `GITHUB_TOKEN`, `VNC_PASSWORD`, `STEAM_BRANCH_PASSWORD` and `TUNNEL_TOKEN` and any Discord webhook address are taken out of the text. The Steam session, `.env`, the viewer password, the mod-signing key and saves are never read. Player names and Steam IDs in the game's logs stay, so share it only with someone you trust
 - No session: `bin/moonpool status` then `bin/moonpool logs game`
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`
