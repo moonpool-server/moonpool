@@ -945,6 +945,38 @@ EOF
   [[ $output == *"usage: moonpool diag screenshot <file.png>"* ]]
 }
 
+@test "diag bundle: logs and status in one zip, secrets and the session left out" {
+  D="$BATS_TEST_TMPDIR/data"
+  G="$D/game/Subnautica2"
+  mkdir -p "$D/logs" "$D/control" "$D/run" "$D/log-history/20261112T000000Z-1" "$D/mod-signing" "$G/Saved/Logs" "$G/Binaries/Win64/ue4ss"
+  printf 'LogNet: Join succeeded: Ada\n' >"$G/Saved/Logs/Subnautica2.log"
+  printf '[Lua] mod up\n' >"$G/Binaries/Win64/ue4ss/UE4SS.log"
+  printf 'posting to https://discord.com/api/webhooks/123/abcSECRET and key aaaaaaaaaaaa\n' >"$D/logs/discord.log"
+  printf 'old launch\n' >"$D/log-history/20261112T000000Z-1/game.log"
+  printf '{"ts":1}\n' >"$D/control/status.json"
+  printf 'viewerpass\n' >"$D/viewer-password"
+  printf 'PRIVATE KEY\n' >"$D/mod-signing/private.pem"
+  mkdir -p "$D/wine/drive_c/Program Files (x86)/Steam/config"; printf 'STEAMSESSIONTOKEN\n' >"$D/wine/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
+  run env SN2_IN_CONTAINER=1 DATA_DIR="$D" SN2_CONTROL_DIR="$D/control" SN2_RUN_DIR="$D/run" UE_LOG="$G/Saved/Logs/Subnautica2.log" \
+    CURSEFORGE_API_KEY=aaaaaaaaaaaa "$BATS_TEST_DIRNAME/../bin/moonpool" --json diag bundle "$BATS_TEST_TMPDIR/b.zip"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | jq -r .code)" = ok ]
+  names=$(python3 -c 'import sys,zipfile; print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))' "$BATS_TEST_TMPDIR/b.zip")
+  for want in game/Subnautica2.log game/UE4SS.log logs/discord.log previous-launches/20261112T000000Z-1/game.log status/status.json summary.txt status/tick-report-last-hour.txt; do
+    printf '%s\n' "$names" | grep -qx "$want"
+  done
+  all=$(python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); print("".join(z.read(n).decode() for n in z.namelist()))' "$BATS_TEST_TMPDIR/b.zip")
+  [[ $all == *"Join succeeded: Ada"* ]]
+  [[ $all != *abcSECRET* && $all != *aaaaaaaaaaaa* && $all != *viewerpass* && $all != *"PRIVATE KEY"* && $all != *STEAMSESSIONTOKEN* ]]
+  [[ $all == *"<Discord webhook removed>"* && $all == *"<CURSEFORGE_API_KEY removed>"* ]]
+}
+
+@test "diag bundle: inside the container it needs the file to write" {
+  run env SN2_IN_CONTAINER=1 "$BATS_TEST_DIRNAME/../bin/moonpool" diag bundle
+  [ "$status" -ne 0 ]
+  [[ $output == *"usage: moonpool diag bundle [file.zip]"* ]]
+}
+
 # ---- install wait: Steam's manifest flips to StateFlags 4 ------------------
 
 install_env() {
