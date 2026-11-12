@@ -35,6 +35,8 @@ param(
   [switch]$DisableMoonpoolMods,
   # Remove what Moonpool put on this PC that is still as it placed it, and say what stayed.
   [switch]$Uninstall,
+  # Put the launcher's, the game's and UE4SS's logs in one zip on the Desktop for the host.
+  [switch]$CollectLogs,
   # For tests: no Desktop or Start menu shortcuts.
   [switch]$NoShortcuts,
   # For tests: how long the game may take to appear after the launch, and a smaller unpack limit.
@@ -710,7 +712,10 @@ function Install-ServerShortcuts($Config, [string]$ServerId, [string]$Game = '')
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     $links = @{ "Subnautica 2 ($server)" = "-Server $ServerId" }
-    if ($folder -eq $folders[0]) { $links['Subnautica 2 (without Moonpool mods)'] = '-DisableMoonpoolMods' }
+    if ($folder -eq $folders[0]) {
+      $links['Subnautica 2 (without Moonpool mods)'] = '-DisableMoonpoolMods'
+      $links['Subnautica 2 (collect logs for the host)'] = '-CollectLogs'
+    }
     foreach ($name in $links.Keys) {
       $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder "$name.lnk"))
       $run = Get-HiddenRun
@@ -1287,6 +1292,75 @@ function Invoke-Uninstall {
   if (-not $env:SN2_JOIN_NO_DIALOG) { Show-Notice 'Moonpool is uninstalled' $text }
 }
 
+# One zip a player can send the host when something goes wrong: the launcher's log, the game's and
+# UE4SS's logs, what Moonpool placed, the names of crash folders (never the dumps, which hold memory)
+# and the versions. The Windows user and PC names are taken out. Nothing is uploaded: it lands on the
+# Desktop (or -Downloads) and Explorer shows it.
+function Invoke-CollectLogs {
+  $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
+  $tmp = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-logs-' + [guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Path $tmp | Out-Null
+  $found = New-Object System.Collections.Generic.List[string]
+  $scrub = {
+    param([string]$Text)
+    if ($env:USERPROFILE) { $Text = $Text.Replace($env:USERPROFILE, '%USERPROFILE%') }
+    foreach ($n in @($env:USERNAME, $env:COMPUTERNAME)) {
+      if ($n -and $n.Length -ge 3) { $Text = [regex]::Replace($Text, '(?i)\b' + [regex]::Escape($n) + '\b', '<removed>') }
+    }
+    $Text
+  }
+  $addTail = {
+    param([string]$Path, [string]$Name)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { $found.Add("$Name : not found"); return }
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $keep = [Math]::Min($bytes.Length, 2MB)  # the end of a long log is where the trouble is
+    $text = [Text.Encoding]::UTF8.GetString($bytes, $bytes.Length - $keep, $keep)
+    [IO.File]::WriteAllText((Join-Path $tmp $Name), (& $scrub $text), [Text.Encoding]::UTF8)
+    $found.Add("$Name : " + (& $scrub $Path) + ", " + $bytes.Length + " bytes" + $(if ($keep -lt $bytes.Length) { ', last 2 MB kept' } else { '' }))
+  }
+  & $addTail (Join-Path $KitHome 'moonpool.log') 'moonpool.log'
+  & $addTail (Join-Path $KitHome 'moonpool.log.prev') 'moonpool.log.prev'
+  & $addTail (Join-Path $KitHome 'owned.json') 'moonpool-placed-files.json'
+  $saved = Join-Path $env:LOCALAPPDATA 'Subnautica2\Saved'
+  & $addTail (Join-Path $saved 'Logs\Subnautica2.log') 'Subnautica2.log'
+  $game = $null; $build = 'unknown'
+  try {
+    $root = $SteamRoot; if (-not $root) { $root = Get-DefaultSteamRoot }
+    $game = Find-GameFolder $root $DefaultAppId
+    $acf = Find-AppManifest $root $DefaultAppId
+    if ($acf) {
+      $branch = Get-AcfValue $acf 'BetaKey'; if (-not $branch) { $branch = 'public' }
+      $build = (Get-AcfValue $acf 'buildid') + " ($branch)"
+    }
+  } catch { $found.Add('game folder : ' + $_.Exception.Message) }
+  if ($game) {
+    $ue4ss = Join-Path $game 'Subnautica2\Binaries\Win64\ue4ss'
+    & $addTail (Join-Path $ue4ss 'UE4SS.log') 'UE4SS.log'
+    & $addTail (Join-Path $ue4ss 'UE4SS-settings.ini') 'UE4SS-settings.ini'
+  }
+  $crashes = @(Get-ChildItem -LiteralPath (Join-Path $saved 'Crashes') -Directory -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 20 | ForEach-Object { $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm') + '  ' + $_.Name })
+  $lastFail = @(Get-Content -LiteralPath (Join-Path $KitHome 'moonpool.log') -ErrorAction SilentlyContinue | Where-Object { $_ -match ' failed: ' } | Select-Object -Last 1)
+  $summary = @(
+    "Moonpool logs, $((Get-Date).ToString('yyyy-MM-dd HH:mm'))",
+    "Launcher build $LauncherBuild, PowerShell $($PSVersionTable.PSVersion), Windows $([Environment]::OSVersion.Version)",
+    "Game build $build",
+    'Last failure: ' + $(if ($lastFail.Count) { & $scrub ([string]$lastFail[0]) } else { 'none in moonpool.log' }),
+    '', 'Files:') + @($found | ForEach-Object { "  $_" }) + @('', "Crash folders (newest first, names only): $($crashes.Count)") + @($crashes | ForEach-Object { "  $_" })
+  [IO.File]::WriteAllLines((Join-Path $tmp 'summary.txt'), [string[]]$summary, [Text.Encoding]::UTF8)
+  $outDir = $Downloads; if (-not $outDir) { $outDir = [Environment]::GetFolderPath('Desktop') }
+  $zip = Join-Path $outDir "Moonpool-logs-$stamp.zip"
+  try {
+    Compress-Archive -Path (Join-Path $tmp '*') -DestinationPath $zip -Force
+  } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+  Write-Log "collected logs into $zip"
+  Write-Host "moonpool: logs collected in $zip"
+  if (-not $env:SN2_JOIN_NO_DIALOG -and [Environment]::UserInteractive) {
+    try { Set-Clipboard -Value ($summary[0..3] -join "`r`n") } catch { }
+    Start-Process explorer.exe "/select,`"$zip`""
+  }
+}
+
 function Invoke-Join {
   if ($Link) {
     if ($BoundCount -ne 1) { Fail 'a join link comes alone; this one carried other options and was refused' }
@@ -1294,6 +1368,7 @@ function Invoke-Join {
     $script:Server = ($Link -replace '^moonpool:', '')
   }
   if ($Uninstall) { Invoke-Uninstall; return }
+  if ($CollectLogs) { Invoke-CollectLogs; return }
   if ($DisableMoonpoolMods) {
     Enter-Lock
     $left = @(Switch-MoonpoolMods $false)
@@ -1607,7 +1682,7 @@ try {
   if ($code -ne 3 -and -not $script:FirstWindowShown -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     $heading = "Couldn't start with mods"
     if ($Uninstall) { $heading = "Couldn't uninstall Moonpool" } elseif ($DisableMoonpoolMods) { $heading = "Couldn't turn Moonpool's mods off" }
-    Show-Notice $heading ($_.Exception.Message + "`n`nThe details are in %LOCALAPPDATA%\moonpool\moonpool.log; send that file to the server's host.")
+    Show-Notice $heading ($_.Exception.Message + "`n`nTo send the host what they need, run the 'Subnautica 2 (collect logs for the host)' shortcut in the Start menu: it puts one zip on your Desktop.")
   }
   exit $code
 } finally {
