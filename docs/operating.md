@@ -153,6 +153,8 @@ A pak mod the host should run goes in `paks-local/` in the data volume as its `.
 
 A UE4SS mod the host should run goes in `ue4ss-local/Mods/<name>/` in the data volume with an empty `enabled.txt` beside its `Scripts` folder. Recreate the host to load it. To remove one delete it from there and from `ue4ss/Mods` in the game folder. Most mods we read act on the local player, so on a host they do nothing for players and belong in `plugins.yaml` instead. A mod that also changes something on players' PCs belongs in `plugins.yaml` too. Mods are other people's code running with the host's rights and Steam session so only use ones you trust
 
+Players' loader needs layout files on some game builds, and the UE4SS release doesn't carry them: without them it crashes the game about ten seconds after the start. Put `MemberVariableLayout.ini` and `VTableLayout.ini` that work on a player's PC for the current build in `ue4ss-client/` in the data volume. The publisher then serves the loader as the pinned release with those two files added, under its own name and sha256, and the launcher installs them with it. A player who already has different files at those paths is asked before they are replaced. These are a player's files, not the host's: the host's own go in `ue4ss-local/`
+
 ## Discord card
 
 1. Make a channel for the server. In its permissions, let `@everyone` read and add reactions but not send messages.
