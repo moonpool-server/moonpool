@@ -12,7 +12,7 @@ Usage: moonpool-instance add <slug> [public|experimental]
        moonpool-instance list
        moonpool-instance rm <slug> [--volumes --volumes]
 
-Repeat --volumes twice to permanently delete that world's Docker volume.
+Repeat --volumes twice to permanently delete that world's Docker volumes.
 EOF
 }
 
@@ -106,7 +106,7 @@ remove_instance() {
   if [ "$volume_flags" -eq 2 ]; then compose "$slug" down --volumes
   else compose "$slug" down; fi
   rm -rf -- "${INSTANCES:?}/$slug"
-  printf "Removed %s%s.\n" "$slug" "$([ "$volume_flags" -eq 2 ] && echo ' and its volume' || echo '; its volume was kept')"
+  printf "Removed %s%s.\n" "$slug" "$([ "$volume_flags" -eq 2 ] && echo ' and its volumes' || echo '; its volumes were kept')"
 }
 
 case ${1:-} in

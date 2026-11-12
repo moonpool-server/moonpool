@@ -9,7 +9,9 @@ name: "${COMPOSE_PROJECT_NAME:-moonpool}"
 services:
   # One-shot, before anything else: make the volume writable by the image's
   # "container" user and create the backup staging folder up front, so the
-  # backup service never starts against a missing folder.
+  # backup service never starts against a missing folder. A mod-signing key
+  # still in the data volume moves to its own volume once: copied, compared,
+  # and only then deleted; a failed move stops the host from starting.
   sn2-volume-init:
     image: "${SN2_IMAGE:-moonpool:panel}"
     pull_policy: never
@@ -17,12 +19,23 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        mkdir -p /home/container/backup-staging &&
-        chown container:container /home/container /home/container/backup-staging
+        mkdir -p /home/container/backup-staging /home/container/mod-signing &&
+        chown container:container /home/container /home/container/backup-staging &&
+        if [ -s /home/container/mod-signing/private.pem ] && [ ! -e /signing/private.pem ]; then
+        cp -p /home/container/mod-signing/public.pem /signing/public.pem &&
+        cp -p /home/container/mod-signing/private.pem /signing/private.pem.new &&
+        cmp -s /home/container/mod-signing/private.pem /signing/private.pem.new &&
+        mv /signing/private.pem.new /signing/private.pem &&
+        rm -f /home/container/mod-signing/private.pem /home/container/mod-signing/public.pem &&
+        echo 'moved the mod-signing key out of the data volume' ||
+        { echo 'could not move the mod-signing key to its own volume;
+        it is still in the data volume' >&2; exit 1; }; fi &&
+        chown -R container:container /signing && chmod 700 /signing
     restart: "no"
     network_mode: none
     volumes:
       - sn2-data:/home/container
+      - sn2-signing:/signing
 
   sn2:
     build:
@@ -97,10 +110,14 @@ services:
       # The join page and signed mod files; unlike noVNC this cannot control Steam.
       - "${MODS_BIND:-0.0.0.0}:${SN2_MODS_PORT:-8081}:${SN2_MODS_PORT:-8081}/tcp"
     volumes:
-      # The one persistent volume: Wine prefix, Windows Steam client and its
-      # session, the game as Steam downloaded it, UE4SS, logs, control queue.
-      # A native Docker volume on purpose; never bind-mount a Steam library.
+      # Wine prefix, Windows Steam client and its session, the game as Steam
+      # downloaded it, UE4SS, logs, control queue. A native Docker volume on
+      # purpose; never bind-mount a Steam library.
       - sn2-data:/home/container
+      # The key that signs the mod list, apart so the game volume can be wiped
+      # or rebuilt without players' launchers seeing a new server. Every process
+      # in this container, mods the host runs included, can still read it.
+      - sn2-signing:/home/container/mod-signing
     depends_on:
       sn2-volume-init:
         condition: service_completed_successfully
@@ -162,3 +179,4 @@ services:
 
 volumes:
   sn2-data:
+  sn2-signing:

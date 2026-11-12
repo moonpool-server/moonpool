@@ -61,14 +61,25 @@ def test_each_player_shows_where_they_were_after_the_delay_and_never_now() -> No
         alice = {"name": "Alice", "x": 123456, "y": -7000, "depth_m": 90}
         published = run(tmp, 1000, [alice, {"name": "Host", "x": 1, "y": 1}])
         assert json.loads(published.read_text())["divers"] == []  # now is never published
-        moved = json.loads(run(tmp, 1900, [dict(alice, x=500000)]).read_text())
+        moved = json.loads(run(tmp, 1900, [dict(alice, x=500000)], MAP_PLAYER_NAMES="true").read_text())
         assert moved["divers"] == [{"name": "Alice", "x": 1235, "y": -70, "depth": 90, "online": True, "left_minutes": None}]
         assert moved["explored"] == [[1200, -100]]  # her first square clears from the fog; the host never does
         assert moved["lifepods"] == [[1000, 2000]] and "bases" not in moved  # a base actor's position is not a base
-        left = json.loads(run(tmp, 1900 + 1200, [], SHOW_PLAYER_NAMES="false").read_text())
+        left = json.loads(run(tmp, 1900 + 1200, [], SHOW_PLAYER_NAMES="false", MAP_PLAYER_NAMES="true").read_text())
         assert [(p["name"], p["x"], p["online"], p["left_minutes"]) for p in left["divers"]] == [("Player 1", 5000, False, 20)]
         assert "Alice" not in published.read_text()
         assert json.loads(run(tmp, 1900 + 900 + 3600 + 60, []).read_text())["divers"] == []  # an hour after they left
+
+
+def test_the_map_numbers_players_unless_map_player_names_is_true() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        bob = {"name": "Bob", "x": 1000, "y": 1000, "depth_m": 5}
+        run(tmp, 1000, [bob])
+        shown = run(tmp, 1900, [bob]).read_text()
+        assert [p["name"] for p in json.loads(shown)["divers"]] == ["Player 1"] and "Bob" not in shown
+        named = json.loads(run(tmp, 1960, [bob], MAP_PLAYER_NAMES="true").read_text())
+        assert [p["name"] for p in named["divers"]] == ["Bob"]
 
 
 def test_signals_show_after_the_delay_and_can_be_kept_off() -> None:

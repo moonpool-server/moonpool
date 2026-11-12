@@ -4,7 +4,8 @@
 visited (the rest stays under fog), the lifepods and the PDA signals everyone can see, all from
 the game's own positions. A base is not drawn from the game's base actor, whose position can be far
 from the rooms; a signal named at the base marks it. Nothing is published sooner than the delay; MAP_DELAY_MINUTES=0 publishes the last recorded position. A player
-who left stays faded for an hour. Names follow SHOW_PLAYER_NAMES; one chart per branch and save.
+who left stays faded for an hour. Players are numbered ("Player 1") unless MAP_PLAYER_NAMES=true, and
+always with SHOW_PLAYER_NAMES=false; one chart per branch and save.
 A still of the map (map.png) goes beside the page for link previews and the card.
 Off (WEB_MAP not true) withdraws the published files and keeps the chart.
 """
@@ -349,8 +350,8 @@ def main():
     chart = chart if isinstance(chart, dict) else {}
     record(chart, status, os.environ.get("HOST_NAME", "SN2 Host"), now)
     public.mkdir(parents=True, exist_ok=True)
-    page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now,
-                          os.environ.get("SHOW_PLAYER_NAMES", "true") == "true")
+    names = os.environ.get("MAP_PLAYER_NAMES", "false") == "true" and os.environ.get("SHOW_PLAYER_NAMES", "true") == "true"
+    page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now, names)
     if os.environ.get("MAP_PLAYERS", "true") != "true":  # no dots and no trace of where anyone went
         page_data["divers"], page_data["explored"] = [], None
     if os.environ.get("MAP_SIGNALS", "true") != "true":
