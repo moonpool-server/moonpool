@@ -73,6 +73,30 @@ make_zip() { # out.zip version path...
   [ "$(jq -r 'has("launcher")' "$m")" = false ]
 }
 
+@test "layout files in ue4ss-client go to players inside the loader, beside the release's own files" {
+  local_mod_yaml
+  mkdir -p "$DATA_DIR/ue4ss" "$DATA_DIR/ue4ss-client" "$BATS_TEST_TMPDIR/rel/ue4ss"
+  printf 'proxy' >"$BATS_TEST_TMPDIR/rel/dwmapi.dll"; printf 'loader' >"$BATS_TEST_TMPDIR/rel/ue4ss/UE4SS.dll"
+  printf 'release layout' >"$BATS_TEST_TMPDIR/rel/ue4ss/VTableLayout.ini"
+  (cd "$BATS_TEST_TMPDIR/rel" && zip -q -r "$DATA_DIR/ue4ss/UE4SS_test.zip" dwmapi.dll ue4ss)
+  printf 'member offsets\n' >"$DATA_DIR/ue4ss-client/MemberVariableLayout.ini"
+  printf 'vtable offsets\n' >"$DATA_DIR/ue4ss-client/VTableLayout.ini"
+  sha=$(sha256sum "$DATA_DIR/ue4ss/UE4SS_test.zip" | cut -d' ' -f1)
+  run env UE4SS_ASSET=UE4SS_test.zip UE4SS_RELEASE_SHA256="$sha" "$ROOT/scripts/mod-service.sh" publish
+  [ "$status" -eq 0 ]
+  m="$DATA_DIR/public/mods.json"
+  asset=$(jq -r '.ue4ss.asset' "$m")
+  [[ "$asset" == UE4SS_test-layout-*.zip ]]; [ "$(jq -r '.ue4ss.url' "$m")" = "files/$asset" ]
+  [ "$(jq -r '.ue4ss.sha256' "$m")" = "$(sha256sum "$DATA_DIR/public/files/$asset" | cut -d' ' -f1)" ]
+  unzip -o -q "$DATA_DIR/public/files/$asset" -d "$BATS_TEST_TMPDIR/out"
+  [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/MemberVariableLayout.ini")" = 'member offsets' ]
+  [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/VTableLayout.ini")" = 'vtable offsets' ]
+  [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/UE4SS.dll")" = loader ]; [ "$(cat "$BATS_TEST_TMPDIR/out/dwmapi.dll")" = proxy ]
+  # The same files publish the same loader; the pinned release itself is never changed.
+  run env UE4SS_ASSET=UE4SS_test.zip UE4SS_RELEASE_SHA256="$sha" "$ROOT/scripts/mod-service.sh" publish
+  [ "$(jq -r '.ue4ss.asset' "$m")" = "$asset" ]; [ "$(sha256sum "$DATA_DIR/ue4ss/UE4SS_test.zip" | cut -d' ' -f1)" = "$sha" ]
+}
+
 @test "an entry for the host side is refused and names where a host mod goes" {
   cat >"$SN2_CONTROL_DIR/plugins.yaml" <<'EOF'
 plugins:

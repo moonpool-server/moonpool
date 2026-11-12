@@ -496,7 +496,32 @@ def ue4ss_block(args, mods, public):
         if not served.is_file() or sha256(served) != digest:
             shutil.copyfile(cached, served)
         url = f"files/{asset}"
+        asset, digest, url = with_client_layout(Path(args.data_dir) / "ue4ss-client", cached, files, asset, digest, url)
     return {"channel": channel, "url": url, "asset": asset, "sha256": digest, "allowed_builds": allowed}
+
+
+CLIENT_LAYOUT_FILES = ("MemberVariableLayout.ini", "VTableLayout.ini")
+
+
+def with_client_layout(folder, cached, files, asset, digest, url):
+    """The loader with the layout files players need, when the host keeps them in ue4ss-client/.
+    Some game builds crash the loader at start without them, and the release does not carry them.
+    The pinned release's own files go in unchanged beside them; the result has its own name and
+    sha256, which the launcher checks like any loader. Without the folder, the release as it is."""
+    extra = [folder / n for n in CLIENT_LAYOUT_FILES if (folder / n).is_file()]
+    if not extra:
+        return asset, digest, url
+    tag = hashlib.sha256(digest.encode() + b"".join(f.name.encode() + f.read_bytes() for f in extra)).hexdigest()[:12]
+    name = f"{Path(asset).stem}-layout-{tag}.zip"
+    served = files / name
+    if not served.is_file():
+        with zipfile.ZipFile(cached) as release:
+            members = [(i.filename, release.read(i)) for i in release.infolist() if not i.is_dir()]
+        base = "ue4ss/" if any(n.startswith("ue4ss/") for n, _ in members) else ""
+        added = {base + f.name: f.read_bytes() for f in extra}
+        members = sorted([(n, d) for n, d in members if n not in added] + list(added.items()))
+        put(served, zip_bytes(members))
+    return name, sha256(served), f"files/{name}"
 
 
 def signing_key(data):
