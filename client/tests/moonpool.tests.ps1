@@ -219,6 +219,21 @@ try {
   Check ($r.Code -eq 0 -and $r.Out -match 'updating Foo 1\.0 -> 1\.1') "update named (got: $($r.Out.Trim()))"
   Check ((Text (Join-Path $w.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v2') 'new content in place'
 
+  Write-Host "the loader's settings, still as Moonpool placed them, take the server's new copy; edited ones stay"
+  $settings = Join-Path $w.Win64 'ue4ss\UE4SS-settings.ini'
+  $loaderSet = @('dwmapi.dll', 'ue4ss\UE4SS.dll', 'ue4ss\UE4SS-settings.ini', 'ue4ss\Mods\mods.txt')
+  $mods = @((Mod $w 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '1.1'), (Mod $w 'Bar' 'Bar.zip' 'Bar' '' $false '2.0'))
+  New-Zip (Join-Path $w.Server 'ue4ss.zip') $loaderSet '2'; Write-Manifest $w $mods
+  $r = Invoke-Join $w
+  Check ($r.Code -eq 0 -and (Text $settings) -eq 'ue4ss\UE4SS-settings.ini v2') "an untouched settings file follows the server (got: $(Text $settings))"
+  Set-Content -LiteralPath $settings -Value 'my tweak' -NoNewline
+  New-Zip (Join-Path $w.Server 'ue4ss.zip') $loaderSet '3'; Write-Manifest $w $mods
+  $r = Invoke-Join $w
+  Check ($r.Code -eq 0 -and (Text $settings) -eq 'my tweak' -and (Text (Join-Path $w.Win64 'ue4ss\UE4SS.dll')) -eq 'ue4ss\UE4SS.dll v3') "an edited settings file stays the player's while the loader updates (got: $(Text $settings))"
+  Remove-Item -LiteralPath $settings   # back to a launcher-placed copy for the tests after this one
+  New-Zip (Join-Path $w.Server 'ue4ss.zip') $loaderSet; Write-Manifest $w $mods
+  [void](Invoke-Join $w)
+
   Write-Host 'an optional mod can be left out, the choice is remembered, and taken back'
   $r = Invoke-Join $w -Extra "-Skip 'Bar'"
   Check ($r.Code -eq 0 -and $r.Out -match 'removing Bar') "skip removes Bar (got: $($r.Out.Trim()))"

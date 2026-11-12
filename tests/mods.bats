@@ -81,6 +81,7 @@ make_zip() { # out.zip version path...
   (cd "$BATS_TEST_TMPDIR/rel" && zip -q -r "$DATA_DIR/ue4ss/UE4SS_test.zip" dwmapi.dll ue4ss)
   printf 'member offsets\n' >"$DATA_DIR/ue4ss-client/MemberVariableLayout.ini"
   printf 'vtable offsets\n' >"$DATA_DIR/ue4ss-client/VTableLayout.ini"
+  printf 'MajorVersion = 5\n' >"$DATA_DIR/ue4ss-client/UE4SS-settings.ini"
   sha=$(sha256sum "$DATA_DIR/ue4ss/UE4SS_test.zip" | cut -d' ' -f1)
   run env UE4SS_ASSET=UE4SS_test.zip UE4SS_RELEASE_SHA256="$sha" "$ROOT/scripts/mod-service.sh" publish
   [ "$status" -eq 0 ]
@@ -91,6 +92,7 @@ make_zip() { # out.zip version path...
   unzip -o -q "$DATA_DIR/public/files/$asset" -d "$BATS_TEST_TMPDIR/out"
   [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/MemberVariableLayout.ini")" = 'member offsets' ]
   [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/VTableLayout.ini")" = 'vtable offsets' ]
+  [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/UE4SS-settings.ini")" = 'MajorVersion = 5' ]
   [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/UE4SS.dll")" = loader ]; [ "$(cat "$BATS_TEST_TMPDIR/out/dwmapi.dll")" = proxy ]
   # The same files publish the same loader; the pinned release itself is never changed.
   run env UE4SS_ASSET=UE4SS_test.zip UE4SS_RELEASE_SHA256="$sha" "$ROOT/scripts/mod-service.sh" publish

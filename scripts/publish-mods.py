@@ -500,12 +500,13 @@ def ue4ss_block(args, mods, public):
     return {"channel": channel, "url": url, "asset": asset, "sha256": digest, "allowed_builds": allowed}
 
 
-CLIENT_LAYOUT_FILES = ("MemberVariableLayout.ini", "VTableLayout.ini")
+CLIENT_LAYOUT_FILES = ("MemberVariableLayout.ini", "VTableLayout.ini", "UE4SS-settings.ini")
 
 
 def with_client_layout(folder, cached, files, asset, digest, url):
-    """The loader with the layout files players need, when the host keeps them in ue4ss-client/.
-    Some game builds crash the loader at start without them, and the release does not carry them.
+    """The loader with the files players need, when the host keeps them in ue4ss-client/: the two
+    layout files, which the release does not carry, and UE4SS-settings.ini, whose defaults guess the
+    engine version and build type; on some game builds both crash the game at start.
     The pinned release's own files go in unchanged beside them; the result has its own name and
     sha256, which the launcher checks like any loader. Without the folder, the release as it is."""
     extra = [folder / n for n in CLIENT_LAYOUT_FILES if (folder / n).is_file()]
