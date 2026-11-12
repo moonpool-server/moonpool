@@ -22,6 +22,7 @@
 !scripts/steam-install-confirm.sh
 !scripts/verify-fresh.sh
 !scripts/world-stats.py
+!scripts/tick-report.py
 !scripts/steamfile.py
 !scripts/sn2files.py
 !scripts/friend-accept.py
