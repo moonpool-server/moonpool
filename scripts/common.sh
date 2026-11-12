@@ -8,16 +8,16 @@ export WINEPREFIX="${WINEPREFIX:-$DATA_DIR/wine}"
 export WINEARCH=win64
 export WINEDEBUG="${WINEDEBUG:--all}"
 export DISPLAY="${DISPLAY:-:99}"
-# The Wine the image was built with (Dockerfile WINE_RUNTIME). Proton's Wine can skip wineserver for
+# The Wine the image was built with (Dockerfile WINE_RUNTIME). wine-tkg's fsync build can skip wineserver for
 # waits with fsync (futex_waitv, Linux 5.16+) or esync (eventfds; needs a high open-file limit).
 # Every Wine process and wineserver must agree, which is why it is set here, where all of them start.
 WINE_RUNTIME="$(cat /opt/sn2/wine-runtime 2>/dev/null || echo winehq)"
 WINE_SYNC="${WINE_SYNC:-auto}"
 case "$WINE_RUNTIME:$WINE_SYNC" in
-  proton:auto|proton:fsync) export WINEFSYNC=1; unset WINEESYNC ;;
-  proton:esync) export WINEESYNC=1; unset WINEFSYNC; ulimit -Sn "$(ulimit -Hn)" 2>/dev/null || true ;;
+  tkg:auto|tkg:fsync) export WINEFSYNC=1; unset WINEESYNC ;;
+  tkg:esync) export WINEESYNC=1; unset WINEFSYNC; ulimit -Sn "$(ulimit -Hn)" 2>/dev/null || true ;;
   *:auto|*:off) unset WINEFSYNC WINEESYNC ;;
-  *) printf 'WINE_SYNC=%s needs the proton Wine runtime (this image: %s); using none
+  *) printf 'WINE_SYNC=%s needs the tkg Wine runtime (this image: %s); using none
 ' "$WINE_SYNC" "$WINE_RUNTIME" >&2
      unset WINEFSYNC WINEESYNC ;;
 esac
