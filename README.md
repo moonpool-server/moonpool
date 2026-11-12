@@ -6,9 +6,9 @@ Moonpool runs the real game under Wine in Docker, on a spare PC or a server. It 
 
 Moonpool is unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve. This repo contains no game files, and nothing here is for sale.
 
-![The Discord card: who is on, the codes to add, the map and a Join button](docs/images/discord-card.png)
+![The join page of a demo server: Play with mods, the server's mods with their summaries, and a preview of the map](docs/images/join-page.png)
 
-![The join page: Play with mods, then the server's mods, each with its summary and its GitHub stars or CurseForge downloads where those sites have them](docs/images/join-page.png)
+![The map page of the same demo: two players shown where they were 15 minutes ago, the lifepod and two PDA signals, fog over the places nobody has visited](docs/images/map.png)
 
 ## For your friends
 
@@ -61,11 +61,9 @@ cp plugins.example.yaml plugins.yaml   # edit it with any editor
 bin/moonpool mods publish plugins.yaml
 ```
 
-The join page then offers Play with mods. Players install the Moonpool launcher once, from [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) in this repo's releases; the join page links it. When they press Play with mods, the launcher lists any new or changed mods with the site each one downloads from, and asks before installing them. It then shows its progress, keeps them on the exact files you published, and starts the game through Steam.
+The join page then offers Play with mods. Players install the Moonpool launcher once, from [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd) in this repo's releases; the join page links it. When they press Play with mods and the list has something they haven't accepted, the launcher shows the mods with the site each one downloads from, marks the new and changed ones, and asks before installing them. It then shows its progress, keeps them on the exact files you published, and starts the game through Steam.
 
-![The launcher asking to install Midnight Zone's mods, each with the site it downloads from](docs/images/launcher-install.png)
-
-![The launcher downloading a mod, with its progress bar and a Cancel button](docs/images/launcher-progress.png)
+![The launcher asking which of the demo server's mods to install, each with the site it downloads from, and the UE4SS loader they need](docs/images/launcher-install.png)
 
 The mods are on only while the game the launcher started is running, so a normal Steam launch loads none of them. When the game closes, the launcher turns them off again, and says so if a file was still in use. If the launcher is killed mid-game, they stay on until its next run or until the player uses the "Subnautica 2 (without Moonpool mods)" shortcut. The player's own mods are left alone, with two exceptions: a `UE4SS_Signatures` folder the server didn't send is moved aside while Moonpool's mods are on and put back after, and a loader the player installed another way is replaced only after asking, with a copy kept in `%LOCALAPPDATA%\Moonpool-replaced`. Xbox and Game Pass players join without mods.
 
@@ -121,7 +119,7 @@ The maintainer tests by hand, with real players joining over the internet, on Do
 |---|---|---|
 | public | `25400633` | Hosted; real players joined over the internet |
 | experimental | `26283380` | Hosted; real players joined over the internet. Joining with mods through the launcher and moving the world between two hosts also worked, in short sessions |
-| experimental | `26496980` (seen 9 November 2026) | Hosted with UE4SS 1190 and two layout files in `ue4ss-local`; the guide's [Updates](docs/operating.md#updates) section says which. No player has joined it yet |
+| experimental | `26496980` (seen 9 November 2026) | Hosted with UE4SS 1190 and two layout files in `ue4ss-local`; the guide's [Updates](docs/operating.md#updates) section says which. Real players joined over the internet with mods through the launcher |
 
 A game update can stop hosting: the newest build above hosted only once it had those two files. The host reports it when that happens, and the [guide](docs/operating.md) covers what to do. Treat a newer build as unproven until a host comes up on it. The table records only the maintainer's runs, so if you try a build, an issue saying what happened is the most useful thing you can send.
 
