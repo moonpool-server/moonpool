@@ -6,6 +6,7 @@ local status = require('status')
 local host_core = require('sn2_host_core')
 local controller_named = host_core.controller_named
 local idle = require('idle')
+local save_policy = require('save_policy')
 local access = require('access')
 local voice_range = require('voice_range')
 local notify = require('notify')
@@ -29,7 +30,7 @@ local DEFAULTS = {
     save_slot = 'Slot1',
     max_players = 4,
   },
-  enabled_commands = { 'status', 'players', 'kick', 'slots', 'friend_code' },
+  enabled_commands = { 'status', 'players', 'kick', 'save', 'slots', 'friend_code' },
 }
 
 local read_file = host_core.read_file
@@ -769,6 +770,50 @@ local function idle_tick(st)
   end
 end
 
+-- Saving (save_policy.lua): with SAVE_EVERY_MINUTES set, the game's own 2-minute autosave is
+-- switched off and the host saves every N minutes and once after each batch of leavers.
+local SAVES = save_policy.new({ every_s = idle.seconds(os.getenv('SN2_SAVE_EVERY_MINUTES') or '10', 60) })
+local GAME_LOG = os.getenv('SN2_GAME_LOG_WIN')
+local game_log_pos = nil
+-- autosave_completed lines the game log gained since the last call; complete lines only, and none
+-- from before this mod started reading. A new, shorter log (a game restart) is read from its start.
+local function new_autosaves()
+  if not GAME_LOG then return 0 end
+  local f = io.open(GAME_LOG, 'rb')
+  if not f then return 0 end
+  local size = f:seek('end') or 0
+  if game_log_pos == nil then game_log_pos = size; f:close(); return 0 end
+  if size < game_log_pos then game_log_pos = 0 end
+  local n = 0
+  if size > game_log_pos then
+    local from = math.max(game_log_pos, size - 1048576)
+    f:seek('set', from)
+    local complete = (f:read(size - from) or ''):match('^(.*\n)') or ''
+    for _ in complete:gmatch('autosave_completed') do n = n + 1 end
+    game_log_pos = from + #complete
+  end
+  f:close()
+  return n
+end
+local function save_tick(st)
+  local names = {}
+  for _, p in ipairs(st.players or {}) do
+    if p.name and p.name ~= st.host_name then names[#names + 1] = p.name end
+  end
+  for _, act in ipairs(save_policy.tick(SAVES, os.time(), st.state == 'up', names, new_autosaves())) do
+    if act == 'autosave_off' then
+      local host = controller_named(st.host_name)
+      if host then
+        log('saves: the game autosaved; ToggleAutoSave as the host, the host saves on its own schedule')
+        run_as(host, 'ToggleAutoSave', st.host_name .. ' (autosave off)')
+      end
+    elseif act == 'save' then
+      local ok, _, err = handlers.save()
+      if not ok then log('saves: scheduled save not requested: ' .. tostring(err)) end
+    end
+  end
+end
+
 -- The replay ledger survives a game restart; 1024 nonces outlast the 120 s acceptance window.
 local NONCE_LEDGER = cpath('receipts', 'nonces.txt')
 local remembered = {}
@@ -1266,6 +1311,7 @@ LoopAsync(STATUS_MS, function()
         weather = wx, weather_types = wxt,
       }, to_str)
       idle_tick(st)
+      save_tick(st)
       st.clock_frozen = IDLE.frozen
       if HOLD.held then st.join_hold = hold.NOTICE end
       if state.friend_code then st.sonar_code = state.friend_code end

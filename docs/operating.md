@@ -91,6 +91,8 @@ bin/moonpool --instance family status
 
 ## Backups
 
+The game saves the world every 2 minutes by itself, and each save stalls the server for a second or more, which players feel as rubber-banding. By default the host switches that autosave off once the world is up and saves it itself every 10 minutes (`SAVE_EVERY_MINUTES`) and once after each batch of players leaves. It sends the game's `ToggleAutoSave` only right after it has seen the game autosave, so the switch is never flipped the wrong way, and again if the game keeps autosaving. A crash can lose up to that many minutes of play. `SAVE_EVERY_MINUTES=0` leaves the game's own autosave alone
+
 Saves are copied every 30 minutes and kept 7 days in `./backups`. For remote storage or encryption copy `backup.env.example` to `backup.env`. Archives hold the saves and the game's own Steam userdata folder and never the account's sign-in, which stays in the volume
 
 ```sh
