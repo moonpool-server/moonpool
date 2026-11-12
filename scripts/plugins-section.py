@@ -56,6 +56,11 @@ def stats_of(s: object) -> dict | None:
     return out
 
 
+def fetched_summary(s: object) -> str:
+    """The mod's own one-line description from GitHub or CurseForge, for an entry the admin gave none."""
+    return str(s.get("summary") or "") if isinstance(s, dict) else ""
+
+
 def read_manifest(public: str) -> dict:
     if not public:
         return {}
@@ -105,7 +110,7 @@ def render(plugins: list, manifest: dict, address: str = "", stats: dict | None 
             notes.append("needs one download from its page")
         return {"name": name, "link": link if link.lower().startswith(("https://", "http://")) else "",
                 "version": str(p.get("version") or pub.get("version") or ""), "notes": notes,
-                "summary": str(p.get("summary") or pub.get("summary") or ""), "stats": stats_of(stats.get(name))}
+                "summary": str(p.get("summary") or pub.get("summary") or fetched_summary(stats.get(name))), "stats": stats_of(stats.get(name))}
 
     env = SandboxedEnvironment(loader=FileSystemLoader(Path(__file__).resolve().parent.parent / "web"), autoescape=True,
                                undefined=StrictUndefined)

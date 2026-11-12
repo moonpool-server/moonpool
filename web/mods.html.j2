@@ -1,7 +1,8 @@
 {#- The join page's mod section (scripts/plugins-section.py). A page cannot tell whether the moonpool: link
     has a handler, so a click says at once what should happen, and if the page still has focus a few seconds
     later, what to do when it didn't. Focus leaving pauses that wait (a window or prompt opened); coming back
-    with nothing shown yet, such as after dismissing the browser's prompt, starts it again. -#}
+    with nothing shown yet, such as after dismissing the browser's prompt, starts it again. A second click within
+    two seconds of the first does nothing, so a double click does not start the launcher twice. -#}
 {%- if launcher -%}
 <a class="button" id="playmods" href="moonpool:{{ address }}">Play with mods</a>
 {#- -#}
@@ -21,7 +22,7 @@
 {#- -#}
 <p class="fine">Play with mods installs or updates this server's mods and turns them on only until Subnautica 2 closes; normal launches don't load them. Mods run with your Windows account's rights, so only accept a host you trust.</p>
 {#- -#}
-<script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}b.addEventListener("click",function(){o.hidden=false;n.hidden=true;wait();});window.addEventListener("blur",function(){clearTimeout(t);});window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>
+<script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}var c=0;b.addEventListener("click",function(e){if(Date.now()-c<2000){e.preventDefault();return;}c=Date.now();b.style.opacity=".6";setTimeout(function(){b.style.opacity="";},2000);o.hidden=false;n.hidden=true;wait();});window.addEventListener("blur",function(){clearTimeout(t);});window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>
 {%- else -%}
 <div class="opt"><p class="fine">Mods this server asks for:</p>
 {%- endif -%}

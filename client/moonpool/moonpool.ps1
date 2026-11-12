@@ -61,6 +61,7 @@ $LoaderConfig = @('ue4ss\UE4SS-settings.ini', 'ue4ss\Mods\mods.txt', 'ue4ss\Mods
 $script:Work = $null
 $script:ModsOn = $false
 $script:Lock = $null
+$script:FirstWindowShown = $false
 # The release job stamps its run number here; an update must be a higher one, so no rollback.
 $LauncherBuild = 0
 # The project's release key. Its private half is not on GitHub, so control of the account or a
@@ -784,7 +785,15 @@ function Enter-Lock {
   $name = 'Global\moonpool-launcher-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $lock = New-Object Threading.Mutex($false, $name)
   try { $held = $lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $held = $true }
-  if (-not $held) { Fail 'another Moonpool launcher is running, and it stays until Subnautica 2 closes; nothing changed' 2 }
+  if (-not $held) {
+    # A second click on the link while the first launcher's window is up: that window comes forward and no second one opens.
+    $first = Get-Process -Name powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID -and $_.MainWindowTitle -eq 'Moonpool' } | Select-Object -First 1
+    if ($first) {
+      $script:FirstWindowShown = $true
+      try { [void](New-Object -ComObject WScript.Shell).AppActivate($first.Id) } catch { }
+    }
+    Fail 'another Moonpool launcher is running, and it stays until Subnautica 2 closes; nothing changed' 2
+  }
   $script:Lock = $lock
 }
 
@@ -1555,7 +1564,7 @@ try {
   Write-Host "moonpool: $($_.Exception.Message)"
   # A link or shortcut has no console left open to read this in. Code 3 is the player's own
   # choice (declined, or closed the window), which needs no message.
-  if ($code -ne 3 -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
+  if ($code -ne 3 -and -not $script:FirstWindowShown -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     $heading = "Couldn't start with mods"
     if ($Uninstall) { $heading = "Couldn't uninstall Moonpool" } elseif ($DisableMoonpoolMods) { $heading = "Couldn't turn Moonpool's mods off" }
     Show-Notice $heading $_.Exception.Message
