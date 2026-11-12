@@ -1422,10 +1422,11 @@ function Invoke-Join {
       $now = if ($exists) { Get-Sha256 $target } else { '' }
       $ours = $ledger.files.ContainsKey($key) -and (-not $exists -or $now -eq $ledger.files[$key].sha256)
       $same = $exists -and ($now -eq $f.Sha256)
-      # The loader's settings are the player's once they exist: never replaced, never
-      # part of what proves the loader current.
+      # The loader's settings are the player's once they exist and differ from what this launcher
+      # placed: never replaced then, and never part of what proves the loader current. A copy still
+      # byte for byte the one placed is the server's, so the server's new copy replaces it.
       $isConfig = ($ModName -eq 'UE4SS' -and $LoaderConfig -contains $f.Rel)
-      if ($isConfig -and $exists) {
+      if ($isConfig -and $exists -and -not ($ours -and -not $same)) {
         if ($ours) { $desired[$key] = $ledger.files[$key] }
         continue
       }
