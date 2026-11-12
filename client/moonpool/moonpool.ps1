@@ -341,11 +341,20 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     if ($accepted -notcontains (Get-CodeSet @($m) $null)[0]) { if ($acceptedNames -contains $m.Name) { $tags += 'changed' } else { $tags += 'new' } }
     $cb.Text = ("$($m.Name) $($m.Version)").Trim() + '   (' + ($tags -join ', ') + ')'
     $cb.Checked = $m.Required -or -not $Skipped.Contains($m.Name)
-    $cb.Enabled = -not $m.Required
+    if ($m.Required) { $cb.AutoCheck = $false }  # always installed: shown ticked and readable, not greyed out
     [void]$flow.Controls.Add($cb)
     $boxes[$m.Name] = $cb
   }
-  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * $boxes.Count + 4, 240))
+  if ($LoaderSpec) {  # the prerequisite the UE4SS mods need, listed with them so nothing installs unseen
+    $cb = New-Object Windows.Forms.CheckBox
+    $cb.AutoSize = $true; $cb.Checked = $true; $cb.AutoCheck = $false
+    $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
+    $cb.ForeColor = Get-Color $Theme.Text
+    $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
+    $cb.Text = 'UE4SS loader   (this server, native code, needed by the UE4SS mods)'
+    [void]$flow.Controls.Add($cb)
+  }
+  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * $flow.Controls.Count + 4, 240))
   $noteText = (Get-KeyWarning $Config $ServerId) + "Ticked mods are installed and turned on for this game session only. They run with your Windows account's rights, so only install mods from a host you trust."
   if ($LoaderSpec) {
     $noteText += ' UE4SS mods also need the UE4SS loader, from this server, native code'
