@@ -318,3 +318,40 @@ EOF
   [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ ! -e "$DATA_DIR/public/files/Removed.zip" ]; [ -e "$DATA_DIR/public/files/Loader.zip" ]
 }
+
+# compose.yaml's volume-init command, run as written with its two mounts pointed at temp folders.
+volume_init() {
+  python3 - "$ROOT/compose.yaml" "$BATS_TEST_TMPDIR/vol" "$(id -u):$(id -g)" <<'PY' >"$BATS_TEST_TMPDIR/init.sh"
+import sys, yaml
+cmd = yaml.safe_load(open(sys.argv[1]))["services"]["sn2-volume-init"]["command"][0]
+print(cmd.replace("/home/container", sys.argv[2] + "/data").replace("/signing", sys.argv[2] + "/signing")
+         .replace("container:container", sys.argv[3]))
+PY
+  mkdir -p "$BATS_TEST_TMPDIR/vol/data" "$BATS_TEST_TMPDIR/vol/signing"
+  run sh "$BATS_TEST_TMPDIR/init.sh"
+}
+
+@test "volume init moves a mod-signing key out of the data volume once, and only after the copy matches" {
+  V="$BATS_TEST_TMPDIR/vol"
+  mkdir -p "$V/data/mod-signing"
+  printf 'PRIVATE\n' >"$V/data/mod-signing/private.pem"; printf 'PUBLIC\n' >"$V/data/mod-signing/public.pem"
+  volume_init
+  [ "$status" -eq 0 ]
+  [ "$(cat "$V/signing/private.pem")" = PRIVATE ] && [ "$(cat "$V/signing/public.pem")" = PUBLIC ]
+  [ ! -e "$V/data/mod-signing/private.pem" ] && [ ! -e "$V/data/mod-signing/public.pem" ]
+  [ "$(stat -c %a "$V/signing")" = 700 ]
+  # A key already in its own volume is never replaced, even by one that turns up in the data volume.
+  printf 'OTHER\n' >"$V/data/mod-signing/private.pem"
+  volume_init
+  [ "$status" -eq 0 ] && [ "$(cat "$V/signing/private.pem")" = PRIVATE ]
+}
+
+@test "volume init that cannot move the key fails and leaves it in the data volume" {
+  V="$BATS_TEST_TMPDIR/vol"
+  mkdir -p "$V/data/mod-signing"
+  printf 'PRIVATE\n' >"$V/data/mod-signing/private.pem"  # public.pem lost: the copy cannot complete
+  volume_init
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"still in the data volume"* ]]
+  [ "$(cat "$V/data/mod-signing/private.pem")" = PRIVATE ] && [ ! -e "$V/signing/private.pem" ]
+}

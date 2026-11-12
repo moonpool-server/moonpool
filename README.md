@@ -98,9 +98,9 @@ Releases come often while the project is young. Each one passes CI and carries t
 
 - **Port 8081** (`SN2_MODS_PORT`) serves the join page and the signed mod list. It listens on every interface by default, because players without a tunnel need it. The page shows the host account's Steam ID and the current lobby ID, which Steam already shows the host's friends. `MODS_BIND=127.0.0.1` closes it when you use the tunnel. `PUBLISH_CARD=true` adds `/card.json`, which holds what the Discord card shows, player names included.
 - **The first mod download.** The first time a player presses Play with mods, the launcher saves this server's signing key from that address and holds every later list to it. Over plain http that first fetch trusts the network, so the launcher allows http only on a private network. Anywhere else needs the tunnel or HTTPS.
-- **The map.** With `WEB_MAP=true`, the map page shows anyone with the link where each player was 15 minutes ago, and the PDA signals everyone in the game can see. Player names are shown unless `SHOW_PLAYER_NAMES=false`.
+- **The map.** With `WEB_MAP=true`, the map page shows anyone with the link where each player was 15 minutes ago, and the PDA signals everyone in the game can see. Players are numbered ("Player 1") unless you set `MAP_PLAYER_NAMES=true`.
 - **The viewer on 8080** controls the signed-in Steam client, so it listens on this machine only unless you set `VIEWER_BIND` and a password. To reach it from elsewhere, use Tailscale or `ssh -L 8080:localhost:8080 <server>`, never a forwarded port.
-- **The data volume** holds the hosting account's Steam session. Keep it and your backups private.
+- **The data volume** holds the hosting account's Steam session, and a second volume holds the key that signs your mod list. Keep both and your backups private.
 
 ## Features
 
@@ -132,7 +132,7 @@ A game update can stop hosting: the newest build above hosted only once it had t
 
 ## Questions and security
 
-Contact: [issues](https://github.com/moonpool-server/moonpool/issues) for questions and concerns, and [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) for security problems. Rights holders can use issues for takedown requests.
+Contact: [issues](https://github.com/moonpool-server/moonpool/issues) for questions and concerns, and [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) for security problems. Rights holders asking for a takedown can open an issue asking for a private contact; please leave confidential material out of it.
 
 ## Contributing
 
@@ -140,15 +140,15 @@ Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). `p
 
 ## Legal and risk
 
-Moonpool's code is MIT licensed. That licence covers only this code. The game and Steam have their own terms, and owning the game doesn't override them. Read both before you run it. This isn't legal advice.
+Moonpool's code is MIT licensed. That licence covers only this code, not Subnautica 2 or Steam. This isn't legal advice.
 
-The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is with KRAFTON. It limits the game to personal, non-commercial use. It bars modifying the game and using it with unauthorized software, bots or scripts, and it says breaking its terms can end your licence. Moonpool loads a mod into the game, so as we read them, running it goes against those terms as written.
+The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) is with KRAFTON. It limits the game to personal, non-commercial use, bars modifying the game and using it with unauthorized software, bots or scripts, and says breaking its terms can end your licence. Moonpool loads a mod and automates hosting, so running it appears to conflict with those terms.
 
-The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) applies too. Without Valve's written consent, section 2.G restricts modifying Steam content, and hosting or matchmaking through emulation, tunneling, added components or similar tools. Section 4.B restricts tampering with how Steam content runs, and section 4.C restricts scripts and bots that interact with Steam content. An unattended host, scripted clicks in the viewer and automatic friend accepting are the kind of automation those sections describe.
+The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) applies too. Without Valve's written consent, section 2.G restricts modifying Steam content and hosting or matchmaking through emulation, tunneling, added components or similar tools. Section 4.B restricts tampering with how Steam content runs, and section 4.C restricts scripts and bots that interact with Steam content.
 
-None of Unknown Worlds, KRAFTON or Valve has consented to this project, and Unknown Worlds doesn't officially support mods yet. Any of them could act against the project or the hosting account. The hosting account can lose the game: the EULA says breaking its terms can end the licence, and Valve can act against a Steam account under its agreement. Nothing here can prevent either. Use a spare account you can afford to lose. That limits what you lose; it doesn't make the use allowed.
+Unknown Worlds, KRAFTON and Valve haven't consented to this project, and Unknown Worlds doesn't officially support mods yet. What's at risk is the hosting account: it could lose the game or face action on its Steam account. Host on a separate account you can afford to lose. That limits what you could lose; it doesn't make the use permitted.
 
-Moonpool needs a licensed copy on a Steam account because it has no dedicated-server program to run. It runs the normal game under Wine and waits for Steam to be signed in. Each world needs its own account that owns the game, and that copy's terms apply.
+There's no dedicated-server program, so Moonpool runs the normal game under Wine, and each world needs its own Steam account that owns the game.
 
 Moonpool ships no game files, no data taken from them and none of the game's art. Its code does name objects in the game so it can call them. Its own commands don't spawn items or move players. The default `friends` preset does run the game's own `Unlock` console command as each joining player, so everyone shares the host's unlocks; `PRESET=stock` turns that off. In-game admins can run other console commands only if you turn that on. A host that puts layout files in `ue4ss-client/` serves them, measured from the game, to anyone who can reach its join page, inside the loader download (docs/operating.md). It hosts four players by default, the game's own limit. If something breaks, take mods out and check the game alone before you report anything to Unknown Worlds. Report Moonpool problems here.
 
