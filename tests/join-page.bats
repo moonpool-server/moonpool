@@ -74,8 +74,8 @@ JSON
   [[ "$output" != *'http-equiv="refresh"'* && "$output" != *'location.href'* && "$output" != *'location.assign'* ]]
   # A click says at once what should open; the install steps show only if the page still has focus.
   [[ "$output" == *'id="opening" hidden'*'id="nothing" hidden'*'Still waiting?'* ]]
-  [[ "$output" == *'Voice</a> 1.2<span class="about">Voice chat.</span></li>'* ]]
-  [[ "$output" == *'nexusmods.com'* && "$output" == *'(optional, needs one download from its page)'* ]]
+  [[ "$output" == *'Voice</a></span><span class="ver">1.2</span><span class="tag req">required</span></div><span class="about">Voice chat.</span></li>'* ]]
+  [[ "$output" == *'nexusmods.com'* && "$output" == *'<span class="tag">optional</span><span class="tag">download from its page</span>'* ]]
 }
 
 @test "an empty published list is a plain page that joins by itself" {

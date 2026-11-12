@@ -6,36 +6,33 @@
 {%- if launcher -%}
 <a class="button" id="playmods" href="moonpool:{{ address }}">Play with mods</a>
 {#- -#}
-<div class="notice" id="opening" hidden><strong>Opening Moonpool&hellip;</strong> If your browser asks, allow it to open Moonpool. Its window lists the mods and asks before installing anything.</div>
+<p class="fine">First time on this PC? <a href="{{ setup_url }}">Get the launcher</a> once. Mods run with your Windows account&rsquo;s rights and are on only until the game closes.</p>
 {#- -#}
-<div class="notice warn" id="nothing" hidden><strong>Still waiting?</strong> If your browser is asking to open Moonpool, allow it. If nothing is asking and no Moonpool window opened, this PC doesn't have the launcher yet. It takes a minute, once:
+<div class="notice" id="opening" hidden><strong>Opening Moonpool&hellip;</strong> Allow your browser to open it. It lists the mods and asks before installing anything.</div>
 {#- -#}
-<ol><li>Download the launcher with the button below. It is one small file from the Moonpool project on GitHub.</li>
+<div class="notice warn" id="nothing" hidden><strong>Still waiting?</strong> If your browser asks to open Moonpool, allow it. If nothing asks, this PC needs the launcher, once:
 {#- -#}
-<li>Run it. Windows may say it protected your PC, because the file isn't code-signed: choose More info, then Run anyway.</li>
+<ol><li>Download it below: one small file from the Moonpool project on GitHub.</li>
+{#- -#}
+<li>Run it. Windows may warn because it isn&rsquo;t code-signed: More info, then Run anyway.</li>
 {#- -#}
 <li>Press Play with mods again.</li></ol>
 {#- -#}
 <a class="button get" href="{{ setup_url }}">Download the launcher</a></div>
 {#- -#}
-<p>First time on this PC? <a href="{{ setup_url }}">Get the launcher</a> once, then press Play with mods.</p>
-{#- -#}
-<p class="fine">Play with mods installs or updates this server's mods and turns them on only until Subnautica 2 closes; normal launches don't load them. Mods run with your Windows account's rights, so only accept a host you trust.</p>
-{#- -#}
 <script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}var c=0;b.addEventListener("click",function(e){if(Date.now()-c<2000){e.preventDefault();return;}c=Date.now();b.style.opacity=".6";setTimeout(function(){b.style.opacity="";},2000);o.hidden=false;n.hidden=true;wait();});window.addEventListener("blur",function(){clearTimeout(t);});window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>
-{%- else -%}
-<div class="opt"><p class="fine">Mods this server asks for:</p>
 {%- endif -%}
+<h2>Mods on this server</h2>
+{#- -#}
 <ul class="mods">
 {%- for m in mods -%}
-<li>{% if m.link %}<a href="{{ m.link }}">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %}
-{%- if m.version %} {{ m.version }}{% endif %}
-{%- if m.notes %} ({{ m.notes|join(', ') }}){% endif %}
-{%- if m.summary or m.stats %}<span class="about">{{ m.summary }}{% if m.summary and m.stats %}<br>{% endif %}
-{%- if m.stats %}{% if m.stats.stars %}&#9733; {{ m.stats.stars }} on GitHub{% else %}{{ m.stats.downloads }} downloads on CurseForge{% endif %}
+<li class="mod"><div class="top"><span class="name">{% if m.link %}<a href="{{ m.link }}">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %}</span>
+{%- if m.version %}<span class="ver">{{ m.version }}</span>{% endif %}
+{%- for note in m.notes %}<span class="tag{% if note == 'required' %} req{% endif %}">{{ note }}</span>{% endfor %}</div>
+{%- if m.summary %}<span class="about">{{ m.summary }}</span>{% endif %}
+{%- if m.stats %}<span class="meta">{% if m.stats.stars %}&#9733; {{ m.stats.stars }} on GitHub{% else %}{{ m.stats.downloads }} downloads on CurseForge{% endif %}
 {%- if m.stats.updated %} &middot; updated {{ m.stats.updated }}{% endif %}
-{%- if m.stats.by %} &middot; by {{ m.stats.by }}{% endif %}{% endif %}</span>{% endif %}</li>
+{%- if m.stats.by %} &middot; by {{ m.stats.by }}{% endif %}</span>{% endif %}</li>
 {%- endfor -%}
 </ul>
-{%- if mods|selectattr('stats')|list %}<p class="fine">Stars and downloads come from GitHub and CurseForge. They show how widely a mod is used, not that its file is safe.</p>{% endif %}
-{%- if not launcher %}</div>{% endif %}
+{%- if mods|selectattr('stats')|list %}<p class="fine">Downloads and stars show how widely a mod is used, not that its file is safe.</p>{% endif %}

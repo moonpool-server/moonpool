@@ -97,17 +97,17 @@ def render(plugins: list, manifest: dict, address: str = "", stats: dict | None 
         pub = published.get(name) or {}
         source = pub.get("source") or {}
         link = str(p.get("source") or source.get("page") or "")
-        notes = []
-        if str(p.get("tier", "optional")).lower() != "mandatory":
-            notes.append("optional, off unless you tick it" if p.get("default", True) is False else "optional")
+        notes = ["required"] if str(p.get("tier", "optional")).lower() == "mandatory" else ["optional"]
+        if p.get("default", True) is False and notes == ["optional"]:
+            notes.append("off by default")
         if pub.get("native"):
             notes.append("native code")
         if source.get("type") == "local":
-            notes.append("this server's own copy")
+            notes.append("server's copy")
         if not pub:
             notes.append("install it yourself")
         elif not source.get("url"):
-            notes.append("needs one download from its page")
+            notes.append("download from its page")
         return {"name": name, "link": link if link.lower().startswith(("https://", "http://")) else "",
                 "version": str(p.get("version") or pub.get("version") or ""), "notes": notes,
                 "summary": str(p.get("summary") or pub.get("summary") or fetched_summary(stats.get(name))), "stats": stats_of(stats.get(name))}
