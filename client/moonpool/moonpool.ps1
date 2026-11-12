@@ -344,7 +344,7 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     [void]$flow.Controls.Add($cb)
     $boxes[$m.Name] = $cb
   }
-  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * @($All).Count + 4, 240))
+  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * $boxes.Count + 4, 240))
   $noteText = (Get-KeyWarning $Config $ServerId) + "Ticked mods are installed and turned on for this game session only. They run with your Windows account's rights, so only install mods from a host you trust."
   if ($LoaderSpec) {
     $noteText += ' UE4SS mods also need the UE4SS loader, from this server, native code'
@@ -389,6 +389,9 @@ function Show-Notice([string]$Heading, [string]$Text) {
     return
   }
   $script:UiInstalling = $false
+  # A failure can arrive while the mod list is on screen: take the list away and bring the text box back.
+  foreach ($c in @($script:Ui.Pane.Controls)) { if ($c -ne $script:Ui.Box) { $script:Ui.Pane.Controls.Remove($c) } }
+  $script:Ui.Box.Visible = $true
   Set-UiMode 'notice' $Text
   $script:Ui.Heading.Text = $Heading
   $script:Ui.Primary.Text = 'Close'
