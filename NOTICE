@@ -53,14 +53,14 @@ Wine and Wine Staging
   packages for the installed version.
 
 ------------------------------------------------------------------------------
-Proton's Wine (only in an image built with --build-arg WINE_RUNTIME=proton)
-  Project: https://github.com/ValveSoftware/wine (Valve's Wine for Proton),
-  built by https://github.com/Kron4ek/Wine-Builds (build scripts: MIT License)
-  License: GNU Lesser General Public License v2.1 or later
-  The Dockerfile downloads the pinned wine-proton release archive from
-  Kron4ek/Wine-Builds, verifies its SHA-256 and unpacks it to /opt/wine-proton,
-  unmodified. Source is available from ValveSoftware/wine at the matching
-  proton branch.
+wine-tkg (only in an image built with --build-arg WINE_RUNTIME=tkg)
+  Project: https://github.com/Frogging-Family/wine-tkg-git (patch set and build
+  system), built by https://github.com/Kron4ek/Wine-Builds (build scripts: MIT
+  License) from the source in https://github.com/Kron4ek/wine-tkg
+  License: GNU Lesser General Public License v2.1 or later (Wine and Staging)
+  The Dockerfile downloads the pinned wine-10.10-staging-tkg release archive from
+  Kron4ek/Wine-Builds, verifies its SHA-256 and unpacks it to /opt/wine-tkg,
+  unmodified. The archive's wine-tkg-config.txt lists the patches applied.
 
 ------------------------------------------------------------------------------
 noVNC, x11vnc, Xvfb (panel target only)
