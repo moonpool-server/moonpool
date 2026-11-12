@@ -17,7 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
-from sn2files import read_json, write_atomic  # noqa: E402
+from sn2files import publish_theme, read_json, write_atomic  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 
@@ -29,6 +29,26 @@ def map_still(public):
         return ""
     stamp = read_json(public / "map.json", {})
     return "map.png?" + str(stamp.get("still") or "") if isinstance(stamp, dict) else "map.png"
+
+
+def map_facts(public):
+    """One line on what the map shows, from its published map.json: how far behind it is and how many
+    players, lifepods and signals are on it, as separate items. [] when the map is off or says nothing."""
+    page = read_json(public / "map.json", {})
+    if not isinstance(page, dict) or not (public / "map.html").is_file():
+        return []
+
+    def count(n, one, many):
+        return f"{n} {one if n == 1 else many}" if n else ""
+    try:
+        delay = int(page.get("delay_minutes") or 0)
+    except (TypeError, ValueError):
+        delay = 0
+    parts = [f"{delay} min behind" if delay else "",
+             count(len(page.get("divers") or []), "player", "players"),
+             count(len(page.get("lifepods") or []), "lifepod", "lifepods"),
+             count(len(page.get("signals") or []), "signal", "signals")]
+    return [x for x in parts if x]
 
 
 def render_join(search, values):
@@ -122,11 +142,12 @@ def main():
     banner = publish_banner(data / "templates", public)
     values = dict(world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh, banner=banner,
                   modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:],
-                  map=map_still(public))
+                  map=map_still(public), map_facts=map_facts(public))
     shipped = str(HERE.parent / "web")
     html = render_join([str(data / "templates"), shipped], values)
     if html is None:
         html = render_join([shipped], values)
+    publish_theme(data, public, shipped)
     write_atomic(public / "join.html", html)
     return 0
 

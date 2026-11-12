@@ -1,0 +1,75 @@
+/* Moonpool's design tokens: every colour, font, size, width and edge the join page and the map use.
+   A host changes the look by putting a copy in templates/theme.css in the data volume; the pages
+   themselves only refer to these names. The map's still picture reads the colours too. */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest first */
+  --ink: #04121a;          /* the page */
+  --hull: #08202b;         /* raised panels */
+  --hull-2: #0d2a37;       /* hover, inputs */
+  --rule: #1c3b47;         /* hairlines */
+  --rule-strong: #2d5666;
+  --grid: #0f2731;         /* the map's grid without a background: quieter than a rule */
+
+  /* Text */
+  --text: #e9efe8;         /* bone, not pure white */
+  --dim: #8fa8ab;
+  --faint: #5f7d84;
+
+  /* Signals: one colour asks for action, the others only inform */
+  --signal: #ffb547;       /* the one call to action */
+  --signal-hover: #ffc773;
+  --signal-ink: #1b1000;
+  --link: #6fd0e3;
+  --warn: #e7a94b;
+  --danger: #ff5a4f;
+  --life: #ff5a4f;         /* lifepods on the map */
+  --beacon: #f2cc60;       /* PDA signals on the map */
+  --overlay: rgb(4 18 26 / 0.9);
+
+  /* A player's marker colour by depth: surface, 100 m, 300 m, 800 m */
+  --depth-0: #8fe9e4;
+  --depth-100: #2b8fc4;
+  --depth-300: #31408f;
+  --depth-800: #27124f;
+
+  /* Type: system fonts only, so no page asks a font host for anything */
+  --font-text: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-data: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  --size-tag: 0.6875rem;
+  --size-meta: 0.75rem;
+  --size-small: 0.8125rem;
+  --size-body: 1rem;
+  --size-lead: 1.0625rem;
+  --size-title: clamp(1.75rem, 4.2vw, 2.5rem);
+  --weight-title: 750;
+  --track-label: 0.12em;
+  --track-title: -0.015em;
+  --leading: 1.5;
+
+  /* Shape and space */
+  --edge: 2px;             /* corners stay nearly square */
+  --hair: 1px;
+  --focus-offset: 3px;
+  --gap-1: 0.25rem;
+  --gap-2: 0.5rem;
+  --gap-3: 0.75rem;
+  --gap-4: 1rem;
+  --gap-5: 1.5rem;
+  --gap-6: 2.5rem;
+  --control-height: 3.25rem;
+
+  /* Layout */
+  --page-max: 72rem;
+  --join-column: 34rem;
+  --map-ratio: 2 / 1;
+  --map-ratio-narrow: 16 / 9;
+  --map-panel-width: 19rem;
+  --map-rail-reveal: 4rem;  /* map left visible beside the open panel on a narrow screen */
+  --overlay-blur: 6px;
+  --marker-size: 30px;      /* the map reads this number for its markers' hit area */
+  --marker-edge: 3px;       /* places are square housings; players stay round */
+  --marker-shadow: 0 1px 6px var(--ink);
+  --grid-step-m: 100;       /* metres between the lines of the map's grid, without a background */
+}

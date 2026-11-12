@@ -20,15 +20,14 @@
 {#- -#}
 <a class="button get" href="{{ setup_url }}">Download the launcher</a></div>
 {#- -#}
-<script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}var c=0;b.addEventListener("click",function(e){if(Date.now()-c<2000){e.preventDefault();return;}c=Date.now();b.style.opacity=".6";setTimeout(function(){b.style.opacity="";},2000);o.hidden=false;n.hidden=true;wait();});window.addEventListener("blur",function(){clearTimeout(t);});window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>
+<script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}var c=0;b.addEventListener("click",function(e){if(Date.now()-c<2000){e.preventDefault();return;}c=Date.now();b.classList.add("pressed");setTimeout(function(){b.classList.remove("pressed");},2000);o.hidden=false;n.hidden=true;wait();});window.addEventListener("blur",function(){clearTimeout(t);});window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>
 {%- endif -%}
 <h2>Mods on this server</h2>
 {#- -#}
 <ul class="mods">
 {%- for m in mods -%}
-<li class="mod"><div class="top"><span class="name">{% if m.link %}<a href="{{ m.link }}">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %}</span>
-{%- if m.version %}<span class="ver">{{ m.version }}</span>{% endif %}
-{%- for note in m.notes %}<span class="tag{% if note == 'required' %} req{% endif %}">{{ note }}</span>{% endfor %}</div>
+<li class="mod"><div class="top"><span class="name">{% if m.link %}<a href="{{ m.link }}">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %}</span><span class="facts">{%- if m.version %}<span class="ver">{{ m.version }}</span>{% endif %}
+{%- for note in m.notes %}<span class="tag{% if note == 'required' %} req{% endif %}">{{ note }}</span>{% endfor %}</span></div>
 {%- if m.summary %}<span class="about">{{ m.summary }}</span>{% endif %}
 {%- if m.stats %}<span class="meta">{% if m.stats.stars %}&#9733; {{ m.stats.stars }} on GitHub{% else %}{{ m.stats.downloads }} downloads on CurseForge{% endif %}
 {%- if m.stats.updated %} &middot; updated {{ m.stats.updated }}{% endif %}

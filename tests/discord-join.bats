@@ -62,11 +62,11 @@ map_status() {
   m="$BATS_TEST_TMPDIR/appmanifest_1962700.acf"
   printf '"AppState"\n{\n\t"buildid"\t\t"26283380"\n\t"MountedConfig"\n\t{\n\t\t"BetaKey"\t\t"experimental"\n\t}\n}\n' >"$m"
   SN2_APPMANIFEST="$m" python3 "$ROOT/scripts/join-page.py"
-  grep -Fq 'Experimental branch</span><span class="chip">Build 26283380' "$PUBLIC_DIR/join.html"
+  grep -Fq 'Experimental branch</span><span>Build 26283380' "$PUBLIC_DIR/join.html"
   grep -Fq 'Betas &rsaquo; <strong>experimental</strong>' "$PUBLIC_DIR/join.html"
   printf '"AppState"\n{\n\t"buildid"\t\t"1"\n}\n' >"$m"
   STEAM_BRANCH='' SN2_APPMANIFEST="$m" python3 "$ROOT/scripts/join-page.py"
-  grep -Fq 'Public branch</span><span class="chip">Build 1' "$PUBLIC_DIR/join.html"
+  grep -Fq 'Public branch</span><span>Build 1' "$PUBLIC_DIR/join.html"
   run ! grep -q 'Betas &rsaquo;' "$PUBLIC_DIR/join.html"
 }
 
