@@ -48,9 +48,19 @@ Pillow
 Wine and Wine Staging
   Project: https://www.winehq.org/ and https://gitlab.winehq.org/wine/wine-staging
   License: GNU Lesser General Public License v2.1 or later
-  Installed into the image from the distribution's packages by the Dockerfile.
-  Source is available from the projects above and from the distribution's
-  source packages for the installed version.
+  Installed into the image from WineHQ's Debian packages by the Dockerfile.
+  Source is available from the projects above and from WineHQ's source
+  packages for the installed version.
+
+------------------------------------------------------------------------------
+Proton's Wine (only in an image built with --build-arg WINE_RUNTIME=proton)
+  Project: https://github.com/ValveSoftware/wine (Valve's Wine for Proton),
+  built by https://github.com/Kron4ek/Wine-Builds (build scripts: MIT License)
+  License: GNU Lesser General Public License v2.1 or later
+  The Dockerfile downloads the pinned wine-proton release archive from
+  Kron4ek/Wine-Builds, verifies its SHA-256 and unpacks it to /opt/wine-proton,
+  unmodified. Source is available from ValveSoftware/wine at the matching
+  proton branch.
 
 ------------------------------------------------------------------------------
 noVNC, x11vnc, Xvfb (panel target only)

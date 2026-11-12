@@ -43,6 +43,24 @@ RUN dpkg --add-architecture i386 \
       xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd logrotate fonts-dejavu-core \
  && apt-get purge -y ipp-usb avahi-daemon \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
+# WINE_RUNTIME=proton also unpacks Valve's Proton Wine as built by Kron4ek/Wine-Builds, pinned by
+# sha256, and puts it first on PATH. It still has fsync, which WineHQ's Wine dropped; WineHQ's stays
+# installed for its system dependencies. The default is winehq until measurements say otherwise.
+ARG WINE_RUNTIME=winehq
+ARG WINE_PROTON_VERSION=11.0-2
+ARG WINE_PROTON_SHA256=f166f7daa1a37b3c8e0ade213a6e7915e582091804071a58a4a32c6c672e1595
+RUN mkdir -p /opt/sn2 \
+ && case "${WINE_RUNTIME}" in \
+      winehq) ;; \
+      proton) f="wine-proton-${WINE_PROTON_VERSION}-amd64-wow64.tar.xz" \
+        && curl -fsSL -o "/tmp/$f" "https://github.com/Kron4ek/Wine-Builds/releases/download/proton-${WINE_PROTON_VERSION}/$f" \
+        && echo "${WINE_PROTON_SHA256}  /tmp/$f" | sha256sum -c - \
+        && mkdir -p /opt/wine-proton && tar -C /opt/wine-proton --strip-components=1 -xJf "/tmp/$f" && rm -f "/tmp/$f" \
+        && for b in /opt/wine-proton/bin/*; do ln -s "$b" /usr/local/bin/; done \
+        && [ "$(command -v wineserver)" = /usr/local/bin/wineserver ] ;; \
+      *) echo "WINE_RUNTIME must be winehq or proton" >&2; exit 2 ;; \
+    esac \
+ && echo "${WINE_RUNTIME}" > /opt/sn2/wine-runtime
 WORKDIR /tmp
 # noVNC from its own release: static files websockify serves. Debian's package would bring Node.js
 # along, which nothing here runs.
