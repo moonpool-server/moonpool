@@ -79,7 +79,7 @@ Admins give orders from inside the game with nothing installed: rename any PDA s
 
 `!cmd` is the same door as `bin/moonpool diag console` and is off until `player` is in `enabled_commands` (see Console commands below)
 
-One order every few seconds. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
+Each admin can give one order every 3 seconds. The host then runs at most one order every 10 seconds, whoever sent it (`admin_gap_s` in the mod's `config.json`), because each console command can stall the server for a second or two. Orders wait their turn: up to 3 per admin and 20 in all, beyond which the signal answers Busy. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
 
 ## More than one world
 

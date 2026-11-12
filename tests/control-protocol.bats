@@ -631,6 +631,15 @@ policy_env() {
   [[ "$output" == *"all passed"* ]]
 }
 
+@test "admin pace: one in-game command per gap, bounded in total and per sender" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/admin_pace_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"admin_pace: ok"* ]]
+  [[ "$output" != *"not ok"* ]]
+}
+
 @test "save policy: autosave off only after a game autosave, one save per batch of leavers, every N minutes" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/save_policy_spec.lua
