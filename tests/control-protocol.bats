@@ -631,6 +631,15 @@ policy_env() {
   [[ "$output" == *"all passed"* ]]
 }
 
+@test "save policy: autosave off only after a game autosave, one save per batch of leavers, every N minutes" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/save_policy_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"save_policy: ok"* ]]
+  [[ "$output" != *"not ok"* ]]
+}
+
 @test "idle policy and slots range pass the stub-clock Lua spec" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/idle_spec.lua
