@@ -26,6 +26,8 @@ local DEFAULTS = {
     return 'Z:\\data\\control' -- outside the container only
   end)(),
   poll_ms = 2000,
+  -- Seconds between two in-game "!" admin commands: each can stall the server for a second or two.
+  admin_gap_s = 10,
   host = {
     save_slot = 'Slot1',
     max_players = 4,
@@ -540,11 +542,13 @@ end
 -- In-game administration through the PDA's Signals > EDIT screen. The hook copies plain values;
 -- the work waits for the next game-thread poll.
 local admin_signal = require('admin_signal')
+local admin_pace = require('admin_pace')
 local ADMIN = admin_signal.new({ admins = os.getenv('SN2_ADMINS') or '',
   prefix = os.getenv('SN2_ADMIN_PREFIX') or '!' })
 local ADMIN_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetPingDisplayName'
 local COLOR_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetThumbnailColor'
-local admin_queue, admin_hooked, color_hooked = {}, false, false
+local admin_queue = admin_pace.new(tonumber(CFG.admin_gap_s) or 10)
+local admin_hooked, color_hooked = false, false
 -- The answer stays on the signal this long, then its own name and colour come back.
 local REPLY_SECONDS = 8
 local admin_restores = {} -- guid key -> { ping, name, color, at }
@@ -675,9 +679,10 @@ local function admin_restore_due()
   end
 end
 
+-- One queued command per call, at most one per admin_gap_s (admin_pace.lua).
 local function admin_drain()
-  local q; admin_queue, q = {}, admin_queue
-  for _, item in ipairs(q) do
+  local item = admin_pace.take(admin_queue, os.time())
+  if item then
     local sender = item.sender
     local r = admin_signal.run(ADMIN, sender, item.text, { now = os.time, call = admin_call })
     if r and r.silent then
@@ -691,6 +696,7 @@ local function admin_drain()
         tostring(sender.name), tostring(sender.eos), item.text, r.ok and 'done' or 'refused', r.text))
       admin_reply(item.ping_id, r)
       remember_restore(item)
+      admin_pace.mark(admin_queue, os.time())
     end
   end
   admin_restore_due()
@@ -716,7 +722,16 @@ LoopAsync(5000, function()
           pcall(function() old = find('UWEPingSystemComponent'):GetPingDisplayName({}, PingId:get()):ToString() end)
           if type(old) ~= 'string' or old == '' or old:sub(1, #ADMIN.prefix) == ADMIN.prefix then old = nil end
           local sender = admin_identity(Context:get())
-          admin_queue[#admin_queue + 1] = { sender = sender, ping_id = ping_id, text = text, old_name = old }
+          local entry = { sender = sender, ping_id = ping_id, text = text, old_name = old }
+          local who = tostring(sender.eos or sender.name or sender.connection)
+          local queued, why = admin_pace.push(admin_queue, entry, who)
+          if not queued then
+            log(string.format('admin: %s from %s not queued: %s (%d waiting)', text, tostring(sender.name), why,
+              admin_pace.size(admin_queue)))
+            local busy = why == 'sender_busy' and 'Busy: your earlier commands are still waiting'
+              or 'Busy: too many commands waiting, try again in a minute'
+            admin_reply(ping_id, { ok = false, text = busy })
+          end
         end)
         admin_hooked = true
         log('admin signal hook registered on game thread')

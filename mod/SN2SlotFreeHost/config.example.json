@@ -1,5 +1,6 @@
 {
   "poll_ms": 2000,
+  "admin_gap_s": 10,
   "host": {
     "save_slot": "Slot1",
     "max_players": 4
