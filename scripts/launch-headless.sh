@@ -113,6 +113,10 @@ if ! set_background_fps "$GAME_USER_SETTINGS" "$SERVER_MAX_FPS"; then
   log "SERVER_MAX_FPS must be a positive integer"; exit 2
 fi
 log "background frame-rate limit: $SERVER_MAX_FPS"
+if ! set_net_tick_rate "${UE_LOG%/Logs/*}/Config/Windows/Engine.ini" "${NET_MAX_TICK_RATE:-}"; then
+  log "NET_MAX_TICK_RATE must be a positive integer or empty"; exit 2
+fi
+[ -z "${NET_MAX_TICK_RATE:-}" ] || log "net.MaxNetTickRate=$NET_MAX_TICK_RATE written; applied only if the game log says Set CVar"
 log "wine: $(wine --version 2>/dev/null) ($WINE_RUNTIME), sync: ${WINEFSYNC:+fsync}${WINEESYNC:+esync}$([ -n "${WINEFSYNC}${WINEESYNC}" ] || echo wineserver)"
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
 apply_local_paks

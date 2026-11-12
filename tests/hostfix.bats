@@ -34,6 +34,23 @@ teardown() { rm -rf "$TMPROOT"; }
   [ ! -e "$ini" ]
 }
 
+@test "net tick rate: a number is written once, empty takes it back out, anything else is refused" {
+  ini="$TMPROOT/Engine.ini"
+  printf '[Core.Log]\nKeep=yes\n' >"$ini"
+  run bash -c '. "$1/scripts/common.sh"; set_net_tick_rate "$2" 30 && set_net_tick_rate "$2" 45' bash "$ROOT" "$ini"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^net.MaxNetTickRate=' "$ini")" -eq 1 ]
+  grep -q '^net.MaxNetTickRate=45$' "$ini"
+  grep -q '^\[ConsoleVariables\]$' "$ini"
+  run bash -c '. "$1/scripts/common.sh"; set_net_tick_rate "$2" "30;bad"' bash "$ROOT" "$ini"
+  [ "$status" -eq 2 ]
+  grep -q '^net.MaxNetTickRate=45$' "$ini"
+  run bash -c '. "$1/scripts/common.sh"; set_net_tick_rate "$2" ""' bash "$ROOT" "$ini"
+  [ "$status" -eq 0 ]
+  run ! grep -q 'MaxNetTickRate' "$ini"
+  grep -q '^Keep=yes$' "$ini"
+}
+
 @test "set_ini_key rewrites a key in place and never duplicates it" {
   ini="$TMPROOT/Engine.ini"
   run bash -c '. "$1/scripts/common.sh"; set_ini_key "$2" SomeSection AKey one' bash "$ROOT" "$ini"
