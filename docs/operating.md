@@ -57,6 +57,8 @@ A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. The
 
 Play with mods turns the mods on only until Subnautica 2 closes, so starting the game from Steam loads none of them. If the launcher is killed mid-game, the next run or the Subnautica 2 (without Moonpool mods) shortcut turns them off. The launcher is Steam-only, so Xbox and Game Pass players join without mods
 
+When a player has trouble, ask them to run the Subnautica 2 (collect logs for the host) shortcut in the Start menu, or `moonpool.ps1 -CollectLogs`. It puts one zip on their Desktop and shows it in Explorer: the launcher's log, the game's `Subnautica2.log`, UE4SS's log and settings, the record of what Moonpool placed, the names of crash folders and the versions. Their Windows user and PC names are taken out, crash dumps are left out because they hold memory, and nothing is uploaded: they send you the file themselves. The launcher's error window points them to the same shortcut.
+
 To take the launcher off a PC, close Subnautica 2 and run `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps1" -Uninstall` in PowerShell. It removes every game file it placed that is still as it placed it, switched on or off, and the folders that leaves empty, then its `moonpool:` link handler, its shortcuts and its own folder. A file you changed since stays and is named. When the launcher finds files it didn't place where a server's mods go, it asks before replacing them and keeps a copy of each in `%LOCALAPPDATA%\Moonpool-replaced`, which uninstalling leaves alone; it doesn't put them back itself. With `-Adopt` it replaces them without asking and keeps no copy. Steam's Verify integrity of game files restores the game's own files
 
 ## In game admin
