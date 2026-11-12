@@ -105,6 +105,18 @@ set_background_fps() {
   case $2 in '' | *[!0-9]* | 0) return 2 ;; esac
   set_ini_key "$1" /Script/Subnautica2.SN2SettingsLocal FrameRateLimit_WhenBackgrounded "$2"
 }
+# NET_MAX_TICK_RATE: the engine's net.MaxNetTickRate console variable in Engine.ini, how many times a
+# second the server's network driver may tick. Empty takes a value set earlier back out, so the game's
+# own default applies again. It counts as applied only when the game log says "Set CVar".
+set_net_tick_rate() {
+  local ini=$1 value=$2
+  if [ -z "$value" ]; then
+    [ ! -f "$ini" ] || sed -i '/^net\.MaxNetTickRate=/d' "$ini"
+    return 0
+  fi
+  case $value in *[!0-9]* | 0) return 2 ;; esac
+  set_ini_key "$ini" ConsoleVariables net.MaxNetTickRate "$value"
+}
 # Prints the mismatch line when only the other branch's executable is installed.
 game_exe_mismatch() {
   local dir="${1:-$WIN64_DIR}" other=experimental
