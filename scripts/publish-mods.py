@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# The manifest is the moonpool launcher's own format; signing is the cryptography package.
+# The manifest is the moonpool launcher's own format, signed with the openssl CLI (RSA, SHA-256).
 """Turn control/plugins.yaml into the signed mod manifest the moonpool launcher syncs to.
 
 The admin keeps ONE list (plugins.yaml). Every entry is on unless it says
@@ -54,7 +54,7 @@ URL_SHAPES = ("https://github.com/<owner>/<repo>/releases/download/<tag>/<file>,
 CF_HASHES = {1: "sha1", 2: "md5"}
 CF_DOWNLOAD_HOSTS = (".curseforge.com", ".forgecdn.net")
 # The loader players get is the host's own pinned build, from this repository's
-# mirror of it (upstream's experimental-latest tag moves; scripts/install-ue4ss.sh).
+# mirror of it (upstream's experimental tag moves; scripts/install-ue4ss.sh).
 UE4SS_MIRROR = os.environ.get("UE4SS_MIRROR", "https://github.com/moonpool-server/moonpool/releases/download/ue4ss-mirror")
 UE4SS_PINS = {
     "pinned": ("UE4SS_v3.0.1-1188-gf885e8d2.zip", "4a594fb5c6e1aa794b06a770730e072c53fb92b741f95a5f0601080d80f4a6c1"),
@@ -471,8 +471,8 @@ def checked_public_url(url):
 
 def ue4ss_block(args, mods, public):
     """The loader players get: the host's own pinned build. Served from the host's
-    verified copy (the install cache) so a player never depends on GitHub, which
-    refuses a private repository's release assets; the mirror URL only when the
+    verified copy (the install cache) so a player never depends on GitHub being
+    reachable; the mirror URL only when the
     cache holds no verified copy."""
     if not any(m["kind"] == "ue4ss" for m in mods):
         return None

@@ -65,7 +65,8 @@ $script:FirstWindowShown = $false
 # The release job stamps its run number here; an update must be a higher one, so no rollback.
 $LauncherBuild = 0
 # The project's release key. Its private half is not on GitHub, so control of the account or a
-# release is not enough to change what runs on a player's PC.
+# release is not enough to change this launcher script on a player's PC. The setup file is not
+# signed, and what a server installs (its mods, the UE4SS loader) is held to the server's own key.
 $ReleaseKey = @{ modulus = 'tSJdxcTDEY2AmF7xE0F5YN4V5XWk3nwuMlH5QXoVf4IgLuHVCl12SajOCwcWxS5wluItvHzJnprs01Gq5FY3/wLNPhQa5YIVsV9b1RzoybzR8s8fkzGaadANmcRQm39RMafxQppjeg5UP8jh1BHqNZvxTVQBAvBjWRI3tfJe8uqcoL6HAPdUM1xb8xc+pkb2E2UFcxGlcbrYMmRBrzjGLgTcye17gTo7bja0gjIa3/8kPG7ECwoH7MYhVKzJm8SdRSfz09lqbLtFfEG86/UBxoDPIhaLz+iYLx/gdsy9lpD78P3gN250cu2IcZE0/xmeyQSggfHOVuvNSWTQkyEsQwhYnF5HnZXnDNEg4mCqh2o/v06EljAe2JOrVZPiEoqT52uXtRh6prF6OmAoVidxS2FUVnIs2DGQDMf/RGM6GVXPd4bgqeXZGvjp8noklRk1qIE32i4RzHYsS3iD/UiHrfiXZacJ7DKWaN8FyVGXJFduyVYxZbmvE9XAl7LPFmwf'; exponent = 'AQAB' }
 $KitHome = Join-Path $env:LOCALAPPDATA 'moonpool'
 $script:ServerId = ''  # the server this run installs for, once known

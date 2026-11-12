@@ -55,7 +55,7 @@ services:
       UNLOCK_INTERVAL_MS: "${UNLOCK_INTERVAL_MS:-50}"  # ms between replayed Unlock lines
       ALLOWLIST_ONLY: "${ALLOWLIST_ONLY:-true}"  # false = accept anyone who asks
       HOST_NAME: "${HOST_NAME:-SN2 Host}"  # the Steam persona players see
-      ADMINS: "${ADMINS:-}"  # EOS player ids, space separated (see .env.example); empty disables in-game admin
+      ADMINS: "${ADMINS:-}"  # EOS player ids, comma separated (see .env.example); empty disables in-game admin
       ADMIN_PREFIX: "${ADMIN_PREFIX:-!}"
       WORLD_NAME: "${WORLD_NAME:-Subnautica 2 server}"  # the session and save name
       MOTD: "${MOTD:-}"  # greeting each player gets once on joining; empty = none

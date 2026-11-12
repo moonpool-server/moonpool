@@ -1,6 +1,6 @@
 -- Recorded scan batch: per display name, the
 -- *_ScanData asset(s) the read-only Name pass mapped it to and every Unlock
--- name replayed by hand for it (x7, 0 errors). Names only, no game content.
+-- name it maps to. Names only, no game content.
 return {
   ["Safety First Poster"] = {
     scans = {
