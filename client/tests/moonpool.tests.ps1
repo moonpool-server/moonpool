@@ -194,6 +194,14 @@ try {
   $ledger = Get-Content -LiteralPath (Join-Path $w.Root 'moonpool\owned.json') -Raw | ConvertFrom-Json
   Check (@($ledger.files.PSObject.Properties).Count -eq 9) "the ledger owns every placed file (got $(@($ledger.files.PSObject.Properties).Count))"
 
+  Write-Host 'a UE4SS_Signatures folder the server did not send is set aside while the mods are on, then put back'
+  $sigs = Join-Path $w.Win64 'ue4ss\UE4SS_Signatures'
+  New-Item -ItemType Directory -Path $sigs -Force | Out-Null; Set-Content -LiteralPath (Join-Path $sigs 'GUObjectHashTables.lua') -Value 'old'
+  $r = Invoke-Join $w
+  Check ($r.Code -eq 0 -and $r.Session -notcontains 'Subnautica2\Binaries\Win64\ue4ss\UE4SS_Signatures\GUObjectHashTables.lua' -and $r.Session -contains 'Subnautica2\Binaries\Win64\ue4ss\UE4SS_Signatures.moonpool-off\GUObjectHashTables.lua') "it is aside while the game runs (got $($r.Code)): $($r.Out.Trim())"
+  Check ((Text (Join-Path $sigs 'GUObjectHashTables.lua')).Trim() -eq 'old' -and -not (Test-Path -LiteralPath "$sigs.moonpool-off")) 'it is back, unchanged, once the game closes'
+  Remove-Item -LiteralPath $sigs -Recurse -Force
+
   Write-Host 'second run with nothing changed writes nothing and downloads nothing'
   $before = Snapshot $w.Win64
   Remove-Item -LiteralPath (Join-Path $w.Server 'ue4ss.zip')   # a download now would fail

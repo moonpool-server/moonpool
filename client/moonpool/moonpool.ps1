@@ -76,8 +76,20 @@ $MaxUnpackedBytes = 4GB
 if ($UnpackLimit -gt 0) { $MaxUnpackedBytes = $UnpackLimit }
 $MaxArchiveEntries = 20000
 
+# Every line is also kept in %LOCALAPPDATA%\moonpool\moonpool.log, so a player can send it to the host;
+# past 1 MB the log starts over and the previous one is kept as moonpool.log.prev.
+function Write-Log([string]$Message) {
+  try {
+    $log = Join-Path $KitHome 'moonpool.log'
+    if (-not (Test-Path -LiteralPath $KitHome)) { New-Item -ItemType Directory -Path $KitHome -Force | Out-Null }
+    if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination "$log.prev" -Force }
+    Add-Content -LiteralPath $log -Value ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + " [build $LauncherBuild] $Message") -Encoding UTF8
+  } catch { }
+}
+
 function Say([string]$Message) {
   Write-Host "moonpool: $Message"
+  Write-Log $Message
   if ($script:Ui) { Set-Status ($Message.Substring(0, 1).ToUpperInvariant() + $Message.Substring(1)) }
 }
 
@@ -785,6 +797,22 @@ function Switch-MoonpoolMods([bool]$On) {
     $left = @($left | Where-Object {
       try { if (Test-Path -LiteralPath $_.To) { Remove-Item -LiteralPath $_.To -Force }; Move-Item -LiteralPath $_.From -Destination $_.To; $false }
       catch { $true } })
+  }
+  # Moonpool's loader runs with the files the server sent. A UE4SS_Signatures folder it was not sent replaces
+  # the loader's own search for the game's tables, and an outdated one stops every script mod from starting.
+  # It is set aside while Moonpool's mods are on and put back when they go off; nothing in it is changed.
+  foreach ($key in @($ledger.files.Keys | Where-Object { (Split-Path -Leaf $_) -ieq 'dwmapi.dll' })) {
+    $sig = Join-Path (Join-Path (Split-Path -Parent $key) 'ue4ss') 'UE4SS_Signatures'
+    if (@($ledger.files.Keys | Where-Object { $_.StartsWith("$sig\", [StringComparison]::OrdinalIgnoreCase) }).Count) { continue }
+    $aside = "$sig.moonpool-off"
+    try {
+      if ($On -and (Test-Path -LiteralPath $sig) -and -not (Test-Path -LiteralPath $aside)) {
+        Move-Item -LiteralPath $sig -Destination $aside
+        Say "set aside ue4ss\UE4SS_Signatures, which this server's loader does not use and which can stop its script mods; it is put back when the game closes"
+      } elseif (-not $On -and (Test-Path -LiteralPath $aside) -and -not (Test-Path -LiteralPath $sig)) {
+        Move-Item -LiteralPath $aside -Destination $sig
+      }
+    } catch { Say "could not move ue4ss\UE4SS_Signatures ($($_.Exception.Message)); script mods may not start" }
   }
   return @($stuck) + @($left | ForEach-Object { $_.From })
 }
@@ -1571,12 +1599,13 @@ try {
   if ($_.Exception.Data.Contains('sn2code')) { $code = [int]$_.Exception.Data['sn2code'] }
   $script:UiCancelled = $false
   Write-Host "moonpool: $($_.Exception.Message)"
+  Write-Log ("failed: $($_.Exception.Message) | " + ($_.ScriptStackTrace -replace '\r?\n', ' < '))
   # A link or shortcut has no console left open to read this in. Code 3 is the player's own
   # choice (declined, or closed the window), which needs no message.
   if ($code -ne 3 -and -not $script:FirstWindowShown -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     $heading = "Couldn't start with mods"
     if ($Uninstall) { $heading = "Couldn't uninstall Moonpool" } elseif ($DisableMoonpoolMods) { $heading = "Couldn't turn Moonpool's mods off" }
-    Show-Notice $heading $_.Exception.Message
+    Show-Notice $heading ($_.Exception.Message + "`n`nThe details are in %LOCALAPPDATA%\moonpool\moonpool.log; send that file to the server's host.")
   }
   exit $code
 } finally {
