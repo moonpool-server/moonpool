@@ -122,9 +122,6 @@ heartbeat() {
     else
       prev_names=$cur
     fi
-    if grep -q FAILED "$BACKUP_STATUS" 2>/dev/null && [ ! -f "$RUN_DIR/backup-failed-sent" ]; then
-      : >"$RUN_DIR/backup-failed-sent"
-    elif ! grep -q FAILED "$BACKUP_STATUS" 2>/dev/null; then rm -f "$RUN_DIR/backup-failed-sent"; fi
     build=$("$(dirname "$0")/steam-config.sh" --report 2>/dev/null | sed -nE 's/.*buildid=([0-9]+).*/\1/p')
     if [ -n "$build" ] && [ "$build" != "$oldbuild" ]; then
       [ -n "$oldbuild" ] && python3 "$NOTIFY" event update "build $oldbuild -> $build"

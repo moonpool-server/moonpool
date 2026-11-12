@@ -78,7 +78,7 @@ signed() { run bash -c ". '$BIN/common.sh'; steam_setup_signed /tmp/SteamSetup.e
 }
 @test "a viewer open to the LAN starts with no password set, because one is always made" {
   viewer VIEWER_BIND=0.0.0.0 VNC_PASSWORD= VIEWER_PASSWORD_FILE="$BATS_TEST_TMPDIR/viewer-password"
-  [ -s "$CALLS.websockify" ] && [ ! -e "$CALLS.sleep" ]
+  [ -s "$CALLS.websockify" ]; [ ! -e "$CALLS.sleep" ]
 }
 
 @test "a viewer open to the LAN with a password starts" {

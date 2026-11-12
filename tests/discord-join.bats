@@ -62,12 +62,12 @@ map_status() {
   m="$BATS_TEST_TMPDIR/appmanifest_1962700.acf"
   printf '"AppState"\n{\n\t"buildid"\t\t"26283380"\n\t"MountedConfig"\n\t{\n\t\t"BetaKey"\t\t"experimental"\n\t}\n}\n' >"$m"
   SN2_APPMANIFEST="$m" python3 "$ROOT/scripts/join-page.py"
-  grep -Fq 'Experimental branch &middot; build 26283380' "$PUBLIC_DIR/join.html"
-  grep -Fq 'Betas to <strong>experimental</strong>' "$PUBLIC_DIR/join.html"
+  grep -Fq 'Experimental branch</span><span class="chip">Build 26283380' "$PUBLIC_DIR/join.html"
+  grep -Fq 'Betas &rsaquo; <strong>experimental</strong>' "$PUBLIC_DIR/join.html"
   printf '"AppState"\n{\n\t"buildid"\t\t"1"\n}\n' >"$m"
   STEAM_BRANCH='' SN2_APPMANIFEST="$m" python3 "$ROOT/scripts/join-page.py"
-  grep -Fq 'Public branch &middot; build 1' "$PUBLIC_DIR/join.html"
-  run ! grep -q 'Betas to' "$PUBLIC_DIR/join.html"
+  grep -Fq 'Public branch</span><span class="chip">Build 1' "$PUBLIC_DIR/join.html"
+  run ! grep -q 'Betas &rsaquo;' "$PUBLIC_DIR/join.html"
 }
 
 @test "Discord card is one Components V2 panel led by a Join link button, in player-facing wording" {
@@ -161,8 +161,8 @@ footer: 12
 not_a_line: "x"
 YAML
   body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
-  [[ "$body" == *'Empty sea for now.'* ]] && [[ "$body" == *'House rule: no base griefing'* ]]
-  [[ "$body" != *'bad '* ]] && [[ "$body" == *'Unofficial and not affiliated'* ]]
+  [[ "$body" == *'Empty sea for now.'* ]]; [[ "$body" == *'House rule: no base griefing'* ]]
+  [[ "$body" != *'bad '* ]]; [[ "$body" == *'Unofficial and not affiliated'* ]]
   grep -q 'card.yaml mods: placeholders here are {n}, {url}' "$LOG_DIR/discord.log"
   grep -q 'card.yaml footer: must be text' "$LOG_DIR/discord.log"
   grep -q 'card.yaml not_a_line: not a card line' "$LOG_DIR/discord.log"
@@ -328,7 +328,7 @@ echo 1500
 @test "mod stats: GitHub and CurseForge numbers reach the page escaped, and a failed read keeps the last ones" {
   api="$BATS_TEST_TMPDIR/api"; mkdir -p "$api/gh/repos/o" "$api/cf/mods"
   printf '{"stargazers_count":1234,"pushed_at":"2026-05-28T10:00:00Z","owner":{"login":"<b>o</b>"}}' >"$api/gh/repos/o/r"
-  printf '{"data":{"downloadCount":27319,"dateModified":"2026-05-31T00:00:00Z","authors":[{"name":"jsthop3"}]}}' >"$api/cf/mods/42"
+  printf '{"data":{"downloadCount":27319,"dateModified":"2026-05-31T00:00:00Z","authors":[{"name":"jsthop3"}],"summary":"A <i>minimap</i>."}}' >"$api/cf/mods/42"
   cat >"$CONTROL_DIR/plugins.yaml" <<'YAML'
 plugins:
   - {name: A, summary: "Does a thing.", source: "https://github.com/o/r"}
@@ -339,7 +339,9 @@ YAML
   [ "$(jq -r '.mods.A.stars' "$RUN_DIR/mod-stats.json")" = 1234 ]
   [ "$(jq -r '.mods.B.downloads' "$RUN_DIR/mod-stats.json")" = 27319 ]
   out=$(python3 "$ROOT/scripts/plugins-section.py" "$CONTROL_DIR/plugins.yaml" "$PUBLIC_DIR" "$RUN_DIR/mod-stats.json")
-  [[ $out == *'Does a thing.<br>&#9733; 1,234 on GitHub &middot; updated 28 May 2026 &middot; by &lt;b&gt;o&lt;/b&gt;'* ]]
+  [[ $out == *'Does a thing.</span><span class="meta">&#9733; 1,234 on GitHub &middot; updated 28 May 2026 &middot; by &lt;b&gt;o&lt;/b&gt;'* ]]
+  # B has no summary of its own: CurseForge's, escaped.
+  [[ $out == *'<span class="about">A &lt;i&gt;minimap&lt;/i&gt;.</span>'* ]]
   [[ $out == *'27,319 downloads on CurseForge &middot; updated 31 May 2026 &middot; by jsthop3'* ]]
   [[ $out == *'not that its file is safe'* ]]
   # Within the refresh window nothing is read; past it, an unreachable API keeps the last numbers.

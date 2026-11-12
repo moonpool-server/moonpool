@@ -19,6 +19,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sn2files import write_atomic  # noqa: E402  (beside this file)
+
 try:
     import yaml
 except ImportError:
@@ -58,7 +61,7 @@ def github(repo):
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
     data = get_json(f"{GH_API}/repos/{repo}", headers)
     return {"site": "github", "stars": int(data["stargazers_count"]), "updated": str(data.get("pushed_at") or "")[:10],
-            "by": str((data.get("owner") or {}).get("login") or "")}
+            "by": str((data.get("owner") or {}).get("login") or ""), "summary": str(data.get("description") or "")[:300]}
 
 
 def curseforge(project_id, slug, key):
@@ -72,7 +75,7 @@ def curseforge(project_id, slug, key):
         project = get_json(cf_url(f"/mods/{int(project_id)}"), headers)["data"]
     authors = ", ".join(str(a.get("name")) for a in project.get("authors") or [] if a.get("name"))
     return {"site": "curseforge", "downloads": int(project.get("downloadCount") or 0),
-            "updated": str(project.get("dateModified") or "")[:10], "by": authors}
+            "updated": str(project.get("dateModified") or "")[:10], "by": authors, "summary": str(project.get("summary") or "")[:300]}
 
 
 def project_of(entry):
@@ -140,9 +143,7 @@ def main():
         if found:
             found["project"] = ident
             fresh[name] = found
-    tmp = out.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"ts": now, "mods": fresh}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, out)
+    write_atomic(out, json.dumps({"ts": now, "mods": fresh}, indent=2, sort_keys=True) + "\n")
     return 0
 
 

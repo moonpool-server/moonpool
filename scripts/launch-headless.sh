@@ -118,11 +118,12 @@ apply_local_paks
 rm -f "$RUN_DIR/mod-session.json"; python3 "$(dirname "$0")/join-page.py" || true
 log "launching: $GAME_EXE_NAME ${args[*]}" | tee -a "$GAME_LOG"
 cd "$WIN64_DIR" || exit 1
-wine "$GAME_EXE_NAME" "${args[@]}" >>"$GAME_LOG" 2>&1 &
+"${WITHOUT_SECRETS[@]}" wine "$GAME_EXE_NAME" "${args[@]}" >>"$GAME_LOG" 2>&1 &
 echo $! >"$GAME_PIDFILE"
 # shellcheck disable=SC2329  # term_stop is invoked indirectly by trap
 trap term_stop TERM INT
 wait $!
 status=$?
+rm -f "$GAME_PIDFILE"  # the number can be another process's by the next stop
 log "game process exited with status $status" | tee -a "$GAME_LOG"
 exit "$status"

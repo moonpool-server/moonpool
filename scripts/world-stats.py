@@ -11,6 +11,9 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sn2files import write_atomic  # noqa: E402  (beside this file)
+
 
 def env(name, default):
     return os.environ.get(name) or str(default)
@@ -119,9 +122,7 @@ def main():
            "last_played": facts["last_played"], "in_game_day": day}
     text = json.dumps(out, separators=(",", ":"))
     cache.parent.mkdir(parents=True, exist_ok=True)
-    tmp = cache.with_name(cache.name + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, cache)
+    write_atomic(cache, text)
     sys.stdout.write(text)
     return 0
 

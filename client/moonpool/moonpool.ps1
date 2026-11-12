@@ -61,6 +61,7 @@ $LoaderConfig = @('ue4ss\UE4SS-settings.ini', 'ue4ss\Mods\mods.txt', 'ue4ss\Mods
 $script:Work = $null
 $script:ModsOn = $false
 $script:Lock = $null
+$script:FirstWindowShown = $false
 # The release job stamps its run number here; an update must be a higher one, so no rollback.
 $LauncherBuild = 0
 # The project's release key. Its private half is not on GitHub, so control of the account or a
@@ -75,8 +76,20 @@ $MaxUnpackedBytes = 4GB
 if ($UnpackLimit -gt 0) { $MaxUnpackedBytes = $UnpackLimit }
 $MaxArchiveEntries = 20000
 
+# Every line is also kept in %LOCALAPPDATA%\moonpool\moonpool.log, so a player can send it to the host;
+# past 1 MB the log starts over and the previous one is kept as moonpool.log.prev.
+function Write-Log([string]$Message) {
+  try {
+    $log = Join-Path $KitHome 'moonpool.log'
+    if (-not (Test-Path -LiteralPath $KitHome)) { New-Item -ItemType Directory -Path $KitHome -Force | Out-Null }
+    if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination "$log.prev" -Force }
+    Add-Content -LiteralPath $log -Value ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + " [build $LauncherBuild] $Message") -Encoding UTF8
+  } catch { }
+}
+
 function Say([string]$Message) {
   Write-Host "moonpool: $Message"
+  Write-Log $Message
   if ($script:Ui) { Set-Status ($Message.Substring(0, 1).ToUpperInvariant() + $Message.Substring(1)) }
 }
 
@@ -340,11 +353,20 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     if ($accepted -notcontains (Get-CodeSet @($m) $null)[0]) { if ($acceptedNames -contains $m.Name) { $tags += 'changed' } else { $tags += 'new' } }
     $cb.Text = ("$($m.Name) $($m.Version)").Trim() + '   (' + ($tags -join ', ') + ')'
     $cb.Checked = $m.Required -or -not $Skipped.Contains($m.Name)
-    $cb.Enabled = -not $m.Required
+    if ($m.Required) { $cb.AutoCheck = $false }  # always installed: shown ticked and readable, not greyed out
     [void]$flow.Controls.Add($cb)
     $boxes[$m.Name] = $cb
   }
-  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * @($All).Count + 4, 240))
+  if ($LoaderSpec) {  # the prerequisite the UE4SS mods need, listed with them so nothing installs unseen
+    $cb = New-Object Windows.Forms.CheckBox
+    $cb.AutoSize = $true; $cb.Checked = $true; $cb.AutoCheck = $false
+    $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
+    $cb.ForeColor = Get-Color $Theme.Text
+    $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
+    $cb.Text = 'UE4SS loader   (this server, native code, needed by the UE4SS mods)'
+    [void]$flow.Controls.Add($cb)
+  }
+  $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * $flow.Controls.Count + 4, 240))
   $noteText = (Get-KeyWarning $Config $ServerId) + "Ticked mods are installed and turned on for this game session only. They run with your Windows account's rights, so only install mods from a host you trust."
   if ($LoaderSpec) {
     $noteText += ' UE4SS mods also need the UE4SS loader, from this server, native code'
@@ -389,6 +411,9 @@ function Show-Notice([string]$Heading, [string]$Text) {
     return
   }
   $script:UiInstalling = $false
+  # A failure can arrive while the mod list is on screen: take the list away and bring the text box back.
+  foreach ($c in @($script:Ui.Pane.Controls)) { if ($c -ne $script:Ui.Box) { $script:Ui.Pane.Controls.Remove($c) } }
+  $script:Ui.Box.Visible = $true
   Set-UiMode 'notice' $Text
   $script:Ui.Heading.Text = $Heading
   $script:Ui.Primary.Text = 'Close'
@@ -479,8 +504,17 @@ function Get-KeyWarning($Config, [string]$ServerId) {
 # Where a mod's file really downloads from; the page only for a file the player fetches by hand.
 function Get-ModHost($Mod) {
   $from = [string](Get-Prop $Mod.Source 'url' ''); if (-not $from) { $from = [string](Get-Prop $Mod.Source 'page' '') }
-  if ($from -match '^https?://([^/:]+)') { return $Matches[1] }
-  return 'this server'
+  if (-not $from) { return 'this server' }
+  try {
+    $at = [Uri](Resolve-Url $ManifestUrl $from)
+    if ($at.Scheme -notmatch '^https?$') { return 'this server' }
+    if ($from -notmatch '^\s*https?:' -and $at.Host -eq ([Uri]$ManifestUrl).Host) { return 'this server' }
+    return $at.Host
+  } catch {
+    $at = $null
+    if ([Uri]::TryCreate($from, [UriKind]::Absolute, [ref]$at) -and $at.Scheme -match '^https?$') { return $at.Host }
+    return 'this server'
+  }
 }
 
 # Every field that decides what runs, one line per mod and the loader, so changing any of them asks again.
@@ -764,6 +798,22 @@ function Switch-MoonpoolMods([bool]$On) {
       try { if (Test-Path -LiteralPath $_.To) { Remove-Item -LiteralPath $_.To -Force }; Move-Item -LiteralPath $_.From -Destination $_.To; $false }
       catch { $true } })
   }
+  # Moonpool's loader runs with the files the server sent. A UE4SS_Signatures folder it was not sent replaces
+  # the loader's own search for the game's tables, and an outdated one stops every script mod from starting.
+  # It is set aside while Moonpool's mods are on and put back when they go off; nothing in it is changed.
+  foreach ($key in @($ledger.files.Keys | Where-Object { (Split-Path -Leaf $_) -ieq 'dwmapi.dll' })) {
+    $sig = Join-Path (Join-Path (Split-Path -Parent $key) 'ue4ss') 'UE4SS_Signatures'
+    if (@($ledger.files.Keys | Where-Object { $_.StartsWith("$sig\", [StringComparison]::OrdinalIgnoreCase) }).Count) { continue }
+    $aside = "$sig.moonpool-off"
+    try {
+      if ($On -and (Test-Path -LiteralPath $sig) -and -not (Test-Path -LiteralPath $aside)) {
+        Move-Item -LiteralPath $sig -Destination $aside
+        Say "set aside ue4ss\UE4SS_Signatures, which this server's loader does not use and which can stop its script mods; it is put back when the game closes"
+      } elseif (-not $On -and (Test-Path -LiteralPath $aside) -and -not (Test-Path -LiteralPath $sig)) {
+        Move-Item -LiteralPath $aside -Destination $sig
+      }
+    } catch { Say "could not move ue4ss\UE4SS_Signatures ($($_.Exception.Message)); script mods may not start" }
+  }
   return @($stuck) + @($left | ForEach-Object { $_.From })
 }
 
@@ -772,7 +822,15 @@ function Enter-Lock {
   $name = 'Global\moonpool-launcher-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $lock = New-Object Threading.Mutex($false, $name)
   try { $held = $lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $held = $true }
-  if (-not $held) { Fail 'another Moonpool launcher is running, and it stays until Subnautica 2 closes; nothing changed' 2 }
+  if (-not $held) {
+    # A second click on the link while the first launcher's window is up: that window comes forward and no second one opens.
+    $first = Get-Process -Name powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID -and $_.MainWindowTitle -eq 'Moonpool' } | Select-Object -First 1
+    if ($first) {
+      $script:FirstWindowShown = $true
+      try { [void](New-Object -ComObject WScript.Shell).AppActivate($first.Id) } catch { }
+    }
+    Fail 'another Moonpool launcher is running, and it stays until Subnautica 2 closes; nothing changed' 2
+  }
   $script:Lock = $lock
 }
 
@@ -952,7 +1010,7 @@ function Get-DefenderVerdict([string]$Path) {
 
 # An unscanned archive installs only on a yes, remembered per archive so it is asked once.
 function Confirm-Unscanned([string]$Archive, [string]$Label, [string]$ServerId) {
-  $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
+  $sha = Get-Sha256 $Archive
   $path = Join-Path $KitHome "$ServerId\unscanned.json"
   $okayed = @(Read-Json $path @())
   if ($okayed -contains $sha) { return }
@@ -1541,12 +1599,13 @@ try {
   if ($_.Exception.Data.Contains('sn2code')) { $code = [int]$_.Exception.Data['sn2code'] }
   $script:UiCancelled = $false
   Write-Host "moonpool: $($_.Exception.Message)"
+  Write-Log ("failed: $($_.Exception.Message) | " + ($_.ScriptStackTrace -replace '\r?\n', ' < '))
   # A link or shortcut has no console left open to read this in. Code 3 is the player's own
   # choice (declined, or closed the window), which needs no message.
-  if ($code -ne 3 -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
+  if ($code -ne 3 -and -not $script:FirstWindowShown -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     $heading = "Couldn't start with mods"
     if ($Uninstall) { $heading = "Couldn't uninstall Moonpool" } elseif ($DisableMoonpoolMods) { $heading = "Couldn't turn Moonpool's mods off" }
-    Show-Notice $heading $_.Exception.Message
+    Show-Notice $heading ($_.Exception.Message + "`n`nThe details are in %LOCALAPPDATA%\moonpool\moonpool.log; send that file to the server's host.")
   }
   exit $code
 } finally {

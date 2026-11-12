@@ -23,16 +23,8 @@ fi
 [ -d "$WIN64_DIR" ] || { log "install-msvc-runtime: game folder $WIN64_DIR missing"; exit 1; }
 mkdir -p "$cache"
 
-if [ ! -f "$exe" ]; then
-  log "install-msvc-runtime: downloading $VCREDIST_URL"
-  curl -fsSL -o "$exe.part" "$VCREDIST_URL"
-  mv -f "$exe.part" "$exe"
-fi
-actual=$(sha256sum "$exe" | cut -d' ' -f1)
-if [ "$actual" != "$VCREDIST_SHA256" ]; then
-  log "install-msvc-runtime: SHA-256 mismatch: got $actual, expected $VCREDIST_SHA256; refusing"
+if ! fetch_pinned "$VCREDIST_URL" "$exe" "$VCREDIST_SHA256"; then
   log "install-msvc-runtime: Microsoft updates this link; set VCREDIST_SHA256 after checking the new file's signature"
-  rm -f "$exe"
   exit 1
 fi
 

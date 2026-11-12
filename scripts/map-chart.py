@@ -3,7 +3,7 @@
 """The map shows where each player was MAP_DELAY_MINUTES ago, the 50 m squares anyone has
 visited (the rest stays under fog), the lifepods and the PDA signals everyone can see, all from
 the game's own positions. A base is not drawn from the game's base actor, whose position can be far
-from the rooms; a signal named at the base marks it. Nothing is published sooner, so the page never shows where someone is now. A player
+from the rooms; a signal named at the base marks it. Nothing is published sooner than the delay; MAP_DELAY_MINUTES=0 publishes the last recorded position. A player
 who left stays faded for an hour. Names follow SHOW_PLAYER_NAMES; one chart per branch and save.
 A still of the map (map.png) goes beside the page for link previews and the card.
 Off (WEB_MAP not true) withdraws the published files and keeps the chart.
@@ -24,11 +24,13 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sn2files import read_json, write_atomic  # noqa: E402  (beside this file)
+
 STILL_W = 1200  # the still's width in pixels; link previews want about this
 FOCUS_MIN_M = 800  # the still never shows less than this across
 FOCUS_PAD_M = 150  # room around the outermost dot
 STILL_VERSION = 5  # bump when the drawing changes, so a cached still is fetched again
-STOPS = [(0, (143, 233, 228)), (100, (43, 143, 196)), (300, (49, 64, 143)), (800, (39, 18, 79))]
 
 KEEP_S = 3600  # how long a player's last spot stays, faded, after they leave
 CELL_M = 50  # one square cleared from the fog
@@ -36,17 +38,8 @@ UU_PER_M = 100  # the game's units are centimetres
 STALE_S = 180
 
 
-def read_json(path, fallback):
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return fallback
-
-
 def write_json(path, value):
-    tmp = Path(str(path) + ".tmp")
-    tmp.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
-    os.replace(tmp, path)
+    write_atomic(path, json.dumps(value, separators=(",", ":")))
 
 
 def number(value):
@@ -159,8 +152,16 @@ def published(chart, status, world, delay_s, now, names=True):
     current = set(signal_keys(status, tracked=os.environ.get("MAP_PLAYERS", "true") == "true"))
     signals = sorted([int(k.split(",", 2)[0]), int(k.split(",", 2)[1]), k.split(",", 2)[2]]
                      for k, first in chart.get("signals", {}).items() if k in current and now - first >= delay_s)
-    return {"world": world, "delay_minutes": delay_s // 60, "updated": now, "cell_m": CELL_M, "explored": explored,
+    return {"world": world, "delay_minutes": delay_s // 60, "updated": now, "refresh_seconds": refresh_seconds(), "cell_m": CELL_M, "explored": explored,
             "divers": divers, "lifepods": settled("lifepods"), "signals": signals}
+
+
+def refresh_seconds():
+    """How often an open page asks for map.json: MAP_REFRESH_SECONDS, 60 unless set, never under 10."""
+    try:
+        return max(10, int(os.environ.get("MAP_REFRESH_SECONDS") or 60))
+    except ValueError:
+        return 60
 
 
 class _HttpsOnly(urllib.request.HTTPRedirectHandler):
@@ -245,7 +246,7 @@ def backdrop(bgs, public, cache, region=None):
             for x in range(x0, x1):
                 tile = fetch(bg["url"].format(z=zoom, x=x, y=y), cache)
                 if tile is not None:
-                    canvas.paste(tile, ((x - x0) * 512, (y - y0) * 512)); rows.add(y); cols.add(x)
+                    canvas.paste(tile, ((x - x0) * 512, (y - y0) * 512), tile); rows.add(y); cols.add(x)
         if region:
             px = 512 / w
             box = tuple(round(v) for v in ((region[0] - left) * px - x0 * 512, (region[1] - top) * (512 / h) - y0 * 512,
@@ -269,7 +270,8 @@ def backdrop(bgs, public, cache, region=None):
                 continue
             l, t, r, b = it["bounds"]
             box = (round((l - left) * px), round((t - top) * px), round((r - left) * px), round((b - top) * px))
-            canvas.paste(src.resize((max(1, box[2] - box[0]), max(1, box[3] - box[1]))), box[:2])
+            src = src.resize((max(1, box[2] - box[0]), max(1, box[3] - box[1])))
+            canvas.paste(src, box[:2], src)
         if region:
             box = tuple(round(v) for v in ((region[0] - left) * px, (region[1] - top) * px,
                                             (region[2] - left) * px, (region[3] - top) * px))
@@ -365,16 +367,15 @@ def main():
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)
-    (public / "map.html").write_text(render_page(page.read_text(encoding="utf-8"), page_data,
-                                                 os.environ.get("MAP_PUBLIC_URL", "")), encoding="utf-8")
+    write_atomic(public / "map.html", render_page(page.read_text(encoding="utf-8"), page_data, os.environ.get("MAP_PUBLIC_URL", "")))
     if chart.get("still") != sig or not (public / "map.png").exists():
         cache = data / "map-tiles"
         cache.mkdir(exist_ok=True)
         try:
-            (public / "map.png").write_bytes(still(page_data, page_data["backgrounds"], public, cache))
+            write_atomic(public / "map.png", still(page_data, page_data["backgrounds"], public, cache))
             chart["still"] = sig
             write_json(store, chart)
-        except (OSError, ValueError) as err:
+        except (OSError, ValueError, Image.DecompressionBombError) as err:  # a picture too large to decode is no still, not a crash
             print("map-chart: no still: %s" % err, file=sys.stderr)
     return 0
 

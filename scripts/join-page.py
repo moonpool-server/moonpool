@@ -17,8 +17,18 @@ from jinja2.sandbox import SandboxedEnvironment
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import steamfile  # noqa: E402  (beside this file)
+from sn2files import read_json, write_atomic  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+
+
+def map_still(public):
+    """The map's still picture for beside the card: its address with the still's own stamp, so a new picture is
+    fetched and an unchanged one is not; "" when the map is off or has no picture yet."""
+    if not ((public / "map.html").is_file() and (public / "map.png").is_file()):
+        return ""
+    stamp = read_json(public / "map.json", {})
+    return "map.png?" + str(stamp.get("still") or "") if isinstance(stamp, dict) else "map.png"
 
 
 def render_join(search, values):
@@ -111,14 +121,13 @@ def main():
     # shipped one. A copy that fails to render is said in the log and the shipped page is used.
     banner = publish_banner(data / "templates", public)
     values = dict(world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh, banner=banner,
-                  modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:])
+                  modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:],
+                  map=map_still(public))
     shipped = str(HERE.parent / "web")
     html = render_join([str(data / "templates"), shipped], values)
     if html is None:
         html = render_join([shipped], values)
-    tmp = public / "join.html.tmp"
-    tmp.write_text(html, encoding="utf-8")
-    os.replace(tmp, public / "join.html")
+    write_atomic(public / "join.html", html)
     return 0
 
 

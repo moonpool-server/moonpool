@@ -49,7 +49,7 @@ bin/moonpool mods list
 
 An entry needs the mod's download link: a GitHub release file, a CurseForge file page or a Nexus file page. CurseForge needs your own API key in `.env` (`CURSEFORGE_API_KEY`, free at console.curseforge.com) and a mod whose author allows distribution; otherwise players download that one from its page
 
-The join page shows each mod's `summary` and, for a GitHub repository or a CurseForge project, its stars or downloads, last update and author. The host reads them from GitHub's and CurseForge's APIs at most every six hours (`MOD_STATS_MAX_AGE` seconds) and keeps the last numbers when a read fails. CurseForge's need the same key. GitHub allows 60 unauthenticated reads an hour; a `GITHUB_TOKEN` in `.env` is used if set
+The join page shows each mod's `summary` (yours from `plugins.yaml`, or when you give none the project's own one-line description from GitHub or CurseForge) and, for a GitHub repository or a CurseForge project, its stars or downloads, last update and author. The host reads them from GitHub's and CurseForge's APIs at most every six hours (`MOD_STATS_MAX_AGE` seconds) and keeps the last numbers when a read fails. CurseForge's need the same key. GitHub allows 60 unauthenticated reads an hour; a `GITHUB_TOKEN` in `.env` is used if set
 
 A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players then download it themselves and the launcher checks it matches
 
@@ -132,6 +132,8 @@ Moonpool has no event bus. It gives you two doors and you decide what happens
 
 `crontab` in the data volume adds your own schedule. Recreate the host after changing it. Its output goes to `logs/cron.log`
 
+The logs in `logs/` that only grow are kept to 10 MB each, with four older pieces beside them (`services.log.1`, then `.2.gz` to `.4.gz`), checked hourly by logrotate. `game.log` starts again at each launch with the last one kept as `game.log.prev`, and `join_watch.log` is left whole because the world's player count is read from it
+
 Those can call anything in `bin/moonpool`. `world time` and `world weather` need `settings` in `enabled_commands` in `sn2headless.json`. For example a storm every Friday evening:
 
 ```
@@ -161,7 +163,7 @@ For mentions on important alerts, make a role people can opt into and set `DISCO
 
 ## Map
 
-`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one dot per player where they were 15 minutes ago (`MAP_DELAY_MINUTES`), colored by depth and tagged with their name ("Player 1" with `SHOW_PLAYER_NAMES=false`), plus lifepods and the PDA signals everyone in the game can see, each with its name at its exact position. Bases aren't drawn on their own: the position the game gives a base can be far from its rooms, so name a signal at the base to mark it. Signals hidden by default, such as story places nobody has found yet, and in-game admin commands are not shown. A signal shows only once it has stood at one place for the delay, so one that moves, such as a vehicle's, shows only where it was left; with `MAP_PLAYERS=false`, signals the game marks as following something are left out too. Someone who left stays as a faded dot for an hour. `MAP_PLAYERS=false` leaves players and the explored places out of the page and its data, `MAP_SIGNALS=false` the signals. Everything the page draws is in `map.json`, which anyone with the link can fetch, so the fog hides nothing from someone who reads it. With a map picture behind it, the default view darkens everywhere nobody has visited yet, and clears in soft patches on the same delay. The Discord picture is fogged the same way. Anyone with the link can see it all
+`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one marker per player where they were `MAP_DELAY_MINUTES` ago (15 unless set; 0 shows the last recorded position), colored by depth and tagged with their name ("Player 1" with `SHOW_PLAYER_NAMES=false`), plus lifepods and the PDA signals everyone in the game can see, each with its name at its exact position. Bases aren't drawn on their own: the position the game gives a base can be far from its rooms, so name a signal at the base to mark it. Signals hidden by default, such as story places nobody has found yet, and in-game admin commands are not shown. A signal shows only once it has stood at one place for the delay, so one that moves, such as a vehicle's, shows only where it was left; with `MAP_PLAYERS=false`, signals the game marks as following something are left out too. Someone who left stays as a faded marker for an hour. `MAP_PLAYERS=false` leaves players and the explored places out of the page and its data, `MAP_SIGNALS=false` the signals. Everything the page draws is in `map.json`, which anyone with the link can fetch, so the fog hides nothing from someone who reads it. With a map picture behind it, the default view darkens everywhere nobody has visited yet, and clears in soft patches on the same delay. The Discord picture is fogged the same way. Anyone with the link can see it all
 
 Moonpool ships no map picture. To put one behind the dots, copy a map file into the data volume; its `credit` line is shown on the page, so name the picture's author and licence there:
 
@@ -175,7 +177,9 @@ The experimental build carries its own top-down region pictures in the game fold
 
 For your own picture pick two spots far apart that you can find in game. Stand on each and run `bin/moonpool map where <player>`, note each spot's pixel position in the picture, then `bin/moonpool map bounds` works out the edges. The picture can't be rotated
 
-The page carries link preview tags and a still at `/map.png`, so a pasted link shows the map in Discord and the like. `/map?embed=1` hides the heading for an iframe. The still is drawn on your host from the same tiles so it's your call too
+The page carries link preview tags and a still at `/map.png`, so a pasted link shows the map in Discord and the like. `/map?embed=1` hides the card of players and places for an iframe.
+
+The address follows the view: `#x=..&y=..&z=..` is the centre in game metres and the zoom, `hide=fog,signals` the layers switched off, so a copied link opens the same place with the same layers. Markers that would overlap merge into one numbered marker; the card lists every player and place, with a box to narrow the list by name, and a click on one goes there. A click on a player follows them: the map stays on them at each check, `follow=<name>` goes into the address, the last 240 places that open page has seen them at are joined into a path, and the browser is asked to keep the screen on until the follow ends (not every browser does). Hiding Players hides the followed player too. With `SHOW_PLAYER_NAMES=false` the numbers are handed out again whenever the set of players shown changes, so a follow can land on someone else. An open page asks for new data every `MAP_REFRESH_SECONDS` (60 unless set, never under 10); the host writes the data every 30 seconds, so less than 30 gains nothing. Players are still shown `MAP_DELAY_MINUTES` behind, so for a map beside the game that shows about where you are, set the delay to 0 and accept that everyone with the link sees the same. The page's libraries and icon font load in the viewer's browser from cdnjs.cloudflare.com and cdn.jsdelivr.net (listed in `NOTICE`). The still is drawn on your host from the same tiles so it's your call too
 
 The example points at [joric's Subnautica 2 tileset](https://github.com/joric/subnautica2_tileset), which your players' browsers load from joric's site. It's a community capture of the game from May 2026, before the experimental branch opened. It needs no lining up but newer builds may differ and no capture made on experimental is known. Its Unlicense covers joric's work and can't speak for the game's own rights, so that part is your call
 
@@ -183,7 +187,7 @@ The example points at [joric's Subnautica 2 tileset](https://github.com/joric/su
 
 What players see is yours to change, from the data volume, nothing to fork
 
-- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch` and `branch_label`. A copy that fails to render is said in the log and the shipped page is used
+- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch`, `branch_label` and `map` (the map's still picture when the map page is on, else empty; the shipped page shows it beside the card on a wide screen, linking to the live map). A copy that fails to render is said in the log and the shipped page is used
 
 ```sh
 docker compose cp sn2:/opt/sn2/web/join.html.j2 join.html.j2

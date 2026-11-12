@@ -16,19 +16,29 @@ JOIN_LOG="$LOG_DIR/join_watch.log"
 results="" failures=0
 
 clean() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/  */ /g; s/^ //; s/ $//'; }
-jescape() { clean "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 line_time() {
   local l=$1
   printf '%s\n' "$l" | sed -nE 's/^\[([^]]+)\].*/\1/p' | head -n1
 }
 file_time() { date -u -d "@$(stat -c %Y "$1")" +%FT%TZ 2>/dev/null || echo unknown; }
-last_line() { grep -aE "$1" "$2" 2>/dev/null | tail -n1; }
+# The newest line matching $1 in log $2, reading the pieces logrotate kept of it (oldest first) before the log itself.
+last_line() {
+  local n
+  {
+    for n in 4 3 2 1; do
+      [ ! -f "$2.$n.gz" ] || gzip -dc "$2.$n.gz"
+      [ ! -f "$2.$n" ] || cat "$2.$n"
+    done
+    cat "$2"
+  } 2>/dev/null | grep -aE "$1" | tail -n1
+}
 record() {
   local id=$1 ok=$2 time=$3 proof=$4 status=PASS
   [ "$ok" = 1 ] || { status=FAIL; failures=$((failures + 1)); }
-  time=${time:-unknown}; proof=$(clean "$proof")
+  time=$(clean "${time:-unknown}"); proof=$(clean "$proof")
   if [ "$json" = 1 ]; then
-    results="$results${results:+,}{\"stage\":\"$(jescape "$id")\",\"status\":\"$status\",\"time\":\"$(jescape "$time")\",\"proof\":\"$(jescape "$proof")\"}"
+    results=$(jq -cn --argjson all "${results:-[]}" --arg stage "$id" --arg status "$status" --arg time "$time" --arg proof "$proof" \
+      '$all + [{stage: $stage, status: $status, time: $time, proof: $proof}]')
   else
     printf '%s %s [%s] %s\n' "$status" "$id" "$time" "$proof"
   fi
@@ -71,10 +81,7 @@ else record loader 0 unknown "${loader_bad# }; checked $UE4SS_DIR"; fi
 layout_bad=""; hash=""; l=""
 if ue4ss_needs_layout_set; then
   [ -f "$exe" ] && hash=$(sha256sum "$exe" | cut -d' ' -f1)
-  set_dir=""
-  for d in "$UE4SS_LAYOUTS"/*/; do
-    [ -n "$hash" ] && [ "$(tr -d ' \r\n' <"${d}exe.sha256" 2>/dev/null)" = "$hash" ] && { set_dir=${d%/}; break; }
-  done
+  set_dir=$(layout_set_for "$hash") || set_dir=""
   [ -n "$set_dir" ] || layout_bad="$layout_bad no-layout-set-for:${hash:-no-exe}"
   for f in MemberVariableLayout.ini VTableLayout.ini; do
     if [ -n "$set_dir" ]; then
@@ -149,5 +156,5 @@ else
   else record card 0 unknown "no 2xx PATCH/POST in $DISCORD_LOG"; fi
 fi
 
-[ "$json" = 1 ] && printf '{"ok":%s,"stages":[%s]}\n' "$([ "$failures" -eq 0 ] && echo true || echo false)" "$results"
+[ "$json" = 1 ] && jq -cn --argjson stages "${results:-[]}" --argjson ok "$([ "$failures" -eq 0 ] && echo true || echo false)" '{ok: $ok, stages: $stages}'
 [ "$failures" -eq 0 ]

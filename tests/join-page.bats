@@ -74,8 +74,8 @@ JSON
   [[ "$output" != *'http-equiv="refresh"'* && "$output" != *'location.href'* && "$output" != *'location.assign'* ]]
   # A click says at once what should open; the install steps show only if the page still has focus.
   [[ "$output" == *'id="opening" hidden'*'id="nothing" hidden'*'Still waiting?'* ]]
-  [[ "$output" == *'Voice</a> 1.2<span class="about">Voice chat.</span></li>'* ]]
-  [[ "$output" == *'nexusmods.com'* && "$output" == *'(optional, needs one download from its page)'* ]]
+  [[ "$output" == *'Voice</a></span><span class="ver">1.2</span><span class="tag req">required</span></div><span class="about">Voice chat.</span></li>'* ]]
+  [[ "$output" == *'nexusmods.com'* && "$output" == *'<span class="tag">optional</span><span class="tag">download from its page</span>'* ]]
 }
 
 @test "an empty published list is a plain page that joins by itself" {
@@ -120,7 +120,7 @@ JSON
 @test "a plugin link that is not http(s) renders as plain text" {
   printf 'plugins:\n  - name: Sneaky\n    source: "javascript:alert(1)"\n    install: { type: github, repo: a/b, tag: t, asset: a.zip }\n' >"$BATS_TEST_TMPDIR/p.yaml"
   run python3 "$ROOT/scripts/plugins-section.py" "$BATS_TEST_TMPDIR/p.yaml"
-  [ "$status" -eq 0 ] && [[ "$output" == *Sneaky* ]] && [[ "$output" != *javascript:* ]]
+  [ "$status" -eq 0 ]; [[ "$output" == *Sneaky* ]]; [[ "$output" != *javascript:* ]]
 }
 
 @test "a banner in templates shows at the top of the page and goes when it is removed" {

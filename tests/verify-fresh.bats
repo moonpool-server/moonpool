@@ -22,6 +22,8 @@ setup() {
   hash=$(sha256sum "$WIN/Subnautica2-Win64-Shipping.exe" | cut -d' ' -f1)
   echo "$hash" >"$LAYOUTS/fixture/exe.sha256"
   for f in MemberVariableLayout VTableLayout; do printf '%s\n' "$f" >"$LAYOUTS/fixture/$f.ini"; cp "$LAYOUTS/fixture/$f.ini" "$U/$f.ini"; done
+  printf 'settings
+' >"$LAYOUTS/fixture/UE4SS-settings.ini"
   sed -i "s/HASH/$hash/" "$DATA/logs/services.log"
   find "$U" -type f -exec touch -t 202601010100 {} +
   # The engine's own log, where the save load is proven. The
@@ -39,8 +41,22 @@ stage_fails() { [ "$status" -eq 1 ] && [[ "$output" == *"FAIL $1"* ]]; }
   run "${VERIFY[@]}"
   [ "$status" -eq 0 ]; [ "$(grep -c '^PASS ' <<<"$output")" -eq 9 ]
   run "${VERIFY[@]}" --json
-  [ "$status" -eq 0 ]; # the bats image has no python3 or jq: check the shape the panel parses
-  [[ "$output" == '{"ok":true,"stages":['*']}' ]]; [ "$(grep -o '"status":"PASS"' <<<"$output" | wc -l)" -eq 9 ]
+  [ "$status" -eq 0 ]
+  [[ "$output" == '{"ok":true,"stages":['*']}' ]]; [ "$(jq '[.stages[] | select(.status == "PASS")] | length' <<<"$output")" -eq 9 ]
+}
+
+@test "evidence that logrotate moved into an older piece of services.log still counts" {
+  mv "$DATA/logs/services.log" "$DATA/logs/services.log.2"; gzip "$DATA/logs/services.log.2"
+  echo '[2026-11-01T09:00:00Z] a later line that proves nothing' >"$DATA/logs/services.log"
+  run "${VERIFY[@]}"
+  [ "$status" -eq 0 ]; [ "$(grep -c '^PASS ' <<<"$output")" -eq 9 ]
+}
+
+@test "a log line with a control byte in it still gives JSON a parser accepts" {
+  printf '[2026-11-01T08:00:00Z] [32mSteam signed in: true [0m
+' >>"$DATA/logs/services.log"
+  run "${VERIFY[@]}" --json
+  jq -e '.stages[] | select(.stage == "steam") | .proof | test("Steam signed in")' <<<"$output"
 }
 
 @test "fresh-host fails save stage when another slot was loaded" { run "${VERIFY[@]/SAVE_NAME=Slot1/SAVE_NAME=Slot2}"; stage_fails save; }
@@ -69,6 +85,7 @@ stage_fails() { [ "$status" -eq 1 ] && [[ "$output" == *"FAIL $1"* ]]; }
 @test "fresh-host fails loader stage" { rm "$U/UE4SS_Signatures/GNatives.lua"; run "${VERIFY[@]}"; stage_fails loader; }
 @test "fresh-host rejects a mixed-build loader folder" { touch -t 200001010000 "$U/UE4SS.dll"; run "${VERIFY[@]}"; stage_fails loader; [[ "$output" == *older-than-exe* ]]; }
 @test "fresh-host fails layout stage: shipped set is for another exe" { echo 0000000000000000000000000000000000000000000000000000000000000000 >"$LAYOUTS/fixture/exe.sha256"; run "${VERIFY[@]}"; stage_fails layout; [[ "$output" == *no-layout-set-for* ]]; }
+@test "fresh-host fails layout stage: a set missing one of its files is no set, as the installer has it" { rm "$LAYOUTS/fixture/UE4SS-settings.ini"; run "${VERIFY[@]}"; stage_fails layout; [[ "$output" == *no-layout-set-for* ]]; }
 @test "fresh-host fails layout stage: set not applied" { echo other >"$U/VTableLayout.ini"; run "${VERIFY[@]}"; stage_fails layout; [[ "$output" == *not-applied:VTableLayout.ini* ]]; }
 @test "fresh-host fails UE4SS stage" { sed -i '/Starting mods/d' "$U/UE4SS.log"; run "${VERIFY[@]}"; stage_fails ue4ss; }
 @test "fresh-host fails session stage" { sed -i '/postmap: world GameSession/d' "$U/UE4SS.log"; run "${VERIFY[@]}"; stage_fails session; }

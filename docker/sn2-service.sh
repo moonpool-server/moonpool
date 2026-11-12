@@ -88,7 +88,7 @@ svc_steam() {
     sleep 30; exit 1
   fi
   say_on_change steam-client "starting the Windows Steam client; sign in on the viewer page"
-  wine "$STEAM_EXE" -no-browser -silent >>"$LOG_DIR/steam.log" 2>&1
+  "${WITHOUT_SECRETS[@]}" wine "$STEAM_EXE" -no-browser -silent >>"$LOG_DIR/steam.log" 2>&1
   sleep 5
   while steam_running; do sleep 5; done
   say_on_change steam-client "Windows Steam client exited; the supervisor starts it again"
@@ -107,7 +107,7 @@ svc_game() {
     say_on_change install "$mismatch; not launching, switching Steam to $STEAM_BRANCH"
     # steam-config sets the branch when the client next starts: restart it once, not while it downloads.
     if [ "$(vdf_get "$STEAM_DIR/steamapps/appmanifest_${GAME_APP_ID}.acf" BetaKey)" != "${STEAM_BRANCH#public}" ]; then
-      wine "$STEAM_EXE" -shutdown >>"$LOG_DIR/steam.log" 2>&1 || true
+      "${WITHOUT_SECRETS[@]}" wine "$STEAM_EXE" -shutdown >>"$LOG_DIR/steam.log" 2>&1 || true
     fi
     sleep 30; exit 0
   fi
@@ -195,7 +195,16 @@ case $name in
       if supercronic -test "$DATA_DIR/crontab" >>"$LOG_DIR/cron.log" 2>&1; then cat "$DATA_DIR/crontab" >>"$RUN_DIR/crontab"
       else echo "crontab in the data volume is not valid; skipped" >>"$LOG_DIR/cron.log"; fi
     fi
-    [ -s "$RUN_DIR/crontab" ] || exec sleep infinity
+    # The logs that only grow are kept to 10 MB each with four older pieces (logrotate, hourly). Not game.log,
+    # which starts again at each launch, nor join_watch.log, which world-stats counts players from.
+    {
+      printf '%s
+' "$LOG_DIR"/{services,steam,web,discord,cron,hooks,xvfb,x11vnc,novnc,clipboard,backup,save-stage,install-confirm}.log
+      printf '%s
+' '{' 'size 10M' 'rotate 4' 'compress' 'delaycompress' 'missingok' 'notifempty' 'copytruncate' '}'
+    } >"$RUN_DIR/logrotate.conf"
+    printf '17 * * * * /usr/sbin/logrotate --state %s %s
+' "$RUN_DIR/logrotate.state" "$RUN_DIR/logrotate.conf" >>"$RUN_DIR/crontab"
     exec supercronic "$RUN_DIR/crontab" >>"$LOG_DIR/cron.log" 2>&1 ;;
   *) echo "sn2-service.sh: unknown service $name" >&2; exit 64 ;;
 esac

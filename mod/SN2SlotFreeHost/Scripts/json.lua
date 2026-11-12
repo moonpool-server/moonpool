@@ -62,13 +62,6 @@ end
 
 local decode_value
 
-local function utf8_char(cp)
-  if cp < 0x80 then return string.char(cp)
-  elseif cp < 0x800 then return string.char(0xC0 + (cp >> 6), 0x80 + (cp & 0x3F))
-  end
-  return string.char(0xE0 + (cp >> 12), 0x80 + ((cp >> 6) & 0x3F), 0x80 + (cp & 0x3F))
-end
-
 local function decode_string(s, i)
   local out, j = {}, i + 1
   while true do
@@ -82,7 +75,7 @@ local function decode_string(s, i)
       elseif e == 'u' then
         local hex = s:sub(j + 2, j + 5)
         if not hex:match('^%x%x%x%x$') then decode_error(s, j, 'bad \\u escape') end
-        out[#out + 1] = utf8_char(tonumber(hex, 16)); j = j + 6
+        out[#out + 1] = utf8.char(tonumber(hex, 16)); j = j + 6
       else decode_error(s, j, 'bad escape') end
     elseif c:byte() < 0x20 then decode_error(s, j, 'control character in string')
     else out[#out + 1] = c; j = j + 1 end

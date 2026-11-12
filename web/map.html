@@ -10,44 +10,70 @@
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#071923">
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/3.0.0/Control.FullScreen.min.css" integrity="sha256-7vzQ1UjjxHzI2q8ndZCxKoVMuk1Vu1AzRtRbGFd5/PY=" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/4.0.0/Control.FullScreen.min.css" integrity="sha512-Dww58CIezLb4kFGtZ8Zlr85kRDwJgyPhe3gVABsvnJruZuYn3xCTpLbE3iBT5hGbrfCytJnZ4aiI3MxN0p+NVQ==" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" integrity="sha512-ENrTWqddXrLJsQS2A86QmvA17PkJ0GVm1bqj5aTgpeMAfDKN2+SIOLpKG8R/6KkimnhTb+VW5qqUHB/r1zaRgg==" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous">
 <style>
-html,body{height:100%;margin:0;background:#071923;color:#eaf7fb;font:15px system-ui,-apple-system,"Segoe UI",sans-serif}
-body{display:flex;flex-direction:column}
-header{padding:12px 16px}
+html,body,#chart{height:100%;margin:0}
+body{background:#071923;color:#eaf7fb;font:15px system-ui,-apple-system,"Segoe UI",sans-serif}
+header,.leaflet-bar a,.leaflet-control-layers,.leaflet-container .leaflet-control-attribution,.tag,.marker-cluster{background-color:rgba(7,25,35,.88);color:#eaf7fb;border:1px solid #2a5266}
+header{position:absolute;z-index:1000;top:12px;left:12px;width:min(300px,calc(100% - 190px));max-height:calc(100% - 60px);overflow:auto;border-radius:10px;backdrop-filter:blur(6px);font-size:13px}
 body.embed header{display:none}
-h1{margin:0;font-size:20px}
-p{margin:4px 0 0;color:#9fc2cf}
-#chart{flex:1;min-height:0}
-.key{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:#9fc2cf}
-.ramp{width:140px;height:10px;background:linear-gradient(90deg,#8fe9e4,#2b8fc4,#31408f,#27124f)}
+summary{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;list-style:none}
+summary::-webkit-details-marker{display:none}
+h1{margin:0;font-size:18px;flex:1}
+#behind{border:1px solid #f2cc60;color:#f2cc60;border-radius:99px;padding:1px 8px;font-size:11px;white-space:nowrap}
+#behind:empty,ul:empty,h2:has(+ ul:empty){display:none}
+h2{margin:6px 14px 2px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6f97a6}
+ul{margin:0;padding:0 6px;list-style:none}
+li{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;cursor:pointer}
+li[hidden]{display:none}
+#find{box-sizing:border-box;width:calc(100% - 28px);margin:0 14px 4px;padding:5px 8px;border:1px solid #2a5266;border-radius:6px;background:#071923;color:#eaf7fb;font:inherit}
+li:hover,li.followed{background:#12384a}
+li.faded{opacity:.55}
+header .fa-solid{box-sizing:border-box;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:none}
+li span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+li small,header p{color:#9fc2cf}
+header p{margin:8px 14px 10px;font-size:12px}
 .leaflet-container{background:#071923;font:inherit}
-.leaflet-control-layers{color:#111}
+.leaflet-bar a:hover{background-color:#12384a;color:#fff}
+.leaflet-bar a.leaflet-disabled{background-color:rgba(7,25,35,.88);color:#4d7385}
+.leaflet-bar a.leaflet-fullscreen-icon{filter:invert(1);background-color:rgba(248,230,220,.88);border-color:#d5ad99}  /* its picture is dark, so the button is drawn in negative */
+.leaflet-container .leaflet-control-attribution{border:0;color:#9fc2cf}
+.leaflet-control-scale-line{background:none;color:#eaf7fb;border-color:#eaf7fb;border-width:3px;font-size:15px;font-weight:600;line-height:1.5;text-shadow:0 0 4px #071923}
+.pin{cursor:pointer}
+.pin.followed i{border-color:#f2cc60;box-shadow:0 0 0 4px rgba(242,204,96,.45)}
+.pin i{box-sizing:border-box;width:30px;height:30px;border:2px solid #eaf7fb;border-radius:50%;display:grid;place-items:center;font-size:14px;box-shadow:0 1px 6px #000}
+.tag{border-radius:6px;padding:1px 7px;font-size:12px;box-shadow:none;white-space:nowrap}
+.tag::before{display:none}
+.marker-cluster{border:2px solid #f2cc60;border-radius:50%;display:grid;place-items:center;font-weight:600;box-shadow:0 1px 6px #000}
 </style>
 </head>
 <body>
-<header>
-<h1 id="title">{{WORLD}}</h1>
+<header><details id="card" open>
+<summary><h1 id="title">{{WORLD}}</h1><span id="behind"></span></summary>
+<input id="find" type="search" placeholder="Find a player or place" aria-label="Find a player or place">
+<h2>Players</h2><ul id="players"></ul>
+<h2>Places</h2><ul id="places"></ul>
 <p id="about"></p>
-<div class="key"><span>Surface</span><span class="ramp"></span><span>Deep</span><span id="credit"></span><span>Anyone with this link sees this page and its data.</span></div>
-</header>
+</details></header>
 <div id="chart"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/3.0.0/Control.FullScreen.min.js" integrity="sha256-RRgp0Apphsfcq2HCH06yN9MGixhRf/4qs11Cu6SJdOM=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/4.0.0/Control.FullScreen.min.js" integrity="sha512-javanlE101qSyZ7XdaJMpB/RnKP4S/8jq1we4sy50BfBgXlcVbIJ5LIOyVa2qqnD+aGiD7J6TQ4bYKnL1Yqp5g==" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js" integrity="sha512-TiMWaqipFi2Vqt4ugRzsF8oRoGFlFFuqIi30FFxEPNw58Ov9mOy6LgC05ysfkxwLE0xVeZtmr92wVg9siAFRWA==" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.featuregroup.subgroup@1.0.2/dist/leaflet.featuregroup.subgroup.js" integrity="sha256-lTN8BYPNcvhjd8DFDOWPtNbYWcQEz94SPEYHCaEDl7k=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js" integrity="sha512-zInFF17qBFVvvvFpIfeBzo7Tj7+rQxLeTJDmbxjBz5/zIr89YVbTNelNhdTT+/DCrxoVzBeUPVFJsczKbB7sew==" crossorigin="anonymous"></script>
 <script>
-var TILE = 512, map, layers = {};
-var stops = [[0, [143, 233, 228]], [100, [43, 143, 196]], [300, [49, 64, 143]], [800, [39, 18, 79]]];
+var TILE = 512, map, layers = {}, shown = {}, trail = [], lock;
+// The address carries the view, so a copied link opens the same place: #x=..&y=..&z=.. in game metres and zoom,
+// hide=fog,signals for layers switched off, follow=a player's name to keep the map on them.
+var link = new URLSearchParams(location.hash.slice(1)), follow = link.get('follow') || '';
+var colour = chroma.scale(['#8fe9e4', '#2b8fc4', '#31408f', '#27124f']).domain([0, 100, 300, 800]);  // a player's colour, by depth in metres
+if (innerWidth < 600) document.getElementById('card').open = false;  // on a phone the map comes first
 if (new URLSearchParams(location.search).get('embed')) document.body.className = 'embed';
-function colour(depth) {
-  for (var i = 1; i < stops.length; i++) {
-    if (depth <= stops[i][0]) {
-      var a = stops[i - 1], b = stops[i], t = (depth - a[0]) / (b[0] - a[0]);
-      return 'rgb(' + a[1].map(function (v, n) { return Math.round(v + (b[1][n] - v) * t); }).join(',') + ')';
-    }
-  }
-  return 'rgb(39,18,79)';
-}
+function text(s) { var e = document.createElement('span'); e.textContent = s; return e; }  // names and credits are never HTML
 // Fog of war: an opaque sheet over the view, so the map gives nothing away, with a soft round
 // hole wherever someone has been; nearby visits melt into one clearing. Redrawn on every move; [lat, lng] points, radius in metres.
 var Fog = L.Layer.extend({
@@ -88,71 +114,123 @@ function setup(bgs) {
   var s = TILE / Math.abs(bgs.length && bgs[0].tiles ? bgs[0].bounds[2] - bgs[0].bounds[0] : b[2] - b[0]);
   var t0 = bgs.length && bgs[0].tiles ? bgs[0].bounds : b, sy = t0[3] > t0[1] ? s : -s;
   var crs = L.extend({}, L.CRS.Simple, {transformation: new L.Transformation(s, -t0[0] * s, sy, -t0[1] * sy)});
-  map = L.map('chart', {crs: crs, minZoom: -2, maxZoom: maxZoom, zoomSnap: 0.5, attributionControl: false, preferCanvas: true, fullscreenControl: true});
-  L.control.scale({imperial: false, position: 'bottomleft'}).addTo(map);
-  var hosts = [];
+  map = L.map('chart', {crs: crs, minZoom: -2, maxZoom: maxZoom, zoomSnap: 0.5, zoomControl: false,
+    fullscreenControl: true, fullscreenControlOptions: {position: 'bottomright'}});
+  map.attributionControl.setPrefix(false);
+  L.control.zoom({position: 'bottomright'}).addTo(map);
+  L.control.scale({imperial: false, maxWidth: 220, position: 'bottomleft'}).addTo(map);
   bgs.forEach(function (g) {
     var area = [[g.bounds[1], g.bounds[0]], [g.bounds[3], g.bounds[2]]];
-    if (g.tiles) L.tileLayer(g.url, {tileSize: TILE, minZoom: -2, maxZoom: g.max_zoom + 1, minNativeZoom: 0, maxNativeZoom: g.max_zoom, bounds: area}).addTo(map);
-    else L.imageOverlay(g.url, area).addTo(map);
-    if (/^https?:/.test(g.url)) { var h = new URL(g.url).hostname; if (hosts.indexOf(h) < 0) hosts.push(h); }
+    var credit = text(g.credit ? 'Map picture: ' + g.credit : /^https?:/.test(g.url) ? 'Background from ' + new URL(g.url).hostname : '').innerHTML;
+    if (g.tiles) L.tileLayer(g.url, {tileSize: TILE, minZoom: -2, maxZoom: g.max_zoom + 1, minNativeZoom: 0, maxNativeZoom: g.max_zoom, bounds: area, attribution: credit}).addTo(map);
+    else L.imageOverlay(g.url, area, {attribution: credit}).addTo(map);
   });
   if (bgs.length) {
     map.fitBounds([[b[1], b[0]], [b[3], b[2]]]);
     map.setMinZoom(map.getZoom() - 1);  // no further out than the whole world, with room
-    var credits = bgs.map(function (g) { return g.credit; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; });
-    if (credits.length) document.getElementById('credit').textContent = 'Map picture: ' + credits.join('; ');
-    else if (hosts.length) document.getElementById('credit').textContent = 'Background from ' + hosts.join(', ');
   }
-  map.createPane('fog').style.zIndex = 350;  // over the picture, under the dots
+  map.createPane('fog').style.zIndex = 350;  // over the picture, under the markers
   layers.fog = new Fog();
   if (bgs.length) layers.fog.addTo(map);
-  layers.players = L.layerGroup().addTo(map);
-  layers.lifepods = L.layerGroup().addTo(map);
-  layers.signals = L.layerGroup().addTo(map);
-  var shown = {'Players': layers.players, 'Lifepods': layers.lifepods, 'Signals': layers.signals};
-  if (bgs.length) shown = L.extend({'Fog': layers.fog}, shown);
-  L.control.layers(null, shown, {position: 'topright'}).addTo(map);
+  // Markers that would sit on top of each other merge into one numbered marker; hovering it names them, a click zooms in.
+  var near = L.markerClusterGroup({maxClusterRadius: 80, showCoverageOnHover: false, iconCreateFunction: function (c) {
+    return L.divIcon({className: 'marker-cluster', iconSize: [34, 34], html: String(c.getChildCount())});
+  }}).addTo(map);
+  near.on('clustermouseover', function (e) {
+    e.layer.bindTooltip(text(e.layer.getAllChildMarkers().map(function (m) { return m.options.label; }).join(' \u00b7 ')), {className: 'tag', direction: 'bottom', offset: [0, 14]}).openTooltip();
+  });
+  if (bgs.length) shown.Fog = layers.fog;
+  ['Players', 'Lifepods', 'Signals'].forEach(function (k) { shown[k] = layers[k.toLowerCase()] = L.featureGroup.subGroup(near).addTo(map); });
+  layers.followed = L.layerGroup().addTo(map);  // outside the merging, so the player being followed is not hidden in a numbered marker
+  map.on('overlayadd overlayremove', function (e) { if (e.layer === layers.players) map[e.type === 'overlayadd' ? 'addLayer' : 'removeLayer'](layers.followed); });
+  L.control.layers(null, shown, {position: 'topright', collapsed: false}).addTo(map);
+  (link.get('hide') || '').split(',').forEach(function (k) { k = k.charAt(0).toUpperCase() + k.slice(1); if (shown[k]) map.removeLayer(shown[k]); });
+  var at = ['y', 'x', 'z'].map(function (k) { return link.get(k) ? Number(link.get(k)) : NaN; });
+  if (at.every(isFinite)) { map.setView([at[0], at[1]], at[2]); map.fitted = true; }
+  map.on('moveend overlayadd overlayremove', share);
 }
-function pin(group, p, label, fill, faded) {
-  var tag = document.createElement('span'); tag.textContent = label;  // a player's name is never HTML
-  L.circleMarker([p[1], p[0]], {radius: 6, color: '#eaf7fb', weight: 2, fillColor: fill, fillOpacity: faded ? 0.4 : 1, opacity: faded ? 0.4 : 1})
-    .bindTooltip(tag, {permanent: true, direction: 'right', offset: [8, 0]}).addTo(group);
+function share() {
+  var c = map.getCenter(), q = new URLSearchParams({x: Math.round(c.lng), y: Math.round(c.lat), z: map.getZoom()});
+  var hide = Object.keys(shown).filter(function (k) { return !map.hasLayer(shown[k]); }).join(',').toLowerCase();
+  if (hide) q.set('hide', hide);
+  if (follow) q.set('follow', follow);
+  history.replaceState(null, '', '#' + q);
 }
+function pin(kind, p, label, note, icon, fill, faded, mark) {
+  var glyph = '<i class="fa-solid fa-' + icon + '" style="background:' + fill + ';color:' + (chroma(fill).luminance() > 0.3 ? '#071923' : '#eaf7fb') + '"></i>';
+  var m = L.marker([p[1], p[0]], {label: label, opacity: faded ? 0.5 : 1, icon: L.divIcon({className: mark ? 'pin followed' : 'pin', iconSize: [30, 30], html: glyph})})
+    .bindTooltip(text(note ? label + ' \u00b7 ' + note : label), {permanent: true, direction: 'bottom', offset: [0, 14], className: 'tag', opacity: faded ? 0.6 : 1})
+    .on('click', function () { map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 6)); }).addTo(mark ? layers.followed : layers[kind]);
+  var row = document.createElement('li'), small = document.createElement('small');
+  row.className = (faded ? 'faded ' : '') + (mark ? 'followed' : '');
+  row.innerHTML = glyph; row.appendChild(text(label)); small.textContent = note; row.appendChild(small);
+  row.onclick = function () { m.fire('click'); };
+  document.getElementById(kind === 'players' ? 'players' : 'places').appendChild(row);
+  return m;
+}
+var find = document.getElementById('find');
+function sift() {  // the card's rows narrowed to what is typed; the map keeps every marker
+  var q = find.value.trim().toLowerCase();
+  [].forEach.call(document.querySelectorAll('header li'), function (row) { row.hidden = row.textContent.toLowerCase().indexOf(q) < 0; });
+}
+find.oninput = sift;
 function draw(d) {
+  every = d.refresh_seconds || 60;
   if (!map) setup(d.backgrounds || (d.background ? [d.background] : []));
-  ['players', 'lifepods', 'signals'].forEach(function (k) { layers[k].clearLayers(); });
-  var seen = [], h = d.cell_m / 2;
+  ['players', 'lifepods', 'signals', 'followed'].forEach(function (k) { layers[k].clearLayers(); });
+  ['players', 'places'].forEach(function (k) { document.getElementById(k).textContent = ''; });
+  var seen = [], crowd = [], found = false, h = d.cell_m / 2, pods = d.lifepods.map(String);
   if (d.explored) {
     layers.fog.set(d.explored.map(function (c) { return [c[1] + h, c[0] + h]; }), d.cell_m * 1.1);
     if (layers.fogHeld) { layers.fog.addTo(map); layers.fogHeld = false; }
   } else if (map.hasLayer(layers.fog)) { map.removeLayer(layers.fog); layers.fogHeld = true; }  // nothing explored is published
   d.divers.forEach(function (p) {
-    pin(layers.players, [p.x, p.y], p.name + (p.online ? ' · ' + p.depth + ' m' : ' · left ' + p.left_minutes + ' min ago'), colour(p.depth), !p.online);
-    seen.push([p.y, p.x]);
+    var here = [p.y, p.x];
+    if (p.name === follow) {  // their path, as far as this open page has seen it
+      found = true;
+      if (String(trail[trail.length - 1]) !== String(here)) trail = trail.concat([here]).slice(-240);
+      L.polyline(trail, {color: '#eaf7fb', weight: 2, opacity: 0.6, dashArray: '2 6', interactive: false}).addTo(layers.followed);
+    }
+    pin('players', [p.x, p.y], p.name, p.online ? p.depth + ' m' : 'left ' + p.left_minutes + ' min ago', 'person-swimming', colour(p.depth).hex(), !p.online, p.name === follow)
+      .off('click').on('click', function () { follow = follow === p.name ? '' : p.name; trail = []; draw(d); share(); });
+    if (p.name === follow) { if (map.fitted) map.panTo(here); else map.setView(here, 5); map.fitted = true; }
+    seen.push(here); crowd.push(here);
   });
-  d.lifepods.forEach(function (p) { pin(layers.lifepods, p, 'Lifepod', '#ff5a4f'); seen.push([p[1], p[0]]); });
-  (d.signals || []).forEach(function (p) { pin(layers.signals, p, p[2], '#f2cc60'); seen.push([p[1], p[0]]); });
+  d.lifepods.forEach(function (p) { pin('lifepods', p, 'Lifepod', '', 'life-ring', '#ff5a4f'); seen.push([p[1], p[0]]); });
+  (d.signals || []).forEach(function (p) {
+    if (pods.indexOf(p[0] + ',' + p[1]) < 0) pin('signals', p, p[2], '', 'tower-broadcast', '#f2cc60');  // a lifepod's own signal is drawn as the lifepod
+    seen.push([p[1], p[0]]);
+  });
   if (d.world) {
     document.title = d.world + ' map';
     document.getElementById('title').textContent = d.world;
   }
-  document.getElementById('about').textContent = d.explored === null ? 'Player positions are not shown on this map.'
-    : d.divers.length ? 'Where each player was about ' + d.delay_minutes + ' minutes ago. Never where they are now.'
-    : 'No player positions to show yet. They appear about ' + d.delay_minutes + ' minutes after someone moves.';
+  if (!found) trail = [];
+  // While following, the browser is asked to keep the screen on; it lets go by itself when the page is hidden, so it is asked again at the next check.
+  if (follow && navigator.wakeLock && !(lock && !lock.released)) navigator.wakeLock.request('screen').then(function (l) { lock = l; }, function () {});
+  if (!follow && lock) { lock.release(); lock = null; }
+  document.getElementById('behind').textContent = d.explored !== null && d.delay_minutes ? d.delay_minutes + ' min behind' : '';
+  document.getElementById('about').textContent = (d.explored === null ? 'Player positions are not shown on this map.'
+    : !d.divers.length ? 'No player positions to show yet.' + (d.delay_minutes ? ' They appear about ' + d.delay_minutes + ' minutes after someone moves.' : '')
+    : (d.delay_minutes ? 'Players are shown where they were about ' + d.delay_minutes + ' minutes ago. ' : 'Players are shown at their last recorded position. ')
+      + (follow ? 'Following ' + follow + '; click them to stop.' : 'Click one to follow them.'))
+    + ' Updated ' + new Date(d.updated * 1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})
+    + ', checked every ' + every + ' seconds. Anyone with this link sees this page and its data.';
+  sift();
   var bare = !(d.backgrounds && d.backgrounds.length);
-  if (!map.fitted && seen.length) {  // open where the action is; the whole world is one zoom out
-    map.fitBounds(seen, {padding: [60, 60], maxZoom: bare ? 3 : 4});
+  if (!map.fitted && seen.length) {  // open on the players, or with none on everything marked
+    map.fitBounds(crowd.length ? crowd : seen, {padding: [60, 60], maxZoom: bare ? 3 : 5});
     map.fitted = true;
   }
   if (bare && !map.fitted) map.setView([0, 0], 0);
 }
+var every = 60;  // seconds between checks; map.json says how often (MAP_REFRESH_SECONDS)
 function load() {
   fetch('map.json', {cache: 'no-store'}).then(function (r) { if (!r.ok) throw r.status; return r.json(); }).then(draw)
-    .catch(function () { document.getElementById('about').textContent = 'Map data unavailable right now; trying again every minute.'; });
+    .catch(function () { document.getElementById('about').textContent = 'Map data unavailable right now; trying again in ' + every + ' seconds.'; })
+    .then(function () { setTimeout(load, every * 1000); });
 }
 load();
-setInterval(load, 60000);
 </script>
 </body>
 </html>

@@ -23,6 +23,7 @@
 !scripts/verify-fresh.sh
 !scripts/world-stats.py
 !scripts/steamfile.py
+!scripts/sn2files.py
 !scripts/friend-accept.py
 !scripts/map-chart.py
 !bin/moonpool
