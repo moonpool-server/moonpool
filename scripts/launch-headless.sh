@@ -112,6 +112,12 @@ if ! set_background_fps "$GAME_USER_SETTINGS" "$SERVER_MAX_FPS"; then
   log "SERVER_MAX_FPS must be a positive integer"; exit 2
 fi
 log "background frame-rate limit: $SERVER_MAX_FPS"
+if [ -n "${AUTOSAVE_SECONDS:-}" ]; then
+  if ! set_autosave_seconds "${UE_LOG%/Logs/*}/Config/Windows/UWESaveSystemUserSetting.ini" "$AUTOSAVE_SECONDS"; then
+    log "AUTOSAVE_SECONDS must be a positive integer"; exit 2
+  fi
+  log "autosave every $AUTOSAVE_SECONDS s"
+fi
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
 apply_local_paks
 # The last run's lobby is gone: a player sent to it gets "session is no longer available".

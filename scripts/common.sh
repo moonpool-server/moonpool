@@ -92,6 +92,11 @@ set_background_fps() {
   case $2 in '' | *[!0-9]* | 0) return 2 ;; esac
   set_ini_key "$1" /Script/Subnautica2.SN2SettingsLocal FrameRateLimit_WhenBackgrounded "$2"
 }
+# Seconds between the game's autosaves, in its save-system settings (UWESaveSystemUserSetting.ini).
+set_autosave_seconds() {
+  case $2 in '' | *[!0-9]* | 0) return 2 ;; esac
+  set_ini_key "$1" /Script/UWESaveSystem.UWESaveSystemUserSettings AutoSaveDurationInSeconds "$2"
+}
 # Prints the mismatch line when only the other branch's executable is installed.
 game_exe_mismatch() {
   local dir="${1:-$WIN64_DIR}" other=experimental

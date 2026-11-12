@@ -73,3 +73,19 @@ teardown() { rm -rf "$TMPROOT"; }
   ln -s "$TMPROOT/secret" "$mods/Big_P.pak"; printf 'v3' >"$d/paks-local/Big_P.pak"; apply
   [ "$(cat "$TMPROOT/secret")" = 'secret' ]
 }
+
+@test "autosave seconds go into the save-system settings, in place, and a bad value is refused" {
+  ini="$TMPROOT/UWESaveSystemUserSetting.ini"
+  printf '[/Script/UWESaveSystem.UWESaveSystemUserSettings]
+bAutoSaveEnabled=True
+' >"$ini"
+  run bash -c '. "$1/scripts/common.sh"; set_autosave_seconds "$2" 600' bash "$ROOT" "$ini"
+  [ "$status" -eq 0 ]; grep -q '^AutoSaveDurationInSeconds=600$' "$ini"; grep -q '^bAutoSaveEnabled=True$' "$ini"
+  run bash -c '. "$1/scripts/common.sh"; set_autosave_seconds "$2" 900' bash "$ROOT" "$ini"
+  [ "$(grep -c '^AutoSaveDurationInSeconds=' "$ini")" -eq 1 ]; grep -q '^AutoSaveDurationInSeconds=900$' "$ini"
+  for bad in 0 -5 10m ''; do
+    run bash -c '. "$1/scripts/common.sh"; set_autosave_seconds "$2" "$3"' bash "$ROOT" "$ini" "$bad"
+    [ "$status" -eq 2 ]
+  done
+  grep -q '^AutoSaveDurationInSeconds=900$' "$ini"
+}

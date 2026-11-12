@@ -8,6 +8,8 @@ Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. T
 
 8 players is a guess at 6 cores 12 GB 60 GB and 25 Mbit. `metrics.csv` in the data volume shows what your host really uses
 
+The game does most of its work on one thread, so a faster core helps more than more cores. `AUTOSAVE_SECONDS` in `.env` sets the time between the game's autosaves, each of which stalls the server for a second or more and shows to players as rubber-banding; unset keeps the game's own interval, two minutes on build 26496980. It takes effect when the host is recreated. The image's Wine (11.20 Staging) has no esync or fsync, and its successor ntsync needs Linux 6.14 or later on the Docker host, so Wine's own syncing cost is not tunable here. The game log's `TickTracker Tick is delayed` lines give the longest stall in each ten seconds, and `ServerMove: TimeStamp expired` counts the moves the server threw away
+
 ## Signing in
 
 The viewer controls a signed in Steam so keep it off the internet. It always asks for a password, made at first start unless you set `VNC_PASSWORD`; `bin/moonpool diag viewer` shows it. Inside Docker the viewer listens on every interface so the password is what keeps other containers out. Use an SSH tunnel or Tailscale to reach it from elsewhere because they're stronger than a VNC password, even if you bind it to your LAN with `VIEWER_BIND=0.0.0.0`
