@@ -113,6 +113,7 @@ if ! set_background_fps "$GAME_USER_SETTINGS" "$SERVER_MAX_FPS"; then
   log "SERVER_MAX_FPS must be a positive integer"; exit 2
 fi
 log "background frame-rate limit: $SERVER_MAX_FPS"
+log "wine: $(wine --version 2>/dev/null) ($WINE_RUNTIME), sync: ${WINEFSYNC:+fsync}${WINEESYNC:+esync}$([ -n "${WINEFSYNC}${WINEESYNC}" ] || echo wineserver)"
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
 apply_local_paks
 # The last run's lobby is gone: a player sent to it gets "session is no longer available".
