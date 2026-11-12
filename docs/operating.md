@@ -209,6 +209,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`
 - The game won't install: `bin/moonpool diag screenshot shot.png`
+- Players say it's choppy: `docker compose exec sn2 python3 /opt/sn2/bin/tick-report.py --from 2026-11-12T20:00 --window 10` reads the logs the host already keeps (times in UTC). Per window it gives the slow frames the game logged (`MaxTickInterval`) with their median, p95, p99 and how many went over 0.5 s and 1 s, the player moves the server dropped as too old (`ServerMove expired`), the game's autosaves, the host's own saves, the console commands run as a player, and the player count. Compare windows with the same number of players. Console commands run as a player can stall the server: on the test host a batch of 81 in twenty minutes gave 30 frames over 1 s and 758 dropped moves, against 8 to 10 and 104 to 370 in the windows around it. Keep big batches for when nobody's on
 
 Known gaps: `Warp` is refused by this build so there's no way to move a player. The hold during the launch cinematic hasn't been proven
 

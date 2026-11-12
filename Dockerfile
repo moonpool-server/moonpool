@@ -83,7 +83,7 @@ VOLUME ["/run"]
 COPY --chmod=0755 docker/sn2-service.sh docker/healthcheck.sh /opt/sn2/bin/
 COPY --chmod=0755 docker/s6-overlay/ /etc/s6-overlay/
 COPY --chmod=0755 scripts/common.sh scripts/launch-headless.sh scripts/restart-warning.sh scripts/install-game.sh \
-     scripts/install-ue4ss.sh scripts/install-msvc-runtime.sh scripts/join-watch.sh scripts/join-page.py scripts/friend-accept.py scripts/discord-notify.py scripts/save-stage.sh scripts/steam-config.sh scripts/restart-after-autosave.sh scripts/steam-install-confirm.sh scripts/verify-fresh.sh scripts/world-stats.py scripts/steamfile.py scripts/sn2files.py \
+     scripts/install-ue4ss.sh scripts/install-msvc-runtime.sh scripts/join-watch.sh scripts/join-page.py scripts/friend-accept.py scripts/discord-notify.py scripts/save-stage.sh scripts/steam-config.sh scripts/restart-after-autosave.sh scripts/steam-install-confirm.sh scripts/verify-fresh.sh scripts/world-stats.py scripts/tick-report.py scripts/steamfile.py scripts/sn2files.py \
      scripts/map-chart.py scripts/plugins-section.py scripts/mod-stats.py scripts/mod-service.sh scripts/publish-mods.py /opt/sn2/bin/
 COPY --chmod=0755 bin/moonpool /usr/local/bin/moonpool
 COPY mod/ /opt/sn2/mod/

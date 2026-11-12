@@ -78,6 +78,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(scripts/sn2files\.py|tests/test_sn2files\.py)$
+      - id: tick-report-test
+        name: tick report (slow frames, dropped moves, saves, commands)
+        entry: uv run --no-project --with pytest python -m pytest -q tests/test_tick_report.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/tick-report\.py|tests/test_tick_report\.py)$
       - id: map-chart-test
         name: map chart test
         entry: uv run --no-project --with pillow --with pytest python -m pytest -q tests/test_map_chart.py
