@@ -90,5 +90,45 @@ eq(tostring(signals[1].tracked) .. ',' .. tostring(signals[2].tracked), 'false,t
 local unreadable = { ActivePings = store.ActivePings,
   DefaultHiddenPings = setmetatable({}, { __index = function() error('cannot read') end }) }
 eq(#status.signals(unreadable, '!'), 0, 'an unreadable hidden list publishes nothing')
+
+-- A search of every loaded object stalls the game thread, so each is made once and its find kept.
+local walks = { all = 0 }
+_G.FindAllOf = function(c) walks.all = walks.all + 1; return saved_find(c) end
+status.build({ map = 'L_Bases' }, to_str)
+local before = walks.all
+status.invalidate()  -- as the players request does
+status.players(to_str)
+eq(walks.all - before, 1, 'a refreshed player list is one search, for the players')
+status.build({ map = 'L_Bases' }, to_str)
+eq(walks.all - before, 1, 'and, naming no map, does not make the next status search the world again')
+
+local sky_name = 'UWESkyActor /Game/L.L:Sky'
+local sky = { IsValid = function() return true end, GetFullName = function() return sky_name end }
+local there = true
+_G.FindFirstOf = function(c) walks[c] = (walks[c] or 0) + 1; return there and c == 'UWESkyActor' and sky or nil end
+eq(status.first('UWESkyActor'), sky, 'first finds the object')
+status.first('UWESkyActor')
+eq(walks.UWESkyActor, 1, 'and the second time hands back the one it kept, without a search')
+sky_name = 'Fish /Game/L.L:Fish'  -- the game gave the address to something else
+there = false
+eq(status.first('UWESkyActor'), nil, 'an object whose name has changed is not handed back')
+eq(walks.UWESkyActor, 1, 'and is not searched for again at once')
+eq(status.first('Nothing'), nil, 'a class that is not there finds nothing')
+status.first('Nothing')
+eq(walks.Nothing, 1, 'and is not searched for again at once')
+local clock = os.time
+rawset(os, 'time', function() return clock() + 60 end)
+status.first('Nothing')
+eq(walks.Nothing, 2, 'but is once the wait is over')
+
+_G.FindAllOf = function(c) walks[c] = (walks[c] or 0) + 1; return { sky } end
+eq(#status.all('Weather', 600), 1, 'all lists what a search found')
+sky_name = 'Fish /Game/L.L:Other'
+eq(#status.all('Weather', 600), 0, 'without what has since gone')
+eq(walks.Weather, 1, 'and searches once while the list is fresh')
+rawset(os, 'time', function() return clock() + 3600 end)
+status.all('Weather', 600)
+eq(walks.Weather, 2, 'then again once it is old')
+rawset(os, 'time', clock)
 if failures > 0 then os.exit(1) end
 print('status_spec: ok')

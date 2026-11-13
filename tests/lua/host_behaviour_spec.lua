@@ -10,7 +10,18 @@ package.path = dir .. '?.lua;' .. package.path
 local fails = 0
 local function check(c, msg) if not c then fails = fails + 1; io.stderr:write('FAIL: ' .. msg .. '\n') end end
 
-local function obj(t) t = t or {}; t.IsValid = function() return true end; return t end
+-- Every fake object has a full name of its own, as every object in the game does.
+local made = 0
+local function obj(t)
+  t = t or {}
+  made = made + 1
+  local name = 'Fake /Game/Fake.Fake_' .. made
+  t.IsValid = function() return true end
+  t.GetFullName = t.GetFullName or function() return name end
+  return t
+end
+-- The mod keeps what its searches find; a test that swaps what there is to find starts it afresh.
+local function FORGET() local st = package.loaded.status; if st then st.forget() end end
 local function fstr(v) return { ToString = function() return v end } end
 local function class(name) return { GetFName = function() return fstr(name) end } end
 local log = {}
@@ -60,6 +71,7 @@ local found = {
   UWEStoryGoalsWorldSubsystem = function() return goals end,
 }
 _G.FindFirstOf = function(c) local f = found[c]; return f and f() or nil end
+FORGET()
 _G.FindAllOf = function() return nil end
 -- The engine's ability-system library answers for any actor that has an ASC, as the engine does.
 local asc_library = obj({ GetAbilitySystemComponent = function(_, actor)
@@ -102,11 +114,13 @@ do
     save_calls = save_calls + 1; forced = force
   end
   local saved_all = _G.FindAllOf
+  FORGET()
   _G.FindAllOf = function(c) if c == 'PlayerController' then return { host } end return saved_all(c) end
   local save_ok, save_data, save_err = _G.SN2_HANDLERS.save({})
   check(save_ok == true, 'save handler accepts the host save request: ' .. tostring(save_err))
   check(save_data and save_data.forced == true, 'the save answer says that the save was forced')
   check(save_calls == 1 and forced == true, 'save handler forces one async save on the host controller')
+  FORGET()
   _G.FindAllOf = saved_all
 end
 
@@ -180,6 +194,7 @@ end
 -- own PlayerNamePrivate: players are listed by name and a per-player command finds its controller.
 if h and h.players and h.player then
   local joiner_pc = obj({ PlayerState = joiner, Pawn = obj({}) })
+  FORGET()
   _G.FindAllOf = function(c)
     if c == 'PlayerState' then return { host_ps, joiner } end
     if c == 'PlayerController' then return { joiner_pc } end
@@ -196,6 +211,7 @@ if h and h.players and h.player then
   local okc, _, _, perr = pcall(h.player, { player = 'Diver', command = 'Unlock SolarPanel' })
   check(okc and perr ~= 'unknown_player',
     'a per-player command finds the controller by that name (err=' .. tostring(perr) .. ')')
+  FORGET()
   _G.FindAllOf = function() return nil end
 end
 
@@ -207,6 +223,7 @@ do
   check(tod() == nil, 'no clock actor: no time of day')
   local saved = _G.FindFirstOf
   local source, answer = 'UWESkyActor', 0.52
+  FORGET()
   _G.FindFirstOf = function(c)
     if c == source then return obj({ GetTimeOfDay = function() return answer end }) end
     return saved(c)
@@ -216,6 +233,7 @@ do
     'the sky actor answers a day fraction (got ' .. tostring(hhmm) .. ' ' .. tostring(frac) .. ')')
   answer = 0.15
   check((tod()) == '03:36', 'the 03:00 probe plus drift reads 03:36')
+  FORGET()
   source, answer = 'DaySequenceActor', 13.4567
   hhmm, frac = tod()
   check(hhmm == '13:27' and frac == 0.561,
@@ -225,6 +243,7 @@ do
     'an hours clock before 01:00 is not mistaken for a fraction (got ' .. tostring((tod())) .. ')')
   answer = 0 / 0
   check(tod() == nil, 'a non-finite answer is no clock')
+  FORGET()
   _G.FindFirstOf = saved
 end
 
@@ -237,12 +256,14 @@ do
   check(current == nil and #types == 0, 'no sync component: no weather, no types')
   local saved_first, saved_all = _G.FindFirstOf, _G.FindAllOf
   local function asset(name) return obj({ GetFName = function() return fstr(name) end }) end
+  FORGET()
   _G.FindFirstOf = function(c)
     if c == 'UWEWeatherSyncComponent' then
       return obj({ GetCurrentWeather = function() return asset('DA_Weather_Clear') end })
     end
     return saved_first(c)
   end
+  FORGET()
   _G.FindAllOf = function(c)
     if c == 'UWEWeatherTypeBase' then
       return { asset('DA_Weather_Storm'), asset('Default__BP_DA_WeatherBase_C'), asset('DA_Weather_Clear'),
@@ -254,7 +275,9 @@ do
   check(current == 'DA_Weather_Clear', 'the current weather is named (got ' .. tostring(current) .. ')')
   check(table.concat(types, ',') == 'DA_Weather_Clear,DA_Weather_Storm',
     'weather types sorted, once each, no class default (got ' .. table.concat(types, ',') .. ')')
+  FORGET()
   _G.FindFirstOf, _G.FindAllOf = saved_first, saved_all
+  FORGET()
   _G.FindAllOf = function() return nil end
 end
 
@@ -265,12 +288,14 @@ do
   local saved_first, saved_all = _G.FindFirstOf, _G.FindAllOf
   local function asset(name) return obj({ GetFName = function() return fstr(name) end }) end
   local given = {}
+  FORGET()
   _G.FindFirstOf = function(c)
     if c == 'UWEWeatherSyncComponent' then
       return obj({ SetCurrentWeather = function(_, t) given[#given + 1] = t:GetFName():ToString() end })
     end
     return saved_first(c)
   end
+  FORGET()
   _G.FindAllOf = function(c)
     if c == 'UWEWeatherTypeBase' then return { asset('DA_Weather_Storm'), asset('DA_Weather_Clear') } end
     return nil
@@ -281,7 +306,9 @@ do
   local set_ok2, why = set('DA_Rain')
   check(set_ok2 == false and why == 'no loaded weather type named DA_Rain' and #given == 1,
     'an unknown type name calls nothing and says so (got ' .. tostring(why) .. ')')
+  FORGET()
   _G.FindFirstOf, _G.FindAllOf = saved_first, saved_all
+  FORGET()
   _G.FindAllOf = function() return nil end
 end
 
@@ -306,10 +333,12 @@ do
     'weather with no sync component is refused by that reason (got ' .. tostring(wx_reason) .. ')')
   local saved_first, saved_all = _G.FindFirstOf, _G.FindAllOf
   local function asset(name) return obj({ GetFName = function() return fstr(name) end }) end
+  FORGET()
   _G.FindFirstOf = function(c)
     if c == 'UWEWeatherSyncComponent' then return obj({ SetCurrentWeather = function() end }) end
     return saved_first(c)
   end
+  FORGET()
   _G.FindAllOf = function(c)
     if c == 'UWEWeatherTypeBase' then return { asset('DA_Clear') } end
     if c == 'PlayerState' then return { joiner } end
@@ -322,7 +351,9 @@ do
   yf:write('weather: clear\nmods: []\n'); yf:close()
   by = rows()
   check(by.weather.applied == true and by.weather.value == 'clear', 'a loaded type is applied and shown so')
+  FORGET()
   _G.FindFirstOf, _G.FindAllOf = saved_first, saved_all
+  FORGET()
   _G.FindAllOf = function() return nil end
   os.remove(ctl .. '\\settings.yaml')
 end
@@ -344,6 +375,7 @@ do
   local saved_first, saved_all = _G.FindFirstOf, _G.FindAllOf
   local function asset(name) return obj({ GetFName = function() return fstr(name) end }) end
   local current, sets = 'DA_Clear', 0
+  FORGET()
   _G.FindFirstOf = function(c)
     if c == 'UWEWeatherSyncComponent' then
       return obj({
@@ -353,6 +385,7 @@ do
     end
     return saved_first(c)
   end
+  FORGET()
   _G.FindAllOf = function(c)
     if c == 'UWEWeatherTypeBase' then return { asset('DA_Clear') } end
     if c == 'PlayerState' then return { joiner } end
@@ -393,7 +426,9 @@ do
   check(wx.observed == 'DA_StormA' and wx.verified_at == first and wx.drifted == nil,
     'the natural cycle moves the readback only (got ' .. tostring(wx.observed) .. ')')
   check(sets == 1, 'the setter is never called again (calls: ' .. sets .. ')')
+  FORGET()
   _G.FindFirstOf, _G.FindAllOf = saved_first, saved_all
+  FORGET()
   _G.FindAllOf = function() return nil end
   os.remove(ctl .. '\\settings.yaml')
   os.remove(ctl .. '\\status.json')
@@ -415,6 +450,7 @@ do
     local function asset(short, display)
       return obj({ GetFName = function() return fstr(short) end, Name = display and fstr(display) or nil })
     end
+    FORGET()
     _G.FindAllOf = function(c)
       if c == 'DataAsset' then
         asked = asked + 1
