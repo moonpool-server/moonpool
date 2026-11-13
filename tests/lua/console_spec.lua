@@ -119,6 +119,22 @@ check(r.runs[1] and r.runs[1].line == 'Give DA_Titanium_ItemType 1', 'on_ambiguo
 r = run('')
 check(#r.runs == 0 and r.lines[1]:find('find', 1, true), 'an empty line shows help')
 
+-- A message relayed between players' games: a cheat channel passes only from an admin, never a denied command.
+local execute = catalog.cheat_channel .. '.Execute'
+check(console.relay(st, 'GameplayMessage.HUDMessage.String', '(String="hello")', false) == true,
+  'a message on another channel passes from anyone')
+check(console.relay(st, execute, '(String="GetCoords")', true) == true, 'an admin may send a command to every game')
+local pass, why = console.relay(st, execute, '(String="GetCoords")', false)
+check(pass == false and why == 'not an admin', 'a player who is not an admin may not')
+pass, why = console.relay(st, execute, '(String="CrashServer")', true)
+check(pass == false and why:find('crashserver', 1, true) ~= nil, 'an admin may not send a denied command to every game')
+
+-- Commands that carry other commands are refused whole: the deny list reads only the first word.
+r = run('ExecuteForAll ClearSaves')
+check(#r.runs == 0, 'a command that would run another on every game is refused')
+r = run('RunMacro Anything')
+check(#r.runs == 0, 'a macro started on the host, whose lines nobody checks, is refused')
+
 -- A line from the game's own screens runs as it is, for its sender; the deny list still holds.
 r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'Item DA_TestItem 2' })
 check(#r.runs == 1 and r.runs[1].line == 'Item DA_TestItem 2' and r.runs[1].player == 'dir',

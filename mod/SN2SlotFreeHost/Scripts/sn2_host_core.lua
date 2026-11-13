@@ -40,10 +40,28 @@ function M.ps_name(ps)
   return name
 end
 
--- A console line run server-side as that player; the game's reply goes to its own log.
+-- Whether the controller has a cheat manager, the object the game runs console cheats through.
+function M.has_cheats(pc)
+  local has = false
+  pcall(function() has = pc.CheatManager:IsValid() end)
+  return has
+end
+-- Takes the controller's cheat manager away; true when it has none afterwards.
+function M.clear_cheats(pc)
+  if not pcall(function() pc.CheatManager = nil end) then
+    pcall(function() pc.CheatManager = CreateInvalidObject() end)
+  end
+  return not M.has_cheats(pc)
+end
+-- A console line run server-side as that player; the game's reply goes to its own log. A player
+-- whose character is not in the world yet (still loading in) is skipped: the game's own commands
+-- read the character without checking, and one run that early crashed the host.
 function M.run_as(pc, line, why)
-  log('console as ' .. why .. ': ' .. line .. ' (game reply lines follow in the game log)')
   ExecuteInGameThread(function()
+    local body = false
+    pcall(function() body = pc:IsValid() and pc.Pawn:IsValid() end)
+    if not body then log('console as ' .. why .. ' skipped, not in the world yet: ' .. line); return end
+    log('console as ' .. why .. ': ' .. line .. ' (game reply lines follow in the game log)')
     local ksl = StaticFindObject('/Script/Engine.Default__KismetSystemLibrary')
     local ok, err = pcall(function() ksl:ExecuteConsoleCommand(pc:GetWorld(), line, pc) end)
     if not ok then log('console as ' .. why .. ' failed: ' .. tostring(err)) end

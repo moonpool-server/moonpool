@@ -21,6 +21,19 @@
   ],
   "max_lines": 12,
   "cheat_prefix": "Cheat.",
+  "tags": [
+    "Cheat.UnlockRecipes",
+    "Cheat.InfiniteKnowledge",
+    "Cheat.AllBioAbilities",
+    "Cheat.FreeBuild",
+    "Cheat.NoSuffocate",
+    "Cheat.NoStarve",
+    "Cheat.NoDehydrate"
+  ],
+  "cheat_channel": "GameplayMessage.Cheat",
+  "cheat_message_pattern": "String=\"(.-)\"",
+  "blocked_channel": "None",
+  "on_gate_failure": "kick",
   "resolve_kinds": [
     "items",
     "places"
@@ -158,7 +171,9 @@
     "killall",
     "killallofclass",
     "kill_player*",
-    "togglesaveblocking"
+    "togglesaveblocking",
+    "executeforall",
+    "runmacro"
   ],
   "messages": {
     "help": "mp [@who] <console line> | find <text> | ls <kind> [text] | who | cheats | . repeats | shortcuts: {shortcuts}",
@@ -171,7 +186,7 @@
     "who_none": "Nobody else is on",
     "cheats_row": "{tag}",
     "cheats_none": "No cheats are on",
-    "cheats_unknown": "The game's world tags can't be read yet",
+    "cheats_unknown": "The game's world tags can't be read right now",
     "no_match": "No {kind} matches {query}",
     "no_player": "No player matches {query}",
     "missing_arg": "{command} needs {arg}",

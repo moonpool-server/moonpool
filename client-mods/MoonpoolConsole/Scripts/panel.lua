@@ -121,7 +121,10 @@ local function typed(line)
   local pc = live(G.controller)[1]
   if not pc then return nil end
   local where, text = route.route(line, game_commands(pc), CFG.word)
-  if where == route.CONSOLE then call(G.typed_line, function() pc:ServerCheat(text) end) end
+  -- Sent once, never retried: a call that failed after it left would run the line twice.
+  if where == route.CONSOLE and not pcall(function() pc:ServerCheat(text) end) then
+    say('failed', { what = G.typed_line, tries = 1, error = text })
+  end
   return where, text
 end
 

@@ -39,7 +39,11 @@ return {
     typed_line = '/Game/Blueprints/UI/Cheat/WBP_CheatInput.WBP_CheatInput_C:Exec',
     controller = 'PlayerController',
     template_prefix = 'Default__',      -- a class's own template object, never a live one
-    last_class = 'Object',              -- where the walk up the cheat manager's classes ends
+    -- Where the walk up the cheat manager's classes ends. Subnautica's own commands are sent on to the
+    -- server by the game; the engine's (this class and above: DestroyAll, DestroyTarget, Summon) run
+    -- only on the player's PC, where they change nothing, so they are not counted as the game's and
+    -- go to the server's console like any other typed line.
+    last_class = 'CheatManager',
     widgets = '/Script/UMG.Default__WidgetBlueprintLibrary',
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
