@@ -31,6 +31,7 @@ for key, name in pairs(cfg.game) do
   check(name ~= nil and name ~= '', 'the game name ' .. key .. ' is set')
 end
 
+check(cfg.game.last_class == 'CheatManager', 'the cheats of the engine itself are not counted as the game ones')
 local rules = { hide = { 'Button', 'Blur' }, keep = { 'ItemButton' } }
 check(route.hidden('Button', 'GodButton', rules), 'a part of a hidden kind is hidden')
 check(not route.hidden('Button', 'ItemButton', rules), 'a kept part stays')

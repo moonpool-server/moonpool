@@ -669,6 +669,21 @@ LoopAsync(5000, function()
   return command_list ~= nil or command_tries >= 12
 end)
 
+-- The world tags that are on, of those console.json names (tags): the game answers for one tag at a
+-- time through the host's cheat manager, and has no call that lists them. nil when it cannot be asked.
+local function world_tags()
+  local cm
+  pcall(function() cm = controller_named(HOST_NAME).CheatManager end)
+  if not (cm and cm:IsValid()) then return nil end
+  local on = {}
+  for _, name in ipairs(CATALOG.tags or {}) do
+    local ok, set = pcall(function() return cm:HasGlobalTag({ TagName = FName(name) }) end)
+    if not ok then return nil end
+    if set then on[#on + 1] = { id = name, name = name } end
+  end
+  return on
+end
+
 -- What the console can see, read from the live game when a line comes in.
 local function console_game()
   return { host = HOST_NAME, list = function(kind)
@@ -686,7 +701,7 @@ local function console_game()
       return idx and idx.items or {}
     end
     if kind == 'commands' then return (command_index()) end
-    if kind == 'tags' then return nil end -- where this build keeps its world tags is not known yet
+    if kind == 'tags' then return world_tags() end
     return {}
   end }
 end
@@ -809,7 +824,10 @@ end
 -- One queued command per call, at most one per admin_gap_s (admin_pace.lua).
 local function admin_drain()
   local item = admin_pace.take(admin_queue, os.time())
-  if item then
+  if item and item.forwarded then -- from the game's cheat call: the gate already checked the sender
+    admin_call('mp', { sender = item.sender, line = item.text, forwarded = true })
+    admin_pace.mark(admin_queue, os.time())
+  elseif item then
     local sender = item.sender
     local r = admin_signal.run(ADMIN, sender, item.text, { now = os.time, call = admin_call })
     if r and r.silent then
@@ -889,6 +907,9 @@ end)
 -- when it starts with the console's word. Anyone else's is dropped and logged.
 -- The line itself is only read. Writing the text in place corrupted the game's memory: three lines
 -- sent this way and the host crashed in MallocBinned2.
+-- The manager is only ever lent back, never made anew and never kept away: a player's ID is not
+-- known for the first seconds after a join, and a manager the game is asked to make afresh
+-- (EnableCheats) crashed the host on its first command.
 local CHEAT_HOOK = '/Script/Subnautica2.SN2PlayerController:ServerCheat'
 local cheat_hooked = false
 local cheat_held = {} -- controller path -> { pc, manager } while the game's own call runs
@@ -908,12 +929,7 @@ local function cheat_take(pc)
   local manager
   pcall(function() manager = pc.CheatManager end)
   if not (manager and manager:IsValid()) then return true end -- none to run the line with
-  if not pcall(function() pc.CheatManager = nil end) then
-    pcall(function() pc.CheatManager = CreateInvalidObject() end)
-  end
-  local still = false
-  pcall(function() still = pc.CheatManager:IsValid() end)
-  if still then return false end
+  if not host_core.clear_cheats(pc) then return false end
   cheat_held[object_path(pc)] = { pc = pc, manager = manager }
   return true
 end
@@ -925,15 +941,20 @@ LoopAsync(5000, function()
     if not (fn and fn:IsValid()) then return end
     RegisterHook(CHEAT_HOOK, function(Context, Msg)
       cheat_restore()
-      local text
+      local text, pc, taken
       pcall(function() text = Msg:get():ToString() end)
-      local pc = Context:get()
-      local taken = cheat_take(pc)
+      pcall(function() pc = Context:get(); taken = cheat_take(pc) end)
       ExecuteInGameThread(cheat_restore) -- also after the call returns, below; this is the net under it
       local sender = controller_identity(pc)
       if not taken then
+        -- The game's own code runs this line: nothing here can call it back. It is said loudly, and a
+        -- sender who is not an admin is removed (console.json: on_gate_failure), so it happens once.
         log(string.format('cheat gate: COULD NOT STOP a line from %s (eos %s): %s', sender.name,
           tostring(sender.eos), tostring(text)))
+        if CATALOG.on_gate_failure == 'kick' and not admin_signal.authorized(ADMIN.admins, sender) then
+          pcall(handlers.kick, { player = sender.name })
+          log('cheat gate: removed ' .. sender.name .. ' after a line that could not be stopped')
+        end
         return
       end
       if type(text) ~= 'string' or text == '' then return end
@@ -942,13 +963,48 @@ LoopAsync(5000, function()
           tostring(sender.eos)))
         return
       end
-      log(string.format('cheat gate: %s from admin %s', text, sender.name))
-      admin_call('mp', { sender = sender, line = text, forwarded = true })
+      -- It waits its turn in the same paced queue as the signal commands.
+      local queued, why = admin_pace.push(admin_queue, { sender = sender, text = text, forwarded = true },
+        sender.eos or sender.name)
+      log(string.format('cheat gate: %s from admin %s: %s', text, sender.name, queued and 'queued' or why))
     end, cheat_restore)
     cheat_hooked = true
     log('cheat gate registered on ' .. CHEAT_HOOK)
   end)
   return cheat_hooked
+end)
+
+-- The game's ExecuteForAll does not use the call above: the sender's game asks the host to pass a
+-- message on a cheat channel to the other players' games, and each of those runs the command as its
+-- own player. console.relay decides; a message that may not pass has its channel changed to one
+-- nobody listens on (console.json: blocked_channel). The channel is a plain name, not text storage.
+local RELAY_HOOK = '/Script/UWEGameplayMessageRuntime.UWEGameplayMessageRouterComponent:ForwardMessageToServerInternal'
+local relay_hooked = false
+LoopAsync(5000, function()
+  if relay_hooked then return true end
+  ExecuteInGameThread(function()
+    if relay_hooked then return end
+    local fn = StaticFindObject(RELAY_HOOK)
+    if not (fn and fn:IsValid()) then return end
+    RegisterHook(RELAY_HOOK, function(Context, _, Channel, _, MessageString)
+      local channel, text
+      pcall(function() channel = Channel:get().TagName:ToString() end)
+      pcall(function() text = MessageString:get():ToString() end)
+      if not channel then return end
+      local sender = admin_identity(Context:get())
+      local pass, why = console.relay(CONSOLE, channel, text, admin_signal.authorized(ADMIN.admins, sender))
+      if pass then return end
+      local now
+      pcall(function() Channel:get().TagName = FName(CATALOG.blocked_channel) end)
+      pcall(function() now = Channel:get().TagName:ToString() end)
+      log(string.format('cheat gate: %s %s on %s from %s (eos %s): %s',
+        now == CATALOG.blocked_channel and 'dropped' or 'COULD NOT STOP', tostring(text), channel, sender.name,
+        tostring(sender.eos), tostring(why)))
+    end)
+    relay_hooked = true
+    log('cheat gate registered on ' .. RELAY_HOOK)
+  end)
+  return relay_hooked
 end)
 
 -- Empty-server policy (idle.lua): FreezeTime with nobody in, UnfreezeTime on a join, and an
@@ -1551,6 +1607,11 @@ LoopAsync(STATUS_MS, function()
       end
       st.settings = settings_block(tod, wx, os.date('!%Y-%m-%dT%H:%M:%SZ'))
       st.unlocks = unlocks.snapshot(UNLOCKS)
+      local tags = world_tags()
+      if tags then
+        st.cheats = {}
+        for _, t in ipairs(tags) do st.cheats[#st.cheats + 1] = t.name end
+      end
       write_atomic(cpath('status.json'), st)
     end)
     if not ok then log('status error: ' .. tostring(err)) end

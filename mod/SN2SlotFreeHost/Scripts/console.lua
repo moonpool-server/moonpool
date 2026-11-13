@@ -134,6 +134,21 @@ function M.exact(st, req)
   return out
 end
 
+-- A message one player's game asks the host to pass to other players' games. The game's
+-- ExecuteForAll sends a command this way, on a cheat channel, and every game that gets it runs it as
+-- its own player: an admin's game would then send it on with an admin's rights. So a message on a
+-- cheat channel passes only from an admin, and only when the deny list does not name its command.
+-- Returns true to pass, or false and why.
+function M.relay(st, channel, text, is_admin)
+  local prefix = st.cat.cheat_channel
+  if not prefix or tostring(channel):sub(1, #prefix) ~= prefix then return true end
+  if not is_admin then return false, 'not an admin' end
+  local command = tostring(text):match(st.cat.cheat_message_pattern or '') or tostring(text)
+  local word = denied(st, command)
+  if word then return false, M.msg(st, 'denied', { word = word }) end
+  return true
+end
+
 -- A line that reached the host through the game's own cheat call. One that starts with the console's
 -- word (signal_word) is a console line: everything after the word is handled like any other. Any
 -- other line is the game's own and runs as it is.
