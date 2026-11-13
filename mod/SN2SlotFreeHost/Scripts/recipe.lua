@@ -710,6 +710,15 @@ local function admin_call(name, args)
     if pc then
       for _, l in ipairs(r.lines) do pcall(function() pc:ClientMessage(l, FName('None'), 0.0) end) end
     end
+    -- The answer also goes to the sender's screen as one of the game's own notifications: a signal
+    -- name shows about 40 characters, and a line sent from the cheat panel has no signal to answer in.
+    if #r.lines > 0 then
+      pcall(function()
+        local to = notify.targets(status.live_players(to_str), HOST_NAME, { args.sender.name })
+        notify.send({ find = StaticFindObject, world = function() return to[1] end, log = log, text = FText },
+          to, 'info', args.line, table.concat(r.lines, '\n'), tonumber(CATALOG.reply_seconds) or 8)
+      end)
+    end
     return true, { lines = r.lines }
   end
   if name == 'ping' then
@@ -877,17 +886,40 @@ LoopAsync(5000, function()
 end)
 
 -- The game itself carries a cheat line from any client to the server through this call, and runs it
--- with no check; a client mod that shows the game's hidden cheat panel is enough to send one. Here the
--- line is emptied before the game runs it, for everyone. An admin's line then runs as it is unless the
--- console's deny list names it, or as a console line when it starts with the console's word; anyone
--- else's is dropped and logged.
+-- with no check; a client mod that shows the game's hidden cheat panel is enough to send one. The
+-- game runs the line through the sender's cheat manager, so for the length of the call the sender has
+-- none: it is taken off the controller before the game's code runs and put back after. An admin's
+-- line is then run from here: as it is unless the console's deny list names it, or as a console line
+-- when it starts with the console's word. Anyone else's is dropped and logged.
+-- The line itself is only read. Writing the text in place corrupted the game's memory: three lines
+-- sent this way and the host crashed in MallocBinned2.
 local CHEAT_HOOK = '/Script/Subnautica2.SN2PlayerController:ServerCheat'
 local cheat_hooked = false
+local cheat_held = {} -- controller path -> { pc, manager } while the game's own call runs
 local function controller_identity(pc)
   local name, connection
   pcall(function() name = ps_name(pc.PlayerState) end)
   pcall(function() connection = pc.NetConnection:GetFName():ToString() end)
   return { name = name or '?', eos = admin_signal.connection_id(ADMIN, connection) }
+end
+local function cheat_restore()
+  for key, held in pairs(cheat_held) do
+    pcall(function() if held.pc:IsValid() and held.manager:IsValid() then held.pc.CheatManager = held.manager end end)
+    cheat_held[key] = nil
+  end
+end
+local function cheat_take(pc)
+  local manager
+  pcall(function() manager = pc.CheatManager end)
+  if not (manager and manager:IsValid()) then return true end -- none to run the line with
+  if not pcall(function() pc.CheatManager = nil end) then
+    pcall(function() pc.CheatManager = CreateInvalidObject() end)
+  end
+  local still = false
+  pcall(function() still = pc.CheatManager:IsValid() end)
+  if still then return false end
+  cheat_held[object_path(pc)] = { pc = pc, manager = manager }
+  return true
 end
 LoopAsync(5000, function()
   if cheat_hooked then return true end
@@ -896,11 +928,14 @@ LoopAsync(5000, function()
     local fn = StaticFindObject(CHEAT_HOOK)
     if not (fn and fn:IsValid()) then return end
     RegisterHook(CHEAT_HOOK, function(Context, Msg)
+      cheat_restore()
       local text
       pcall(function() text = Msg:get():ToString() end)
-      local emptied = pcall(function() Msg:set('') end)
-      local sender = controller_identity(Context:get())
-      if not emptied then
+      local pc = Context:get()
+      local taken = cheat_take(pc)
+      ExecuteInGameThread(cheat_restore) -- also after the call returns, below; this is the net under it
+      local sender = controller_identity(pc)
+      if not taken then
         log(string.format('cheat gate: COULD NOT STOP a line from %s (eos %s): %s', sender.name,
           tostring(sender.eos), tostring(text)))
         return
@@ -913,7 +948,7 @@ LoopAsync(5000, function()
       end
       log(string.format('cheat gate: %s from admin %s', text, sender.name))
       admin_call('mp', { sender = sender, line = text, forwarded = true })
-    end)
+    end, cheat_restore)
     cheat_hooked = true
     log('cheat gate registered on ' .. CHEAT_HOOK)
   end)

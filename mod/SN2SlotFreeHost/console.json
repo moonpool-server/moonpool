@@ -2,6 +2,7 @@
   "_about": "The in-game admin console's words, shortcuts and replies. A host overrides any of it with console.json in the data volume; a key left out keeps the value here. Nothing a player reads is written in the code.",
   "signal_word": "mp",
   "line_gap_ms": 1000,
+  "reply_seconds": 8,
   "target_mark": "@",
   "targets": {
     "all": [
