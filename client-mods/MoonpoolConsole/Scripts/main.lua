@@ -18,12 +18,17 @@ else
   end)
   panel.say('ready', { key = CFG.key })
 end
-local back = Key[CFG.back_key]
-if back then
-  RegisterKeyBind(back, function()
+local function bind(name, fn)
+  local k = Key[name]
+  if not k then panel.say('bad_key', { key = name }); return end
+  RegisterKeyBind(k, function()
     ExecuteInGameThread(function()
-      local ok, err = pcall(panel.back)
+      local ok, err = pcall(fn)
       if not ok then panel.say('error', { error = err }) end
     end)
   end)
 end
+bind(CFG.back_key, panel.back)
+-- With a list open the keyboard belongs to the list, so the typing keys are read here (config.lua).
+for name, char in pairs(CFG.search.keys) do bind(name, function() panel.key(char) end) end
+bind(CFG.search.erase, function() panel.key(nil) end)

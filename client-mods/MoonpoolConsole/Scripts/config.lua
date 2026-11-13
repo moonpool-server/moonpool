@@ -20,9 +20,11 @@ return {
   layout = { part = 'VerticalBox_199', left = 0.60, right = 0.78, bottom = 0.42,
     margin = { left = 0.0, right = 0.0, bottom = 0.0 } },
   -- What the panel's own label over the command line says (part: the game's name for that label; the
-  -- game rewrites the line under the command line itself, so the hint cannot go there).
+  -- game rewrites the line under the command line itself, so the hint cannot go there): text with no
+  -- list open, filtering while one is, with {query} for what has been typed.
   hint = { part = 'CommonTextBlock_2',
-    text = 'Type to filter: name or category. Esc: back.' },
+    text = 'Open a list, then type to filter it. Esc: back.',
+    filtering = 'Filter: {query}_   Backspace erases, Esc goes back.' },
   -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
   panel = {
     hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
@@ -33,14 +35,21 @@ return {
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
   -- commands, its diagnostic windows.
   close = { lists = { 'WBP_CheatListSelector_C' }, most = 100, wait_ms = 100, commands = { 'CloseDiag' } },
-  -- The command line is also a search box: while one of the game's lists is open, rows that do not
-  -- answer what is typed are hidden (looked at every every_ms). Items the game itself calls
-  -- unpublished are hidden unless show_unpublished is true.
+  -- While one of the game's lists is open, the keyboard belongs to the list, not the command line, so
+  -- this mod reads the typing keys itself (keys: UE4SS Key names, each with the character it types;
+  -- erase: the key that takes one back) and hides the rows that do not answer what was typed. Items
+  -- the game itself calls unpublished are hidden unless show_unpublished is true. Lists opening and
+  -- closing are looked for every every_ms.
   -- strip: the parts of an item's data name that every item shares, as Lua patterns.
   -- live: false turns the search off altogether.
   -- settle_ms: how long a list's row count must hold still before its rows are read.
   search = { live = true, every_ms = 250, settle_ms = 500, show_unpublished = false,
     strip = { '^DA_', '_ItemType.*$' },
+    keys = { A = 'a', B = 'b', C = 'c', D = 'd', E = 'e', F = 'f', G = 'g', H = 'h', I = 'i', J = 'j', K = 'k',
+      L = 'l', M = 'm', N = 'n', O = 'o', P = 'p', Q = 'q', R = 'r', S = 's', T = 't', U = 'u', V = 'v',
+      W = 'w', X = 'x', Y = 'y', Z = 'z', ZERO = '0', ONE = '1', TWO = '2', THREE = '3', FOUR = '4',
+      FIVE = '5', SIX = '6', SEVEN = '7', EIGHT = '8', NINE = '9', SPACE = ' ' },
+    erase = 'BACKSPACE',
     -- An item's category is the folder its data lives in (Tools, Resource, Equipment): typing it
     -- narrows the list. A Lua pattern over the item's full name.
     category = '/ItemType/([%w_]+)/' },
@@ -70,7 +79,6 @@ return {
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
     set_text = '/Script/UMG.TextBlock:SetText',
-    typed = '/Script/Subnautica2.SN2CheatInput:GetTypedString',
     list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
     row_item = 'Context',               -- what a row stands for: an item's name in the game's data
     tree = 'WidgetTree',                -- where a panel keeps its widgets
