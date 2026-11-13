@@ -32,6 +32,19 @@ for key, name in pairs(cfg.game) do
 end
 
 check(cfg.game.last_class == 'CheatManager', 'the cheats of the engine itself are not counted as the game ones')
+local row = route.search_text('DA_TitaniumIngot_ItemType', 'Titanium Ingot', cfg.search.strip)
+check(row == 'Titanium Ingot TitaniumIngot',
+  'a row is searched by its name and its data name, without the shared parts')
+check(route.matches(row, 'ing TIT') and route.matches(row, ''),
+  'typed words match as written, in any order and any case')
+check(not route.matches(row, 'tnm') and route.matches(row, 'tnm', true), 'letters in order count only when loose')
+check(not route.matches(row, 'copper') and not route.matches(row, 'tit x', true),
+  'a word that is not there hides the row')
+check(not route.matches('Advanced Wiring Kit AdvancedWiringKit', 'tnm', true),
+  'loose letters must sit in one word that starts alike')
+check(cfg.search.every_ms > 0 and cfg.search.show_unpublished == false, 'unpublished items are hidden as shipped')
+check(cfg.search.settle_ms >= cfg.search.every_ms, 'a list is given time to finish building before it is read')
+
 local rules = { hide = { 'Button', 'Blur' }, keep = { 'ItemButton' } }
 check(route.hidden('Button', 'GodButton', rules), 'a part of a hidden kind is hidden')
 check(not route.hidden('Button', 'ItemButton', rules), 'a kept part stays')

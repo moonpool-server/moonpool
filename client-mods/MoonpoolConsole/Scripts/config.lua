@@ -22,6 +22,14 @@ return {
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
   -- commands, its diagnostic windows.
   close = { lists = { 'WBP_CheatListSelector_C' }, most = 100, wait_ms = 100, commands = { 'CloseDiag' } },
+  -- The command line is also a search box: while one of the game's lists is open, rows that do not
+  -- answer what is typed are hidden (looked at every every_ms). Items the game itself calls
+  -- unpublished are hidden unless show_unpublished is true.
+  -- strip: the parts of an item's data name that every item shares, as Lua patterns.
+  -- live: false turns the search off altogether.
+  -- settle_ms: how long a list's row count must hold still before its rows are read.
+  search = { live = true, every_ms = 150, settle_ms = 600, show_unpublished = false,
+    strip = { '^DA_', '_ItemType.*$' } },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
@@ -47,6 +55,14 @@ return {
     widgets = '/Script/UMG.Default__WidgetBlueprintLibrary',
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
+    typed = '/Script/Subnautica2.SN2CheatInput:GetTypedString',
+    list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
+    row_item = 'Context',               -- what a row stands for: an item's name in the game's data
+    child_count = '/Script/UMG.PanelWidget:GetChildrenCount',
+    child_at = '/Script/UMG.PanelWidget:GetChildAt',
+    item_class = 'UWEItemType',
+    item_label = 'Name',
+    is_published = '/Script/UWEAssetRegistry.UWEPrimaryDataAssetBase:IsPublished',
     -- The game counts an activated panel as an open menu, shown or not, and stops offering the
     -- world's own actions; so the panel is activated only while it shows.
     activate = '/Script/CommonUI.CommonActivatableWidget:ActivateWidget',
@@ -60,6 +76,7 @@ return {
     -- its backing covers the whole screen and would swallow clicks meant for the lists and the game.
     shown = 4,
     hidden = 1,
+    row_shown = 0,                      -- a list row that shows takes clicks (Visible)
     layer = 1000,                       -- above the game's own screens
   },
 }
