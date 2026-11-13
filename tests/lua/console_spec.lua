@@ -121,5 +121,12 @@ check(r.runs[1] and r.runs[1].line == 'Give DA_Titanium_ItemType 1', 'on_ambiguo
 r = run('')
 check(#r.runs == 0 and r.lines[1]:find('find', 1, true), 'an empty line shows help')
 
+-- A line from the game's own screens runs as it is, for its sender; the deny list still holds.
+r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'Item DA_TestItem 2' })
+check(#r.runs == 1 and r.runs[1].line == 'Item DA_TestItem 2' and r.runs[1].player == 'dir',
+  'an exact line is not looked up')
+r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'CrashServer' })
+check(#r.runs == 0 and #r.lines == 1, 'an exact line on the deny list never runs')
+
 if failures > 0 then os.exit(1) end
 print('console: ok')

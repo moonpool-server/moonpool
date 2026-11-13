@@ -99,6 +99,10 @@ Every word, shortcut and reply comes from `console.json`. To change them, put yo
 
 Each admin can give one order every 3 seconds. The host then runs at most one order every 10 seconds, whoever sent it (`admin_gap_s` in the mod's `config.json`), because each console command can stall the server for a second or two. Orders wait their turn: up to 3 per admin and 20 in all, beyond which the signal answers Busy. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
 
+### The game's own cheat panel
+
+The game carries a cheat line from any client to the host (`SN2PlayerController:ServerCheat`) and runs it without checking who sent it. The game ships no way to open its cheat panel, but a client mod that shows it is enough to send lines. The host mod empties every such line before the game runs it. A line from someone in `ADMINS` then runs as it was sent, unless `deny` in `console.json` names it and only with `player` in `enabled_commands`; a line from anyone else is dropped and logged as `cheat gate: dropped`. These lines are not held to `admin_gap_s`. If the line can't be emptied the log says `cheat gate: COULD NOT STOP`. Tried on the live host with one admin: a give ran once. Not yet tried: a player who is not an admin, and a denied command.
+
 ## More than one world
 
 Each world needs its own Steam account that owns the game
