@@ -691,6 +691,13 @@ policy_env() {
   [[ "$output" == *", 0 failures"* ]]
 }
 
+@test "the console client mod routes typed lines and trims the panel by its settings" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/console_client_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
+
 @test "hosted poll scans only on player changes or the safety interval" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/hosted_poll_spec.lua

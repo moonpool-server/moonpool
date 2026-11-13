@@ -107,6 +107,7 @@ COPY --chmod=0755 scripts/common.sh scripts/launch-headless.sh scripts/restart-w
      scripts/map-chart.py scripts/plugins-section.py scripts/mod-stats.py scripts/mod-service.sh scripts/publish-mods.py /opt/sn2/bin/
 COPY --chmod=0755 bin/moonpool /usr/local/bin/moonpool
 COPY mod/ /opt/sn2/mod/
+COPY client-mods/ /opt/sn2/client-mods/
 COPY web/ /opt/sn2/web/
 COPY NOTICE LICENSE /opt/sn2/
 
