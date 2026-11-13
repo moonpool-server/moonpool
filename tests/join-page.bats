@@ -142,3 +142,26 @@ JSON
   [[ "$output" != *'class="banner"'* ]]
   [ ! -e "$DATA_DIR/public/banner.png" ]
 }
+
+@test "the web server names a type for every kind of file the pages publish, so a browser applies the stylesheet" {
+  conf=$(sed -n '/^mimetype.assign/,/)$/p' "$ROOT/scripts/mod-service.sh")
+  for ext in .html .json .png .css .jpg .jpeg .webp .gif .zip; do
+    [[ "$conf" == *"\"$ext\" =>"* ]] || { echo "no type for $ext"; false; }
+  done
+  [[ "$conf" == *'".css" => "text/css'* ]]
+}
+
+@test "the page links theme.css by a fingerprint of its content, and a host's own theme changes it" {
+  command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
+  run render
+  [ "$status" -eq 0 ]
+  shipped=$(printf '%s' "$output" | grep -o 'theme\.css?[0-9a-f]*')
+  [ "${#shipped}" -eq 22 ]
+  cmp "$ROOT/web/theme.css" "$DATA_DIR/public/theme.css"
+  mkdir -p "$DATA_DIR/templates"
+  printf ':root { --ink: #000000; }\n' >"$DATA_DIR/templates/theme.css"
+  run render
+  own=$(printf '%s' "$output" | grep -o 'theme\.css?[0-9a-f]*')
+  [ "${#own}" -eq 22 ] && [ "$own" != "$shipped" ]
+  grep -q -- '--ink: #000000' "$DATA_DIR/public/theme.css"
+}
