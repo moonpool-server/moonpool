@@ -3,20 +3,26 @@ return {
   -- The key that shows the panel and, pressed again, closes it and everything it opened
   -- (a name from UE4SS's Key table).
   key = 'F2',
+  -- After a press of the key, further presses are ignored for this long.
+  toggle_gap_ms = 500,
+  -- The key that steps back: open lists close first, then the panel. It does nothing while the panel
+  -- is not showing.
+  back_key = 'ESCAPE',
   -- The word the server's console listens for (signal_word in the server's console.json).
   word = 'mp',
   -- Calls into the game fail now and then on this build; each is tried this many times.
   tries = 40,
-  -- Where the panel sits: from left to right as shares of the screen's width, standing on the line at
+  -- Where the panel sits: under the game's centred pick lists, as wide as they are, so the command
+  -- line reads as the list's search box. From left to right as shares of the screen's width, standing on the line at
   -- bottom (a share of its height), with margins in the game's own layout units. part is the game's
   -- name for the block that holds the whole panel.
-  layout = { part = 'VerticalBox_199', left = 0.66, right = 1.0, bottom = 1.0,
-    margin = { left = 0.0, right = 24.0, bottom = 40.0 } },
+  layout = { part = 'VerticalBox_199', left = 0.409, right = 0.591, bottom = 0.93,
+    margin = { left = 0.0, right = 0.0, bottom = 0.0 } },
   -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
   panel = {
     hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
-    keep = { 'Input', 'autocomplete', 'Description', 'ItemButton', 'SpawnButton', 'EquipButton', 'GotoButton',
-      'MacroButton', 'DiagNearby', 'HorizontalBox', 'HorizontalBox_0' },
+    keep = { 'Input', 'autocomplete', 'Description', 'ItemButton', 'SpawnButton', 'EquipButton', 'MacroButton',
+      'HistoryButton', 'HorizontalBox_0' },
   },
   -- What closing also closes: the game's pick lists (by class; the game stacks them, so they are
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
@@ -28,8 +34,11 @@ return {
   -- strip: the parts of an item's data name that every item shares, as Lua patterns.
   -- live: false turns the search off altogether.
   -- settle_ms: how long a list's row count must hold still before its rows are read.
-  search = { live = true, every_ms = 150, settle_ms = 600, show_unpublished = false,
-    strip = { '^DA_', '_ItemType.*$' } },
+  search = { live = true, every_ms = 250, settle_ms = 500, show_unpublished = false,
+    strip = { '^DA_', '_ItemType.*$' },
+    -- An item's category is the folder its data lives in (Tools, Resource, Equipment): typing it
+    -- narrows the list. A Lua pattern over the item's full name.
+    category = '/ItemType/([%w_]+)/' },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
@@ -58,6 +67,9 @@ return {
     typed = '/Script/Subnautica2.SN2CheatInput:GetTypedString',
     list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
     row_item = 'Context',               -- what a row stands for: an item's name in the game's data
+    tree = 'WidgetTree',                -- where a panel keeps its widgets
+    root = 'RootWidget',                -- and the topmost of them
+    container = '/Script/UMG.PanelWidget', -- the kind of widget that holds others
     child_count = '/Script/UMG.PanelWidget:GetChildrenCount',
     child_at = '/Script/UMG.PanelWidget:GetChildAt',
     item_class = 'UWEItemType',
