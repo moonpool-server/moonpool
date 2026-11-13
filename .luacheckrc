@@ -5,7 +5,7 @@ max_line_length = 120
 -- Globals UE4SS provides to mods (see the UE4SS Lua API documentation).
 read_globals = {
     "RegisterHook", "NotifyOnNewObject", "FindFirstOf", "FindAllOf", "FindObject",
-    "StaticFindObject", "ExecuteInGameThread", "ExecuteInGameThreadWithDelay",
+    "StaticFindObject", "CreateInvalidObject", "ExecuteInGameThread", "ExecuteInGameThreadWithDelay",
     "LoopInGameThreadWithDelay", "CancelDelayedAction",
     "RegisterKeyBind", "RegisterConsoleCommandHandler", "RegisterCustomEvent",
     "IterateGameDirectories", "Key", "ModifierKey", "UEHelpers", "FName", "FText", "FLinearColor",
