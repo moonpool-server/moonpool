@@ -51,7 +51,7 @@ An entry needs the mod's download link: a GitHub release file, a CurseForge file
 
 The join page shows each mod's `summary` (yours from `plugins.yaml`, or when you give none the project's own one-line description from GitHub or CurseForge) and, for a GitHub repository or a CurseForge project, its stars or downloads, last update and author. The host reads them from GitHub's and CurseForge's APIs at most every six hours (`MOD_STATS_MAX_AGE` seconds) and keeps the last numbers when a read fails. CurseForge's need the same key. GitHub allows 60 unauthenticated reads an hour; a `GITHUB_TOKEN` in `.env` is used if set
 
-A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once. Players then download it themselves and the launcher checks it matches
+A Nexus file needs `bin/moonpool mods pin "<name>" <file.zip>` once, and so does a CurseForge file whose author keeps it on CurseForge (the server never fetches or serves those; the pin must be the file CurseForge lists). Players then download it themselves and the launcher checks it matches
 
 A mod that ships `.pak` files instead of Lua needs `kind: pak` on its entry. The launcher shows players a box for each mod: mandatory ones are ticked and locked, optional ones are ticked unless the entry says `default: false`. What a player ticks is remembered per server. The boxes come back when a mod is added or changes, with each new or changed one marked
 

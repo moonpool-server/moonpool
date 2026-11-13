@@ -171,13 +171,13 @@ class CurseForgeTests(unittest.TestCase):
                     "downloadUrl": "https://edge.forgecdn.net/example.zip", "hashes": [{"algo": 1, "value": self.sha1}]}
         raise AssertionError(path)
 
-    def resolve(self, allowed=True, body=None):
+    def resolve(self, allowed=True, body=None, pins=None):
         self.allowed = allowed
         install = {"type": "curseforge", "project_id": 123, "file_id": 456}
         with mock.patch.object(PUBLISH, "cf_get", self.fake_get), \
              mock.patch.object(PUBLISH.urllib.request, "build_opener") as opener:
             opener.return_value.open.return_value = Response(self.body if body is None else body)
-            return PUBLISH.resolve_curseforge({}, install, "secret", self.root, "Example", "ue4ss")
+            return PUBLISH.resolve_curseforge({}, install, "secret", self.root, "Example", "ue4ss", pins)
 
     def test_a_distributable_file_is_fetched_and_verified(self):
         source, archive = self.resolve()
@@ -192,6 +192,20 @@ class CurseForgeTests(unittest.TestCase):
         self.assertIsNone(archive)
         self.assertEqual(source["url"], "")
         self.assertEqual(source["page"], "https://curseforge.test/example")
+
+    def test_a_pinned_non_distributable_file_gains_its_layout_and_is_still_not_fetched(self):
+        roots = [{"name": "Example", "prefix": "Example", "native": False}]
+        pin = {"sha256": hashlib.sha256(self.body).hexdigest(), "sha1": self.sha1, "roots": roots}
+        source, archive = self.resolve(False, pins={"curseforge:123/456": pin})
+        self.assertIsNone(archive)
+        self.assertEqual(source["url"], "")
+        self.assertEqual(source["roots"], roots)
+        self.assertEqual([h["algorithm"] for h in source["hashes"]], ["sha256", "sha1"])
+
+    def test_a_pin_of_another_file_is_refused(self):
+        pin = {"sha256": "0" * 64, "sha1": "1" * 40, "roots": []}
+        with self.assertRaisesRegex(ValueError, "not the file CurseForge lists"):
+            self.resolve(False, pins={"curseforge:123/456": pin})
 
     def test_a_hash_mismatch_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "failed its sha1 check"):
