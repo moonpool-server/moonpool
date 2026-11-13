@@ -630,6 +630,45 @@ local function admin_settings(key, value)
   return true, { value = value }
 end
 
+-- The game's own console commands: the functions of the host's cheat manager class and of every
+-- class it is built on, read once from the class itself. Empty until the host has a controller.
+local command_list
+local function command_index()
+  if command_list then return command_list end
+  local out, seen = {}, {}
+  local ok, err = pcall(function()
+    local cls = controller_named(HOST_NAME).CheatManager:GetClass()
+    for _ = 1, 16 do
+      if not (cls and cls:IsValid()) or cls:GetFName():ToString() == 'Object' then break end
+      cls:ForEachFunction(function(fn)
+        local name = fn:GetFName():ToString()
+        if not seen[name] then seen[name] = true; out[#out + 1] = { id = name, name = name } end
+      end)
+      cls = cls:GetSuperStruct()
+    end
+  end)
+  if not ok or #out == 0 then return {}, err end
+  table.sort(out, function(x, y) return x.name < y.name end)
+  log('console: ' .. #out .. ' game commands indexed')
+  command_list = out
+  return out
+end
+
+-- Read ahead of the first console line, once the host is in the world, so that line does not wait.
+local command_tries = 0
+LoopAsync(5000, function()
+  if not _G.SN2_HOSTED then return false end
+  ExecuteInGameThread(function()
+    if command_list then return end
+    local _, err = command_index()
+    command_tries = command_tries + 1
+    if not command_list and command_tries == 12 then
+      log('console: the game command list could not be read: ' .. tostring(err))
+    end
+  end)
+  return command_list ~= nil or command_tries >= 12
+end)
+
 -- What the console can see, read from the live game when a line comes in.
 local function console_game()
   return { host = HOST_NAME, list = function(kind)
@@ -646,6 +685,7 @@ local function console_game()
       local idx = asset_index()
       return idx and idx.items or {}
     end
+    if kind == 'commands' then return (command_index()) end
     if kind == 'tags' then return nil end -- where this build keeps its world tags is not known yet
     return {}
   end }
