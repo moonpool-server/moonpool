@@ -18,3 +18,12 @@ else
   end)
   panel.say('ready', { key = CFG.key })
 end
+local back = Key[CFG.back_key]
+if back then
+  RegisterKeyBind(back, function()
+    ExecuteInGameThread(function()
+      local ok, err = pcall(panel.back)
+      if not ok then panel.say('error', { error = err }) end
+    end)
+  end)
+end

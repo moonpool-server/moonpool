@@ -18,27 +18,12 @@ function M.route(line, known, word)
 end
 
 -- Whether text answers a typed query: every word of the query is in the text as written, in any
--- order ("ing tit" finds Titanium Ingot). With loose, a typed word's letters only have to appear in
--- order inside one word that starts with the same letter ("tnm" finds Titanium): for a slip of the
--- finger, used when nothing answers as written. An empty query matches everything.
-function M.matches(text, query, loose)
+-- order and any case ("ing tit" finds Titanium Ingot, "tools" finds everything in that category).
+-- An empty query matches everything.
+function M.matches(text, query)
   text = tostring(text):lower()
   for word in tostring(query):lower():gmatch('%S+') do
-    if not loose then
-      if not text:find(word, 1, true) then return false end
-    else
-      local found = false
-      for part in text:gmatch('%S+') do  -- within one word of the text, starting with its first letter
-        local at = part:sub(1, 1) == word:sub(1, 1) and 1 or nil
-        for letter in word:gmatch('.') do
-          at = at and part:find(letter, at, true)
-          if not at then break end
-          at = at + 1
-        end
-        found = found or at ~= nil
-      end
-      if not found then return false end
-    end
+    if not text:find(word, 1, true) then return false end
   end
   return true
 end
@@ -61,16 +46,6 @@ function M.hidden(kind, part, rules)
   for _, k in ipairs(rules.hide or {}) do hide = hide or k == kind end
   for _, k in ipairs(rules.keep or {}) do keep = keep or k == part end
   return hide and not keep
-end
-
--- A panel part's own name and kind from its full name, or nil for anything not directly in this
--- panel. base: the panel's full path. Parts inside the panel's buttons (their own trees) are left alone.
-function M.part_of(full_name, base)
-  local kind, path = tostring(full_name):match('^(%S+)%s+(.*)$')
-  if not path or path:sub(1, #base) ~= base then return nil end
-  local part = path:sub(#base + 1):match('^%.WidgetTree_%d+%.([%w_]+)$')
-  if not part then return nil end
-  return part, kind
 end
 
 return M

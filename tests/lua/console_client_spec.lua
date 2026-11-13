@@ -31,17 +31,18 @@ for key, name in pairs(cfg.game) do
   check(name ~= nil and name ~= '', 'the game name ' .. key .. ' is set')
 end
 
+check(type(cfg.back_key) == 'string' and cfg.back_key ~= cfg.key, 'stepping back has a key of its own')
+check(cfg.toggle_gap_ms >= 100, 'a double press of the key is ignored')
 check(cfg.game.last_class == 'CheatManager', 'the cheats of the engine itself are not counted as the game ones')
-local row = route.search_text('DA_TitaniumIngot_ItemType', 'Titanium Ingot', cfg.search.strip)
-check(row == 'Titanium Ingot TitaniumIngot',
-  'a row is searched by its name and its data name, without the shared parts')
-check(route.matches(row, 'ing TIT') and route.matches(row, ''),
-  'typed words match as written, in any order and any case')
-check(not route.matches(row, 'tnm') and route.matches(row, 'tnm', true), 'letters in order count only when loose')
-check(not route.matches(row, 'copper') and not route.matches(row, 'tit x', true),
-  'a word that is not there hides the row')
-check(not route.matches('Advanced Wiring Kit AdvancedWiringKit', 'tnm', true),
-  'loose letters must sit in one word that starts alike')
+local row = route.search_text('DA_TitaniumIngot_ItemType', 'Titanium Ingot Resource', cfg.search.strip)
+check(row == 'Titanium Ingot Resource TitaniumIngot',
+  'a row is searched by its name, its category and its data name, without the shared parts')
+check(route.matches(row, 'ing TIT') and route.matches(row, ''), 'typed words match as written, in any order and case')
+check(route.matches(row, 'resource tit'), 'the category is a search word like any other')
+check(not route.matches(row, 'tnm') and not route.matches(row, 'copper'), 'a word that is not there hides the row')
+local knife = 'UWEItemType /Game/Data/ItemType/Tools/DA_Knife_ItemType.DA_Knife_ItemType'
+check(knife:match(cfg.search.category) == 'Tools',
+  'the category is the folder the item lives in')
 check(cfg.search.every_ms > 0 and cfg.search.show_unpublished == false, 'unpublished items are hidden as shipped')
 check(cfg.search.settle_ms >= cfg.search.every_ms, 'a list is given time to finish building before it is read')
 
@@ -50,18 +51,10 @@ check(route.hidden('Button', 'GodButton', rules), 'a part of a hidden kind is hi
 check(not route.hidden('Button', 'ItemButton', rules), 'a kept part stays')
 check(not route.hidden('TextBox', 'Input', rules), 'a kind that is not listed stays')
 
-local base = '/Engine/Transient.Game_1:Instance_2.WBP_CheatInput_C_3'
-local part, kind = route.part_of('CommonTextButton_C ' .. base .. '.WidgetTree_4.GodButton', base)
-check(part == 'GodButton' and kind == 'CommonTextButton_C', 'a part directly in the panel is named with its kind')
-check(route.part_of('CommonTextBlock ' .. base .. '.WidgetTree_4.GodButton.WidgetTree_5.TextLabel', base) == nil,
-  'a part inside one of the panel\'s buttons is left alone')
-check(route.part_of('CommonTextBlock /Engine/Transient.Other_9.WidgetTree_4.Input', base) == nil,
-  'a part of another panel is left alone')
-
 -- The shipped settings keep the command line and what opens the pick lists.
 local function shown(kind_, part_) return not route.hidden(kind_, part_, cfg.panel) end
 check(shown('CommonTextBlock', 'Input') and shown('CommonTextBlock', 'autocomplete'), 'the command line stays')
-check(shown('CommonTextButton_C', 'ItemButton') and shown('CommonTextButton_C', 'GotoButton')
+check(shown('CommonTextButton_C', 'ItemButton') and not shown('CommonTextButton_C', 'GotoButton')
   and shown('CommonTextButton_C', 'MacroButton'), 'the pick lists stay, macros among them')
 check(not shown('CommonTextButton_C', 'DiagMap') and not shown('HorizontalBox', 'StatCommandsContainer')
   and not shown('BackgroundBlur', 'BackgroundBlur_82'), 'the debug rows and the blur are hidden')
