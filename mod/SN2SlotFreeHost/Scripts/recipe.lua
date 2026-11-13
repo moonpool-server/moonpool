@@ -655,7 +655,8 @@ local function admin_call(name, args)
   if name == 'mp' then
     if not CFG.enabled_set.player then return false, nil, console.msg(CONSOLE, 'console_off') end
     local req = { sender = { name = args.sender.name, key = args.sender.eos }, text = args.line }
-    local r = args.exact and console.exact(CONSOLE, req) or console.handle(CONSOLE, req, console_game())
+    local r = args.forwarded and console.forwarded(CONSOLE, req, console_game())
+      or console.handle(CONSOLE, req, console_game())
     -- Each line can stall the server for a second or so, so they go line_gap_ms apart.
     local gap = tonumber(CATALOG.line_gap_ms) or 1000
     for i, run in ipairs(r.runs) do
@@ -838,7 +839,8 @@ end)
 -- The game itself carries a cheat line from any client to the server through this call, and runs it
 -- with no check; a client mod that shows the game's hidden cheat panel is enough to send one. Here the
 -- line is emptied before the game runs it, for everyone. An admin's line then runs as it is unless the
--- console's deny list names it; anyone else's is dropped and logged.
+-- console's deny list names it, or as a console line when it starts with the console's word; anyone
+-- else's is dropped and logged.
 local CHEAT_HOOK = '/Script/Subnautica2.SN2PlayerController:ServerCheat'
 local cheat_hooked = false
 local function controller_identity(pc)
@@ -870,7 +872,7 @@ LoopAsync(5000, function()
         return
       end
       log(string.format('cheat gate: %s from admin %s', text, sender.name))
-      admin_call('mp', { sender = sender, line = text, exact = true })
+      admin_call('mp', { sender = sender, line = text, forwarded = true })
     end)
     cheat_hooked = true
     log('cheat gate registered on ' .. CHEAT_HOOK)
