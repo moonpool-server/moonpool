@@ -108,6 +108,8 @@ set_background_fps() {
 # NET_MAX_TICK_RATE: the engine's net.MaxNetTickRate console variable in Engine.ini, how many times a
 # second the server's network driver may tick. Empty takes a value set earlier back out, so the game's
 # own default applies again. It counts as applied only when the game log says "Set CVar".
+# On game build 26496980 the engine does not know the variable: the log says "deferred - dummy
+# variable created" and the console answers "Command not recognized", so the setting does nothing there.
 set_net_tick_rate() {
   local ini=$1 value=$2
   if [ -z "$value" ]; then
