@@ -105,6 +105,16 @@ The game carries a cheat line from any client to the host (`SN2PlayerController:
 
 Tried on the live host with one admin: twelve lines in a row each ran once, and an unclear name was asked about and answered. Not yet tried: a player who is not an admin, and a denied command. An earlier version changed the line's text in place instead; that corrupted the game's memory and crashed the host after about three lines.
 
+### The admin panel (client mod MoonpoolConsole)
+
+`client-mods/MoonpoolConsole` comes with Moonpool. It is not offered to players until you list it in `plugins.yaml` with `install: {type: local}`; a folder of the same name under `client-mods/` in the data volume replaces the shipped one.
+
+In the game, its key (F2 as shipped) shows the game's own cheat panel at the bottom right, trimmed to a command line and the buttons that open the game's item, spawn, equip, goto and nearby windows. The same key closes the panel and everything it opened: the pick lists, which the game stacks, and the diagnostic windows. A line typed there that is one of the game's own commands is left to the game, so `give tit 5` opens the game's own list narrowed to the matches and a pick gives 5; anything else is sent to the host as a console line (`who`, `g tit 10`, a kit name) and answered with a notification. The mod decides nothing about who may do what: the host's gate above does, so a player who is not an admin gets nothing from it.
+
+`Scripts/config.lua` is the only place to change it: the key, the console's word, where the panel sits, which parts of the game's panel stay, what closing closes, the log messages, and the game's own names the mod relies on.
+
+Tried on one PC on game build 26496980 through a test harness that calls the mod's functions: shown and closed eleven times in a row with the world's own actions usable afterwards; `who` and `g tit 1` answered on screen; `give tit` opened the game's list with four matches; three lists opened on top of older ones were all closed by one close. Each call into the game is retried, because calls fail at random on this build. Not yet tried: installing it through the launcher, typing on a keyboard, a mouse pick from a list with the panel showing, and the nearby window.
+
 ## More than one world
 
 Each world needs its own Steam account that owns the game

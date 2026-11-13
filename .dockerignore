@@ -13,6 +13,7 @@
 !scripts/mod-service.sh
 !scripts/publish-mods.py
 !client/
+!client-mods/
 !scripts/save-stage.sh
 !scripts/backup-run.sh
 !scripts/steam-config.sh

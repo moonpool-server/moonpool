@@ -391,9 +391,16 @@ def resolve_curseforge(entry, install, key, temp_dir, name, kind, pins=None):
     return source, archive
 
 
+# Client mods that come with Moonpool: beside this script's folder in the image and in the repository.
+SHIPPED_CLIENT_MODS = Path(__file__).resolve().parent.parent / "client-mods"
+
+
 def resolve_local(entry, install, data, public, name):
-    """The server's own mod: a folder under client-mods/<name>/ zipped and served."""
+    """The server's own mod: a folder under client-mods/<name>/ zipped and served. The data volume's
+    folder wins; without one, a mod of that name shipped with Moonpool (SHIPPED_CLIENT_MODS) is used."""
     folder = data / "client-mods" / name
+    if not folder.is_dir():
+        folder = SHIPPED_CLIENT_MODS / name
     if not folder.is_dir():
         raise ValueError(f"{name}: client-mods/{name}/ is missing in the data volume")
     files = sorted(p for p in folder.rglob("*") if p.is_file())

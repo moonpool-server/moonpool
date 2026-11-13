@@ -290,6 +290,23 @@ class DownloadsAndLinks(unittest.TestCase):
         self.assertEqual(PUBLISH.copy_capped(io.BytesIO(b"y" * 10), out, "https://example/y.zip", cap=10), 10)
         self.assertEqual(out.getvalue(), b"y" * 10)
 
+    def test_a_shipped_client_mod_is_published_unless_the_data_volume_has_its_own(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"; public = Path(tmp) / "public"; data.mkdir()
+            source, archive = PUBLISH.resolve_local({"name": "MoonpoolConsole"}, {"type": "local"}, data, public,
+                                                    "MoonpoolConsole")
+            with zipfile.ZipFile(archive) as z:
+                self.assertEqual(sorted(z.namelist()), ["Scripts/config.lua", "Scripts/main.lua", "Scripts/panel.lua",
+                                                       "Scripts/route.lua"])
+            self.assertEqual(source["url"], "files/MoonpoolConsole.zip")
+            own = data / "client-mods" / "MoonpoolConsole" / "Scripts"; own.mkdir(parents=True)
+            (own / "main.lua").write_text("print('mine')")
+            _, archive = PUBLISH.resolve_local({"name": "MoonpoolConsole"}, {"type": "local"}, data, public,
+                                               "MoonpoolConsole")
+            with zipfile.ZipFile(archive) as z:
+                self.assertEqual(z.namelist(), ["Scripts/main.lua"])
+                self.assertEqual(z.read("Scripts/main.lua"), b"print('mine')")
+
     def test_a_link_under_client_mods_is_not_published(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp) / "data"; public = Path(tmp) / "public"
