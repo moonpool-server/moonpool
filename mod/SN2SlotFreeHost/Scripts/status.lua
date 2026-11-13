@@ -92,6 +92,7 @@ local function loc(actor)
   if not ok or not x then return nil end
   return { x = math.floor(x + 0.5), y = math.floor(y + 0.5), z = math.floor(z + 0.5) }
 end
+M.loc = loc
 
 -- Mark the cache stale; called on a map load and when a PlayerState is created.
 function M.invalidate() cache.dirty = true end
