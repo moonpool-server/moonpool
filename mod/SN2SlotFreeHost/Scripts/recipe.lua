@@ -980,24 +980,44 @@ local function list_inbox()
   return names
 end
 
-local function regular_not_reparse(path)
-  -- Wine's cmd has no reparse-point filter (-l matches nothing), so a link passes as a file;
-  -- only the container's own user can write the inbox.
-  local p = io.popen('cmd /c dir /a:-d /b "' .. path .. '" 2>nul')
-  if not p then return false end
-  local line = p:read('*l'); p:close()
-  return line ~= nil
+-- The requests to answer. The client writes each request's file name into .pending; the file is
+-- taken by a rename, so a name written while this runs lands in a new .pending for the next poll.
+-- Nothing here starts a process: under Wine each `cmd /c dir` took about half a second and the game
+-- waited for it. A .pending with no names in it (the mod's own, after a crash) means list the folder.
+local function pending_names()
+  local pending, taken = cpath('inbox', '.pending'), cpath('inbox', '.pending.taken')
+  os.remove(taken)
+  if not os.rename(pending, taken) then return nil end
+  local raw = read_file(taken) or ''
+  os.remove(taken)
+  local names, seen_names = {}, {}
+  for line in raw:gmatch('[^\r\n]+') do
+    if line:match('^[0-9a-f]+%.json$') and not seen_names[line] then
+      seen_names[line] = true; names[#names + 1] = line
+    end
+  end
+  if #names == 0 then return list_inbox() end
+  return names
 end
 
 local inflight = {} -- nonces whose handler is queued on the game thread, answer not yet written
+-- Answers in the outbox, oldest first: those left by an earlier run, listed once here, then each new one.
+local answered = {}
+do
+  local p = io.popen('cmd /c dir /b /od "' .. cpath('outbox') .. '\\*.json" 2>nul')
+  if p then
+    for line in p:lines() do answered[#answered + 1] = (line:gsub('%s+$', '')) end
+    p:close()
+  end
+end
 local function process_inbox()
-  local pending = cpath('inbox', '.pending')
-  if not read_file(pending) then return end
-  os.remove(pending)
-  for _, name in ipairs(list_inbox()) do
+  local names = pending_names()
+  if not names then return end
+  for _, name in ipairs(names) do
     local path = cpath('inbox', name)
-    local is_regular = regular_not_reparse(path)
-    local raw = is_regular and read_file(path) or nil
+    -- A folder or a missing file cannot be read; only the container's own user can write the inbox.
+    local raw = read_file(path)
+    local is_regular = raw ~= nil
     os.remove(path)
     local id = name:gsub('%.json$', '')
     local result
@@ -1039,13 +1059,10 @@ local function process_inbox()
     if result and not inflight[id] and protocol.valid_nonce(id) then
       write_atomic(cpath('outbox', name), result)
     end
+    -- A ceiling for answers whose client died before reading them: the oldest go first.
+    answered[#answered + 1] = name
+    while #answered > 128 do os.remove(cpath('outbox', table.remove(answered, 1))) end
   end
-  -- A ceiling for answers whose client died before reading them.
-  local answers = {}
-  local p = io.popen('cmd /c dir /b "' .. cpath('outbox') .. '\\*.json" 2>nul')
-  if p then for line in p:lines() do answers[#answers + 1] = line:gsub('%s+$', '') end; p:close() end
-  table.sort(answers)
-  while #answers > 128 do os.remove(cpath('outbox', table.remove(answers, 1))) end
 end
 
 -- After a crash: drop the mod's unpublished temp files and answer whatever is still in the inbox.

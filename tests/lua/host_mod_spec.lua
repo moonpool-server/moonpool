@@ -145,11 +145,15 @@ do
   check(launcher:find('SN2_GAME_LOG_WIN=$(winpath "$UE_LOG")', 1, true)
     ~= nil, 'the launcher exports the absolute game log path (common.sh picks it per executable)')
   check(launcher:match('\nexport [^\n]*SN2_GAME_LOG_WIN') ~= nil, 'SN2_GAME_LOG_WIN is exported')
-  -- Wine's cmd has no reparse-point filter: /a:-d-l matched nothing and every
-  -- request was refused as non_regular_file.
+  -- Answering a request starts no process: under Wine each `cmd /c dir` held the game for about half
+  -- a second. The names come from .pending, which the client writes.
   local recipe = assert(io.open(dir .. 'recipe.lua')):read('a')
-  check(recipe:find("dir /a:-d /b", 1, true) ~= nil and recipe:find("/a:-d-l", 1, true) == nil,
-    'the inbox file check uses a filter Wine honours (/a:-d, no -l)')
+  local inbox = assert(recipe:match('\nlocal function process_inbox%(%)(.-)\nend\n'), 'process_inbox not found')
+  check(not inbox:find('popen', 1, true) and not inbox:find('os.execute', 1, true)
+    and not inbox:find('list_inbox', 1, true), 'answering a request starts no process and lists no folder')
+  check(inbox:find('pending_names()', 1, true) ~= nil, 'the request names come from .pending')
+  local cli = assert(io.open(dir .. '../../../bin/moonpool')):read('a')
+  check(cli:find('pending.write(dest.name', 1, true) ~= nil, 'the client writes its request name into .pending')
 end
 
 -- The example config leaves enabled_commands to the mod's default.
