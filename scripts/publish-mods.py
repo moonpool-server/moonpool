@@ -346,7 +346,7 @@ def resolve_nexus(entry, install, pins, name):
             "hashes": [{"algorithm": "sha256", "value": digest}], "roots": pin.get("roots", [])}
 
 
-def resolve_curseforge(entry, install, key, temp_dir, name, kind):
+def resolve_curseforge(entry, install, key, temp_dir, name, kind, pins=None):
     project_id = install.get("project_id")
     if project_id is None and install.get("slug"):  # from a pasted file link: the project by its slug
         found = cf_get(f"/mods/search?gameId={CF_GAME_ID}&slug={urllib.parse.quote(str(install['slug']))}", key)
@@ -368,6 +368,15 @@ def resolve_curseforge(entry, install, key, temp_dir, name, kind):
               "size": file_data.get("fileLength", 0), "hashes": hashes,
               "allow_mod_distribution": bool(project.get("allowModDistribution", False))}
     if not source["allow_mod_distribution"]:
+        # The author keeps the file on CurseForge: nothing is fetched or served here. A copy the host
+        # downloaded and pinned says what is inside it; it must be the file CurseForge lists.
+        pin = (pins or {}).get(f"curseforge:{project_id}/{file_id}")
+        if pin:
+            same = [h for h in hashes if pin.get(h["algorithm"])]
+            if not same or any(pin[h["algorithm"]] != h["value"] for h in same):
+                raise ValueError(f"{name}: the pinned archive is not the file CurseForge lists; download it again and re-pin")
+            source["roots"] = pin.get("roots", [])
+            source["hashes"] = [{"algorithm": "sha256", "value": pin["sha256"]}] + hashes
         return source, None
     url = file_data.get("downloadUrl")
     if not url:
@@ -430,7 +439,7 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
         key = os.environ.get("CURSEFORGE_API_KEY", "")
         if not key:
             raise ValueError(f"{name}: CURSEFORGE_API_KEY is not set")
-        source, archive = resolve_curseforge(entry, install, key, temp_dir, name, kind)
+        source, archive = resolve_curseforge(entry, install, key, temp_dir, name, kind, pins)
     elif source_type == "local":
         source, archive = resolve_local(entry, install, data, public, name)
     else:
@@ -676,9 +685,13 @@ def pin(args):
         key = f"nexus:{install.get('mod_id')}/{install.get('file_id')}"
     elif source_type == "github":
         key = f"github:{install.get('repo')}@{install.get('tag')}/{install.get('asset')}"
+    elif source_type == "curseforge":  # for a file its author keeps on CurseForge
+        key = f"curseforge:{install.get('project_id')}/{install.get('file_id')}"
     else:
-        raise ValueError(f"{args.name}: only nexus and github entries are pinned by hand")
+        raise ValueError(f"{args.name}: only nexus, github and curseforge entries are pinned by hand")
     pins[key] = {"sha256": digest, "size": archive.stat().st_size, "file_name": archive.name, "roots": roots}
+    if source_type == "curseforge":  # CurseForge lists sha1 and md5: kept, to check the pin is its file
+        pins[key].update(sha1=sha256(archive, "sha1"), md5=sha256(archive, "md5"))
     write_atomic(pins_path, json.dumps(pins, indent=2, sort_keys=True) + "\n")
     install["sha256"] = digest
     if source_type == "nexus":

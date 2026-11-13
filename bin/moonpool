@@ -59,7 +59,8 @@ The world
   settings apply               copy ./settings.yaml (beside .env) to the mod and re-read it
   mods list                    the mods this server asks players for, as published
   mods publish [plugins.yaml]  copy that file in (if given) and turn it into the signed manifest
-  mods pin <name> <archive>    record a hand-downloaded archive (Nexus) for one entry
+  mods pin <name> <archive>    record a hand-downloaded archive (Nexus, or a CurseForge
+                               file its author keeps there) for one entry
   mods enable|disable <name>   switch one entry on or off in plugins.yaml and republish
   map where <player>           where that player is now, in game units, to line up a map
   map bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>
