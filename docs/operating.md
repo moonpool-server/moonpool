@@ -83,7 +83,10 @@ Admins give orders from inside the game with nothing installed: rename any PDA s
 
 ```
 !mp g cop 10              Give the only item whose name starts with cop, 10 of it
-!mp give "titanium ingot" names with spaces go in quotes; an unclear one lists the matches
+!mp g 10 titanium ingot   the name's words and the number in any order, no quotes needed
+!mp g tit                 an unclear name asks: tit? 1 Titanium  2 Titanium Ingot
+!mp 2                     ...and a bare number answers it
+!mp power                 a kit: several lines under one word (tadpole, upgrades, materials, power, unlock, freebuild)
 !mp @john h               heal the player whose name matches john; @all and @host work too
 !mp f titan               find items, places, players and tags by name, with their ids
 !mp l items cop           list one kind, filtered
@@ -92,7 +95,7 @@ Admins give orders from inside the game with nothing installed: rename any PDA s
 !mp .                     the last line again
 ```
 
-Every word, shortcut and reply comes from `console.json`. To change them, put your own `console.json` in the data volume with only the keys you change, then recreate the host: it is merged over the shipped one. Shortcuts are data too: `commands` maps a word to the game's console lines, with arguments looked up by kind. The `deny` list stops commands that crash or wipe the world; an empty list allows everything. Lines from one order run `line_gap_ms` apart (1000 by default), because each can stall the server for a second or so. Replies come back in the signal's name, which shows about 40 characters, and are also sent to your game console as messages. Which world cheats are on can't be read yet (`!mp c` says so)
+Every word, shortcut and reply comes from `console.json`. To change them, put your own `console.json` in the data volume with only the keys you change, then recreate the host: it is merged over the shipped one. Shortcuts are data too: `commands` maps a word to the game's console lines, with arguments looked up by kind. A mistyped word is taken as the one shortcut it is closest to, when only one fits. `on_ambiguous: first` takes the best match without asking. The `deny` list stops commands that crash or wipe the world; an empty list allows everything. Lines from one order run `line_gap_ms` apart (1000 by default), because each can stall the server for a second or so. Replies come back in the signal's name, which shows about 40 characters, and are also sent to your game console as messages. Which world cheats are on can't be read yet (`!mp c` says so)
 
 Each admin can give one order every 3 seconds. The host then runs at most one order every 10 seconds, whoever sent it (`admin_gap_s` in the mod's `config.json`), because each console command can stall the server for a second or two. Orders wait their turn: up to 3 per admin and 20 in all, beyond which the signal answers Busy. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
 
