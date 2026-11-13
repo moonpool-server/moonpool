@@ -179,6 +179,15 @@ fake_mod() {
   [ "$status" -eq 70 ]; [[ $(jq -r .message <<<"$output") == *"symlink or non-regular"* ]]
 }
 
+@test "a request's file name is written into .pending for the mod" {
+  fake_mod true '{"players":[]}'
+  run "$CTL" --json players
+  wait
+  [ "$status" -eq 0 ]
+  id=$(jq -r .request_id <<<"$output")
+  grep -qx "$id.json" "$SN2_CONTROL_DIR/inbox/.pending"
+}
+
 @test "a full inbox is bounded and refused without adding a request" {
   for n in $(seq 1 128); do printf '{}' >"$SN2_CONTROL_DIR/inbox/$(printf '%032x' "$n").json"; done
   run "$CTL" --json players

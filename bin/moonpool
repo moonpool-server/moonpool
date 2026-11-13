@@ -404,7 +404,10 @@ def queue_call(cmd, args):
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(request)
     os.replace(tmp, dest)
-    (c / "inbox" / ".pending").touch()
+    # The mod learns of the request from this file: listing the folder costs it a Wine process, and the
+    # game waits about half a second for each one.
+    with open(c / "inbox" / ".pending", "a", encoding="ascii") as pending:
+        pending.write(dest.name + "\n")
     timeout = int(E.get("SN2_TIMEOUT") or 15)
     for _ in range(timeout * 4):
         if out.exists() or out.is_symlink():
