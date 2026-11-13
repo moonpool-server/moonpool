@@ -631,6 +631,15 @@ policy_env() {
   [[ "$output" == *"all passed"* ]]
 }
 
+@test "admin console: shortcuts, targets, name lookup, deny list, discovery, and every reply from console.json" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/console_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"console: ok"* ]]
+  [[ "$output" != *"not ok"* ]]
+}
+
 @test "admin pace: one in-game command per gap, bounded in total and per sender" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/admin_pace_spec.lua

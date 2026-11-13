@@ -36,6 +36,13 @@ UE4SS (RE-UE4SS)
   the values pinned in scripts/common.sh. Not modified.
 
 ------------------------------------------------------------------------------
+fzy-lua
+  Project: https://github.com/swarn/fzy-lua, version v1.0.3
+  License: MIT License, Copyright (c) 2020 Seth Warn
+  mod/SN2SlotFreeHost/Scripts/fzy_lua.lua is that project's src/fzy_lua.lua,
+  unmodified. The host mod's admin console uses it to match names.
+
+------------------------------------------------------------------------------
 Pillow
   Project: https://python-pillow.github.io, License: MIT-CMU
   Its PyPI wheel for CPython 3.13 on Linux, pinned by version and sha256 in the

@@ -106,6 +106,9 @@ mods="$UE4SS_DIR/Mods"
 rm -rf "$mods/SN2SlotFreeHost"
 mkdir -p "$mods/SN2SlotFreeHost"
 cp -r "$MOD_SRC/SN2SlotFreeHost/Scripts" "$mods/SN2SlotFreeHost/"
+# The in-game console's words and replies, and the host's own changes to them from the data volume.
+cp -f "$MOD_SRC/SN2SlotFreeHost/console.json" "$mods/SN2SlotFreeHost/console.json"
+if [ -f "$DATA_DIR/console.json" ]; then cp -f "$DATA_DIR/console.json" "$mods/SN2SlotFreeHost/console.local.json"; fi
 : >"$mods/SN2SlotFreeHost/enabled.txt"
 cfg="$DATA_DIR/sn2headless.json"
 if [ ! -f "$cfg" ]; then

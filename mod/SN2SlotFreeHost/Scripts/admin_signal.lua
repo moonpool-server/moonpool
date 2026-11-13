@@ -59,7 +59,8 @@ end
 
 function M.new(opts)
   opts = opts or {}
-  return { admins = M.admins(opts.admins), ids = {}, prefix = opts.prefix or '!', last = {}, restart = {} }
+  return { admins = M.admins(opts.admins), ids = {}, prefix = opts.prefix or '!', last = {}, restart = {},
+    console_word = opts.console_word and opts.console_word:lower() or nil }
 end
 
 local function reply(ok, text) return { ok = ok, text = short(text), color = ok and 'green' or 'red' } end
@@ -103,6 +104,12 @@ function M.run(state, sender, text, g)
   state.last[key] = now
 
   local a, cmd = p.args, p.command
+  if state.console_word and cmd == state.console_word then
+    -- The admin console (console.lua): any line, its reply lines back.
+    local ok, data, err = g.call('mp', { sender = sender, line = p.raw })
+    if not ok then return reply(false, err or 'refused') end
+    return line_reply(true, data.lines)
+  end
   if cmd == 'help' then return reply(true, 'cmd kick ping slots time weather') end
   if cmd == 'cmd' then
     -- The game's own console, run on the host as this admin: the same door and the same

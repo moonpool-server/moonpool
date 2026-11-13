@@ -1,0 +1,56 @@
+{
+  "_about": "The in-game admin console's words, shortcuts and replies. A host overrides any of it with console.json in the data volume; a key left out keeps the value here. Nothing a player reads is written in the code.",
+  "signal_word": "mp",
+  "line_gap_ms": 1000,
+  "target_mark": "@",
+  "targets": { "all": ["all", "*"], "host": ["host"], "me": ["me"] },
+  "repeat": ["."],
+  "max_lines": 12,
+  "cheat_prefix": "Cheat.",
+  "resolve_kinds": ["items", "places"],
+  "kinds": {
+    "items":    { "aliases": ["i", "item", "items"] },
+    "places":   { "aliases": ["p", "place", "places"] },
+    "players":  { "aliases": ["pl", "player", "players"] },
+    "commands": { "aliases": ["cmd", "command", "commands"] },
+    "tags":     { "aliases": ["t", "tag", "tags"] }
+  },
+  "verbs": {
+    "find":   ["f", "find", "?"],
+    "ls":     ["l", "ls", "list"],
+    "who":    ["w", "who"],
+    "cheats": ["c", "cheats"],
+    "help":   ["help", "h?"]
+  },
+  "commands": {
+    "give":   { "aliases": ["g", "give"], "lines": ["Give {item} {count}"],
+                "args": [{ "name": "item", "kind": "items" }, { "name": "count", "default": "1" }] },
+    "heal":   { "aliases": ["h", "heal"], "lines": ["HealMe", "attr oxygen 100", "attr food 100", "attr water 100"] },
+    "tag":    { "aliases": ["tag+"], "lines": ["AddTag {tag}"], "args": [{ "name": "tag", "kind": "tags" }] },
+    "untag":  { "aliases": ["tag-"], "lines": ["RemoveTag {tag}"], "args": [{ "name": "tag", "kind": "tags" }] }
+  },
+  "deny": ["crashserver*", "crashclient*", "clearsaves", "newgameofmode", "destroyallactorsofclass", "forceprocessexit",
+           "forcequickprocessexit", "killall", "killallofclass", "kill_player*", "togglesaveblocking"],
+  "messages": {
+    "help":          "mp [@who] <console line> | find <text> | ls <kind> [text] | who | cheats | . repeats | shortcuts: {shortcuts}",
+    "find_row":      "{kind}: {name} = {id}",
+    "find_none":     "Nothing matches {query}",
+    "ls_row":        "{name} = {id}",
+    "ls_none":       "No {kind} match {query}",
+    "ls_kinds":      "ls needs one of: {kinds}",
+    "who_row":       "{name}  eos {eos}  {ping} ms",
+    "who_none":      "Nobody else is on",
+    "cheats_row":    "{tag}",
+    "cheats_none":   "No cheats are on",
+    "cheats_unknown":"The game's world tags can't be read yet",
+    "ambiguous":     "{query} could be: {matches}",
+    "no_match":      "No {kind} matches {query}",
+    "no_player":     "No player matches {query}",
+    "missing_arg":   "{command} needs {arg}",
+    "denied":        "{word} is on the deny list (console.json)",
+    "ran":           "{count} line(s) for {players}: {lines}",
+    "no_last":       "Nothing to repeat yet",
+    "more":          "... and {count} more",
+    "console_off":   "The console is off: add player to enabled_commands in sn2headless.json"
+  }
+}
