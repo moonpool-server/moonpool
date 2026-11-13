@@ -145,6 +145,7 @@ def main():
                   map=map_still(public), map_facts=map_facts(public))
     shipped = str(HERE.parent / "web")
     values["theme"] = publish_theme(data, public, shipped)
+    values["game"] = os.environ.get("GAME_NAME") or "Subnautica 2"  # said on the page, so a visitor knows what this joins
     html = render_join([str(data / "templates"), shipped], values)
     if html is None:
         html = render_join([shipped], values)

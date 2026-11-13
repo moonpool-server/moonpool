@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 {%- if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif -%}
-<title>Join {{ world }}</title><meta property="og:title" content="Join {{ world }}"><meta property="og:type" content="website"><link rel="icon" href="data:,"><link rel="stylesheet" href="theme.css?{{ theme }}"><style>
+<title>Join {{ world }} · {{ game }}</title><meta property="og:title" content="Join {{ world }} · {{ game }}"><meta property="og:type" content="website"><link rel="icon" href="data:,"><link rel="stylesheet" href="theme.css?{{ theme }}"><style>
 html{background:var(--ink);color:var(--text);font:var(--size-body)/var(--leading) var(--font-text)}
 body{margin:0;min-height:100vh;padding:clamp(var(--gap-4),5vw,var(--gap-6));box-sizing:border-box}
 .page{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--join-column)),1fr));gap:var(--gap-6);max-width:var(--page-max);margin:0 auto;align-items:start}
 .card{min-width:0;max-width:var(--join-column)}
 .readout{display:flex;flex-wrap:wrap;gap:var(--gap-1) var(--gap-4);margin:0;padding:0 0 var(--gap-2);border-bottom:var(--hair) solid var(--rule-strong);font:var(--size-small)/1.4 var(--font-data);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--dim)}
 .readout .warn{color:var(--warn)}
+.readout .game{color:var(--text)}
 h1{margin:var(--gap-4) 0 0;font-size:var(--size-title);line-height:1.08;font-weight:var(--weight-title);letter-spacing:var(--track-title)}
 .hint{margin:var(--gap-3) 0 0;font-size:var(--size-small);color:var(--dim)}
 .hint strong{color:var(--text)}
@@ -47,7 +48,7 @@ h2{margin:var(--gap-6) 0 0;padding:0 0 var(--gap-2);border-bottom:var(--hair) so
 .map:hover img{border-color:var(--link)}.map:hover .bar b{color:var(--link)}
 @media (max-aspect-ratio:3/4){.map img{aspect-ratio:var(--map-ratio-narrow)}}
 </style></head>
-<body><div class="page"><main class="card">{% if banner %}<img class="banner" src="{{ banner }}" alt="">{% endif %}{%- if branch or build %}<p class="readout">{% if branch %}<span{% if branch != "public" %} class="warn"{% endif %}>{{ branch_label }} branch</span>{% endif %}{% if build %}<span>Build {{ build }}</span>{% endif %}</p>{% endif %}<h1>Join {{ world }}</h1>
+<body><div class="page"><main class="card">{% if banner %}<img class="banner" src="{{ banner }}" alt="">{% endif %}<p class="readout"><span class="game">{{ game }}</span>{% if branch %}<span{% if branch != "public" %} class="warn"{% endif %}>{{ branch_label }} branch</span>{% endif %}{% if build %}<span>Build {{ build }}</span>{% endif %}</p><h1>Join {{ world }}</h1>
 {%- if branch and branch != "public" %}<p class="hint">Your game must match: in Steam, Subnautica 2 &rsaquo; Properties &rsaquo; Betas &rsaquo; <strong>{{ branch }}</strong>.</p>{% endif -%}
 {%- if not join %}<p class="lead">The server is starting.</p><p class="hint">This page refreshes itself and is ready as soon as the world is open.</p>
 {%- elif mods_published %}{{ modnote|safe }}

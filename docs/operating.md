@@ -215,7 +215,7 @@ docker compose cp sn2:/opt/sn2/web/theme.css theme.css
 docker compose cp theme.css sn2:/home/container/templates/theme.css
 ```
 
-- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch`, `branch_label`, `map` (the map's still picture when the map page is on, else empty; the shipped page shows it beside the card on a wide screen, linking to the live map) `map_facts` (what the map shows, as short items such as `15 min behind` and `2 players`) and `theme` (a fingerprint of `theme.css`; link the stylesheet as `theme.css?{{ theme }}` so a changed theme is fetched again). A copy that fails to render is said in the log and the shipped page is used
+- The join page: copy the shipped template out, edit it, put it back as `templates/join.html.j2`. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch`, `branch_label`, `map` (the map's still picture when the map page is on, else empty; the shipped page shows it beside the card on a wide screen, linking to the live map) `map_facts` (what the map shows, as short items such as `15 min behind` and `2 players`) `game` (the game's name, `GAME_NAME` or Subnautica 2) and `theme` (a fingerprint of `theme.css`; link the stylesheet as `theme.css?{{ theme }}` so a changed theme is fetched again). A copy that fails to render is said in the log and the shipped page is used
 
 ```sh
 docker compose cp sn2:/opt/sn2/web/join.html.j2 join.html.j2
