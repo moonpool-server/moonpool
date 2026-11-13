@@ -16,7 +16,7 @@ return {
   panel = {
     hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
     keep = { 'Input', 'autocomplete', 'Description', 'ItemButton', 'SpawnButton', 'EquipButton', 'GotoButton',
-      'DiagNearby', 'HorizontalBox', 'HorizontalBox_0' },
+      'MacroButton', 'DiagNearby', 'HorizontalBox', 'HorizontalBox_0' },
   },
   -- What closing also closes: the game's pick lists (by class; the game stacks them, so they are
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
