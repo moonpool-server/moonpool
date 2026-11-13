@@ -144,10 +144,10 @@ def main():
                   modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:],
                   map=map_still(public), map_facts=map_facts(public))
     shipped = str(HERE.parent / "web")
+    values["theme"] = publish_theme(data, public, shipped)
     html = render_join([str(data / "templates"), shipped], values)
     if html is None:
         html = render_join([shipped], values)
-    publish_theme(data, public, shipped)
     write_atomic(public / "join.html", html)
     return 0
 
