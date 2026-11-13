@@ -38,7 +38,7 @@ local function aliases(t)
 end
 
 function M.new(catalog)
-  return { cat = catalog, last = {},
+  return { cat = catalog, last = {}, pending = {},
     verbs = aliases(catalog.verbs), commands = aliases(catalog.commands), kinds = aliases(catalog.kinds),
     targets = aliases(catalog.targets), repeats = aliases({ ['.'] = catalog['repeat'] or {} }) }
 end
@@ -96,12 +96,24 @@ local function names(list, max)
   return table.concat(out, ', ')
 end
 
+-- Several things match: take the first when the catalog says so, else ask, numbered, and remember
+-- the line so a bare number answers it.
+local function choose(st, req, found, query)
+  if st.cat.on_ambiguous == 'first' then return found[1].id end
+  local list, max = {}, math.min(#found, st.cat.max_choices or 6)
+  for i = 1, max do list[#list + 1] = i .. ' ' .. found[i].name end
+  st.pending[req.sender.key or req.sender.name] = { text = req.text, query = lower(query), found = found, max = max }
+  return nil, M.msg(st, 'choose', { query = query, choices = table.concat(list, '  ') })
+end
+
 -- One value of a kind for a typed query: the id, or nil and the reply that says why.
-local function resolve(st, game, kind, query)
+local function resolve(st, game, kind, query, req)
+  local forced = req.forced and req.forced[lower(query)]
+  if forced then return forced end
   local found = M.match(game.list(kind), query)
   if #found == 1 then return found[1].id end
   if #found == 0 then return nil, M.msg(st, 'no_match', { kind = kind, query = query }) end
-  return nil, M.msg(st, 'ambiguous', { query = query, matches = names(found, 8) })
+  return choose(st, req, found, query)
 end
 
 local function denied(st, line)
@@ -143,6 +155,15 @@ function M.handle(st, req, game)
   local out = { lines = {}, runs = {} }
   local function say(t) for _, l in ipairs(type(t) == 'table' and t or { t }) do out.lines[#out.lines + 1] = l end end
 
+  local picked = tonumber(tostring(req.text or ''):match('^%s*(%d+)%s*$'))
+  if picked and st.pending[key] then
+    local p = st.pending[key]
+    st.pending[key] = nil
+    if picked < 1 or picked > p.max then say(M.msg(st, 'no_choice', { count = p.max })); return out end
+    return M.handle(st, { sender = req.sender, text = p.text, forced = { [p.query] = p.found[picked].id } }, game)
+  end
+  if not req.forced then st.pending[key] = nil end
+
   if tokens[1] and st.repeats[lower(tokens[1].text)] then
     if not st.last[key] then say(M.msg(st, 'no_last')); return out end
     tokens = st.last[key]
@@ -161,6 +182,15 @@ function M.handle(st, req, game)
   if #tokens == 0 then return M.handle(st, { sender = req.sender, text = 'help' }, game) end
 
   local first = lower(tokens[1].text)
+  if not st.verbs[first] and not st.commands[first] and #first >= 3 then
+    local near = {}
+    for alias in pairs(st.verbs) do near[#near + 1] = { id = alias, name = alias } end
+    for alias in pairs(st.commands) do near[#near + 1] = { id = alias, name = alias } end
+    local hits = M.match(near, first)
+    local real = false  -- a word the game itself knows is never rewritten
+    for _, c in ipairs(game.list('commands') or {}) do real = real or lower(c.name) == first end
+    if #hits == 1 and not real then first = hits[1].id end
+  end
   local verb = st.verbs[first]
   if verb == 'help' then
     local short = {}
@@ -228,15 +258,26 @@ function M.handle(st, req, game)
   local lines = {}
   if command then
     local c = st.cat.commands[command]
-    local values = {}
-    for i, a in ipairs(c.args or {}) do
-      local typed = tokens[i + 1] and tokens[i + 1].text
+    local values, words, numbers = {}, {}, {}
+    for i = 2, #tokens do  -- the name's words and the number can come in any order, quotes or not
+      local t = tokens[i]
+      if not t.quoted and t.text:match('^%-?%d+%.?%d*$') then numbers[#numbers + 1] = t.text
+      else words[#words + 1] = t.text end
+    end
+    local name = table.concat(words, ' ')
+    for _, a in ipairs(c.args or {}) do
+      local typed
+      if a.kind then
+        typed, name = name ~= '' and name or nil, ''
+      else
+        typed = table.remove(numbers, 1)
+      end
       if not typed and a.default == nil then
         say(M.msg(st, 'missing_arg', { command = command, arg = a.name }))
         return out
       end
       if typed and a.kind then
-        local id, why = resolve(st, game, a.kind, typed)
+        local id, why = resolve(st, game, a.kind, typed, req)
         if not id then say(why); return out end
         values[a.name] = id
       else
@@ -250,11 +291,16 @@ function M.handle(st, req, game)
     local words = {}
     for _, t in ipairs(tokens) do
       if t.quoted then
-        local id
-        for _, kind in ipairs(st.cat.resolve_kinds or {}) do
+        local id = req.forced and req.forced[lower(t.text)]
+        for _, kind in ipairs(not id and st.cat.resolve_kinds or {}) do
           local found = M.match(game.list(kind), t.text)
           if #found == 1 then id = found[1].id; break end
-          if #found > 1 then say(M.msg(st, 'ambiguous', { query = t.text, matches = names(found, 8) })); return out end
+          if #found > 1 then
+            local why
+            id, why = choose(st, req, found, t.text)
+            if not id then say(why); return out end
+            break
+          end
         end
         if not id then
           say(M.msg(st, 'no_match', { kind = table.concat(st.cat.resolve_kinds or {}, '/'), query = t.text }))
