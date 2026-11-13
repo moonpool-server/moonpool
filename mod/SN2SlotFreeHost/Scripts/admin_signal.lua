@@ -25,6 +25,17 @@ function M.admins(csv)
   return out
 end
 
+-- The ADMINS list plus the lines of the control folder's admins.txt: an ID first on each line, then
+-- anything after a space or tab as a note, # for comments. The file is read again as the host runs.
+function M.admin_set(csv, file_text)
+  local out = M.admins(csv)
+  for line in tostring(file_text or ''):gmatch('[^\r\n]+') do
+    local id = line:match('^%s*(%x+)')
+    if id and #id == 32 and not line:match('^%s*%x+[^%s%x]') then out[id:lower()] = true end
+  end
+  return out
+end
+
 -- The engine logs which EOS ID each connection object belongs to; no player text is involved.
 function M.note_connection(state, line)
   local id, connection = line:match('Added client connection: %[UNetConnection%] RemoteAddr: EOS:(%x+), Name: ([%w_]+)')

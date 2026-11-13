@@ -110,5 +110,15 @@ r = admin.run(s, ALICE, '!restart cancel', game())
 eq(calls[#calls][1], 'restart_cancel', 'restart cancel is immediate')
 eq(r.text, 'restart cancelled', 'restart cancel reply')
 
+local A, B = string.rep('a', 32), string.rep('B', 32)
+local set = admin.admin_set(A, table.concat({ '# note', B .. '\tJohnny', string.rep('c', 31), 'not-an-id',
+  string.rep('d', 32) .. 'x' }, '\n'))
+eq(set[A], true, 'the ADMINS list still counts with a file')
+eq(set[B:lower()], true, 'an ID in admins.txt counts, with a note after it')
+local n = 0
+for _ in pairs(set) do n = n + 1 end
+eq(n, 2, 'a comment, a short ID, a name and an ID with extra characters are not admins')
+eq(next(admin.admin_set('', nil)), nil, 'no list and no file: nobody is an admin')
+
 if failures > 0 then print(failures .. ' failed'); os.exit(1) end
 print('all passed')

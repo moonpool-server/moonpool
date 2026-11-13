@@ -63,7 +63,7 @@ To take the launcher off a PC, close Subnautica 2 and run `powershell -Execution
 
 ## In game admin
 
-Put each admin's Epic ID in `ADMINS`. The UE4SS log prints `player NAME eos=...` when someone joins. Names and Steam IDs don't count because a client can claim those
+Put each admin's Epic ID in `ADMINS`, or one per line in `control/admins.txt` in the data volume (a note may follow the ID after a space; `#` starts a comment). The file is read again while the host runs, so adding or removing an admin there needs no restart; `ADMINS` is read at start. The UE4SS log prints `player NAME eos=...` when someone joins. Names and Steam IDs don't count because a client can claim those
 
 Admins give orders from inside the game with nothing installed: rename any PDA signal to a command and the host does it, then writes the answer back into the signal's name, green for done and red for refused
 

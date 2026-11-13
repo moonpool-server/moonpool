@@ -1146,6 +1146,7 @@ local no_controller_said = {}
 local banned_seen = {}
 local function hosted_replay()
   local ok, err = pcall(function()
+    ADMIN.admins = admin_signal.admin_set(os.getenv('SN2_ADMINS') or '', read_file(cpath('admins.txt')))
     access.tick(banned_seen, access.names(read_file(cpath('bans.txt'))), cached_players(), HOST_NAME,
       function(name)
         local ran, _, why = handlers.player({ player = HOST_NAME, command = 'KickPlayer ' .. name })
