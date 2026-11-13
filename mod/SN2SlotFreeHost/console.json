@@ -148,7 +148,7 @@
         "tag+"
       ],
       "lines": [
-        "AddTag {tag}"
+        "AddGlobalTag {tag}"
       ],
       "args": [
         {
@@ -162,7 +162,7 @@
         "tag-"
       ],
       "lines": [
-        "RemoveTag {tag}"
+        "RemoveGlobalTag {tag}"
       ],
       "args": [
         {
@@ -178,13 +178,13 @@
       ],
       "lines": [
         "DayOnly 0",
-        "RemoveTag Cheat.UnlockRecipes",
-        "RemoveTag Cheat.InfiniteKnowledge",
-        "RemoveTag Cheat.AllBioAbilities",
-        "RemoveTag Cheat.FreeBuild",
-        "RemoveTag Cheat.NoSuffocate",
-        "RemoveTag Cheat.NoStarve",
-        "RemoveTag Cheat.NoDehydrate"
+        "RemoveGlobalTag Cheat.UnlockRecipes",
+        "RemoveGlobalTag Cheat.InfiniteKnowledge",
+        "RemoveGlobalTag Cheat.AllBioAbilities",
+        "RemoveGlobalTag Cheat.FreeBuild",
+        "RemoveGlobalTag Cheat.NoSuffocate",
+        "RemoveGlobalTag Cheat.NoStarve",
+        "RemoveGlobalTag Cheat.NoDehydrate"
       ]
     }
   },
