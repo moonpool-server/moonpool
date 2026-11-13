@@ -443,7 +443,7 @@ local UNLOCK_GAME = {
 -- thread for a minute on a join and crashed UE4SS. Rebuilt at most once a minute on a scan miss.
 local ASSET_INDEX, ASSET_INDEX_AT = nil, -60
 local function build_asset_index()
-  local idx, names, scans = { names = {}, scans = {} }, 0, 0
+  local idx, names, scans = { names = {}, scans = {}, items = {} }, 0, 0
   local started = os.clock()
   local ok, all = pcall(FindAllOf, 'DataAsset')
   for _, o in ipairs(ok and type(all) == 'table' and all or {}) do
@@ -451,6 +451,15 @@ local function build_asset_index()
     if type(short) == 'string' and short ~= '' then
       local k = short:lower()
       if not idx.names[k] then idx.names[k] = short; names = names + 1 end
+      local base = short:match('^DA_(.+)_ItemType$')
+      if base then
+        local display
+        for _, field in ipairs({ 'DisplayName', 'Name' }) do
+          if not display then pcall(function() display = o[field]:ToString() end) end
+        end
+        if type(display) ~= 'string' or display == '' then display = base:gsub('_', ' '):gsub('(%l)(%u)', '%1 %2') end
+        idx.items[#idx.items + 1] = { id = short, name = display }
+      end
       if short:match('^DA_.+_ScanData$') then
         local okn, display = pcall(function() return o.Name:ToString() end)
         if okn and type(display) == 'string' and display ~= '' then
@@ -543,7 +552,39 @@ end
 -- the work waits for the next game-thread poll.
 local admin_signal = require('admin_signal')
 local admin_pace = require('admin_pace')
-local ADMIN = admin_signal.new({ admins = os.getenv('SN2_ADMINS') or '',
+local console = require('console')
+-- The admin console's words and replies: the shipped console.json, then the host's own
+-- console.local.json (copied from the data volume by install-ue4ss.sh) over it, key by key.
+local function load_catalog()
+  local cat = {}
+  for _, dir in ipairs({ 'ue4ss-exp', 'ue4ss' }) do
+    local base = dir .. '\\Mods\\SN2SlotFreeHost\\'
+    local raw = read_file(base .. 'console.json')
+    if raw then
+      local ok, c = pcall(json.decode, raw)
+      if ok and type(c) == 'table' then cat = c end
+      local own = read_file(base .. 'console.local.json')
+      local okl, o = pcall(json.decode, own or '')
+      if own and okl and type(o) == 'table' then
+        for k, v in pairs(o) do
+          if type(v) == 'table' and type(cat[k]) == 'table' and #v == 0 then
+            for kk, vv in pairs(v) do cat[k][kk] = vv end
+          else
+            cat[k] = v
+          end
+        end
+      elseif own then
+        log('console: console.local.json is not JSON; using the shipped words')
+      end
+      break
+    end
+  end
+  return cat
+end
+local CATALOG = load_catalog()
+local CONSOLE = console.new(CATALOG)
+local EOS_BY_NAME = {} -- from the game log's login lines, for the console's who
+local ADMIN = admin_signal.new({ console_word = CATALOG.signal_word, admins = os.getenv('SN2_ADMINS') or '',
   prefix = os.getenv('SN2_ADMIN_PREFIX') or '!' })
 local ADMIN_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetPingDisplayName'
 local COLOR_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetThumbnailColor'
@@ -589,7 +630,47 @@ local function admin_settings(key, value)
   return true, { value = value }
 end
 
+-- What the console can see, read from the live game when a line comes in.
+local function console_game()
+  return { host = HOST_NAME, list = function(kind)
+    if kind == 'players' then
+      local out = {}
+      for _, p in ipairs(players()) do
+        if p.name ~= HOST_NAME then
+          out[#out + 1] = { id = p.name, name = p.name, eos = EOS_BY_NAME[p.name] or '?', ping = p.ping_ms or '?' }
+        end
+      end
+      return out
+    end
+    if kind == 'items' then
+      local idx = asset_index()
+      return idx and idx.items or {}
+    end
+    if kind == 'tags' then return nil end -- where this build keeps its world tags is not known yet
+    return {}
+  end }
+end
+
 local function admin_call(name, args)
+  if name == 'mp' then
+    if not CFG.enabled_set.player then return false, nil, console.msg(CONSOLE, 'console_off') end
+    local r = console.handle(CONSOLE, { sender = { name = args.sender.name, key = args.sender.eos }, text = args.line },
+      console_game())
+    -- Each line can stall the server for a second or so, so they go line_gap_ms apart.
+    local gap = tonumber(CATALOG.line_gap_ms) or 1000
+    for i, run in ipairs(r.runs) do
+      ExecuteWithDelay((i - 1) * gap, function() ExecuteInGameThread(function()
+        local pc = controller_named(run.player)
+        if pc then run_as(pc, run.line, 'console ' .. tostring(args.sender.name) .. ' for ' .. run.player)
+        else log('console: ' .. run.player .. ' gone before ' .. run.line) end
+      end) end)
+    end
+    local pc = controller_named(args.sender.name)
+    if pc then
+      for _, l in ipairs(r.lines) do pcall(function() pc:ClientMessage(l, FName('None'), 0.0) end) end
+    end
+    return true, { lines = r.lines }
+  end
   if name == 'ping' then
     local rows = status.players(to_str)
     local lines = {}
@@ -1006,7 +1087,7 @@ local function hold_poll()
   for _, l in ipairs(lines) do
     admin_signal.note_connection(ADMIN, l)
     local player, id = admin_signal.login_label(l)
-    if player then log('player ' .. player .. ' eos=' .. id) end -- the value ADMINS takes
+    if player then log('player ' .. player .. ' eos=' .. id); EOS_BY_NAME[player] = id end -- the value ADMINS takes
     if LIFEPOD_JOIN_HOLD then hold_act(hold.line(HOLD, l, os.time())) end
     if UNLOCK_REPLAY_ENABLED then pcall(unlock_line, l) end
   end
