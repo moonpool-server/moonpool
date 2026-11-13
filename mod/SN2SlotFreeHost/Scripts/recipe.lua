@@ -1393,15 +1393,15 @@ local function time_of_day()
   local t, from, unit
   for _, c in ipairs(CLOCK_CLASSES) do
     pcall(function()
-      local a = FindFirstOf(c.cls)
-      if valid(a) then t = clock_value(a); from = c.cls; unit = c.unit end
+      local a = status.first(c.cls)
+      if a then t = clock_value(a); from = c.cls; unit = c.unit end
     end)
     if t then break end
   end
   if not t then
     pcall(function()
-      local s = FindFirstOf('DaySequenceSubsystem')
-      if valid(s) then
+      local s = status.first('DaySequenceSubsystem')
+      if s then
         local a = s:GetDaySequenceActor(true) -- GetDaySequenceActor(bool bFindFallbackOnNull)
         if valid(a) then t = clock_value(a); from = 'DaySequenceSubsystem'; unit = 'hours' end
       end
@@ -1450,11 +1450,12 @@ local function object_name(o)
   return type(n) == 'string' and n ~= '' and n or nil
 end
 local weather_paths_said = false
+local WEATHER_TYPES_KEEP_S = 600  -- the weather types are the game's data: they change with the map
 local function weather()
   local current, types = nil, {}
   pcall(function()
-    local sync = FindFirstOf('UWEWeatherSyncComponent')
-    if valid(sync) then
+    local sync = status.first('UWEWeatherSyncComponent')
+    if sync then
       local w = sync:GetCurrentWeather()
       if valid(w) then current = object_name(w) end
     end
@@ -1462,8 +1463,8 @@ local function weather()
   local paths = {}
   pcall(function()
     local named = {}
-    for _, t in ipairs(FindAllOf('UWEWeatherTypeBase') or {}) do
-      local n = valid(t) and object_name(t) or nil
+    for _, t in ipairs(status.all('UWEWeatherTypeBase', WEATHER_TYPES_KEEP_S)) do
+      local n = object_name(t)
       if n and not named[n] and not n:match('^Default__') then
         named[n] = true; types[#types + 1] = n
         pcall(function() paths[n] = t:GetFullName() end)
@@ -1485,11 +1486,11 @@ _G.SN2_WEATHER = weather -- read by tests/lua/host_behaviour_spec.lua
 -- Called on the game thread already.
 set_weather = function(name)
   local ok, err = pcall(function()
-    local sync = FindFirstOf('UWEWeatherSyncComponent')
-    if not valid(sync) then error('no weather sync component', 0) end
+    local sync = status.first('UWEWeatherSyncComponent')
+    if not sync then error('no weather sync component', 0) end
     local target
-    for _, t in ipairs(FindAllOf('UWEWeatherTypeBase') or {}) do
-      if valid(t) and object_name(t) == name then target = t; break end
+    for _, t in ipairs(status.all('UWEWeatherTypeBase', WEATHER_TYPES_KEEP_S)) do
+      if object_name(t) == name then target = t; break end
     end
     if not target then error('no loaded weather type named ' .. name, 0) end
     sync:SetCurrentWeather(target)
@@ -1511,7 +1512,7 @@ end
 settings_readback = function() return time_of_day(), (weather()) end
 local function current_map()
   local m
-  pcall(function() m = to_str(FindFirstOf('World'):GetFName()) end)
+  pcall(function() m = to_str(status.first('World'):GetFName()) end)
   return m
 end
 

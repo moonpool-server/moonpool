@@ -5,6 +5,7 @@
 local M = {}
 
 local CACHE_MAX_S = 600       -- re-search bases and the lifepods at most every 10 min
+local SEARCH_AGAIN_S = 10     -- a class that was not found is searched for again no sooner than this
 local BASE_GAP_UU = 5000      -- 50 m: pieces closer than this are one base
 local POD_SKIP_UU = 8000      -- 80 m: pieces this close to a lifepod belong to it
 local BASE_PREFIX = 'BP_BaseModule_'
@@ -29,6 +30,52 @@ function M.object_path(o)
   return M.path_of(full)
 end
 
+-- FindFirstOf and FindAllOf go through every object the game has loaded: about 45 ms of the game
+-- thread each in a loaded world, and StaticFindObject about 30 ms. So what a search finds is kept,
+-- with its full name. An address the game has freed can be handed to another object, which IsValid
+-- passes; the full name is read again before each use, and an object whose name has changed is
+-- dropped. The search runs again only then; for a class that is not there, no sooner than
+-- SEARCH_AGAIN_S.
+local function keep(o)
+  local name
+  pcall(function() name = o:GetFullName() end)
+  return name and { o = o, name = name } or nil
+end
+local function kept_object(k)
+  if not (k and valid(k.o)) then return nil end
+  local name
+  pcall(function() name = k.o:GetFullName() end)
+  return name == k.name and k.o or nil
+end
+local first_kept, first_tried = {}, {}
+function M.first(class)
+  local o = kept_object(first_kept[class])
+  if o then return o end
+  first_kept[class] = nil
+  if os.time() - (first_tried[class] or -SEARCH_AGAIN_S) < SEARCH_AGAIN_S then return nil end
+  first_tried[class] = os.time()
+  local ok, got = pcall(FindFirstOf, class)
+  first_kept[class] = ok and valid(got) and keep(got) or nil
+  return first_kept[class] and got or nil
+end
+-- Every object of a class, for sets that change rarely: searched for at most once per keep_s.
+local all_kept = {}
+-- Everything kept is dropped: the next read searches again.
+function M.forget() first_kept, first_tried, all_kept = {}, {}, {} end
+function M.all(class, keep_s)
+  local list = all_kept[class]
+  if not list or os.time() - list.at >= keep_s then
+    list = { at = os.time() }
+    local ok, got = pcall(FindAllOf, class)
+    for _, o in ipairs(ok and type(got) == 'table' and got or {}) do
+      if valid(o) then list[#list + 1] = keep(o) end
+    end
+    all_kept[class] = list
+  end
+  local out = {}
+  for _, k in ipairs(list) do out[#out + 1] = kept_object(k) end
+  return out
+end
 
 local function loc(actor)
   local x, y, z
@@ -139,6 +186,7 @@ function M.signals(store, admin_prefix)
 end
 
 local function search(map_name)
+  map_name = map_name or cache.map  -- a caller that names no map is not a change of map
   local players = {}
   for _, ps in ipairs(FindAllOf('PlayerState') or {}) do
     local path = valid(ps) and M.object_path(ps)
