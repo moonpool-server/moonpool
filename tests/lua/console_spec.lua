@@ -108,11 +108,9 @@ r = run('9', st)
 check(#r.runs == 0 and r.lines[1]:find('1 to 2', 1, true), 'a number past the choices says the range')
 r = run('g 10 titanium ingot')
 check(r.runs[1] and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 10', 'the number first, the name unquoted')
-r = run('giv cop 3')
-check(r.runs[1] and r.runs[1].line == 'Give DA_Copper_ItemType 3',
-  'a mistyped shortcut is understood when only one fits')
-r = run('power')
-check(#r.runs == 2 and r.runs[1].line == 'Give DA_PowerCell_ItemType 5', 'a kit from console.json runs its lines')
+r = run('h')
+check(#r.runs == #catalog.commands.heal.lines and r.runs[1].line == catalog.commands.heal.lines[1],
+  'a shortcut with several lines runs each of them')
 local first = json.decode(json.encode(catalog)); first.on_ambiguous = 'first'
 r = console.handle(console.new(first), { sender = me, text = 'g tit' }, game)
 check(r.runs[1] and r.runs[1].line == 'Give DA_Titanium_ItemType 1', 'on_ambiguous first takes the best match')

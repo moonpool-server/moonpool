@@ -203,15 +203,6 @@ function M.handle(st, req, game)
   if #tokens == 0 then return M.handle(st, { sender = req.sender, text = 'help' }, game) end
 
   local first = lower(tokens[1].text)
-  if not st.verbs[first] and not st.commands[first] and #first >= 3 then
-    local near = {}
-    for alias in pairs(st.verbs) do near[#near + 1] = { id = alias, name = alias } end
-    for alias in pairs(st.commands) do near[#near + 1] = { id = alias, name = alias } end
-    local hits = M.match(near, first)
-    local real = false  -- a word the game itself knows is never rewritten
-    for _, c in ipairs(game.list('commands') or {}) do real = real or lower(c.name) == first end
-    if #hits == 1 and not real then first = hits[1].id end
-  end
   local verb = st.verbs[first]
   if verb == 'help' then
     local short = {}

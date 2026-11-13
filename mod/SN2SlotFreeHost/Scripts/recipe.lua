@@ -706,12 +706,8 @@ local function admin_call(name, args)
         else log('console: ' .. run.player .. ' gone before ' .. run.line) end
       end) end)
     end
-    local pc = controller_named(args.sender.name)
-    if pc then
-      for _, l in ipairs(r.lines) do pcall(function() pc:ClientMessage(l, FName('None'), 0.0) end) end
-    end
-    -- The answer also goes to the sender's screen as one of the game's own notifications: a signal
-    -- name shows about 40 characters, and a line sent from the cheat panel has no signal to answer in.
+    -- The answer goes to the sender's screen as one of the game's own notifications: a signal name
+    -- shows about 40 characters, and a line sent from the cheat panel has no signal to answer in.
     if #r.lines > 0 then
       pcall(function()
         local to = notify.targets(status.live_players(to_str), HOST_NAME, { args.sender.name })

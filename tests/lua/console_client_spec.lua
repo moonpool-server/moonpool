@@ -47,7 +47,8 @@ check(route.part_of('CommonTextBlock /Engine/Transient.Other_9.WidgetTree_4.Inpu
 -- The shipped settings keep the command line and what opens the pick lists.
 local function shown(kind_, part_) return not route.hidden(kind_, part_, cfg.panel) end
 check(shown('CommonTextBlock', 'Input') and shown('CommonTextBlock', 'autocomplete'), 'the command line stays')
-check(shown('CommonTextButton_C', 'ItemButton') and shown('CommonTextButton_C', 'GotoButton'), 'the pick lists stay')
+check(shown('CommonTextButton_C', 'ItemButton') and shown('CommonTextButton_C', 'GotoButton')
+  and shown('CommonTextButton_C', 'MacroButton'), 'the pick lists stay, macros among them')
 check(not shown('CommonTextButton_C', 'DiagMap') and not shown('HorizontalBox', 'StatCommandsContainer')
   and not shown('BackgroundBlur', 'BackgroundBlur_82'), 'the debug rows and the blur are hidden')
 check(type(cfg.key) == 'string' and type(cfg.word) == 'string' and cfg.tries >= 1, 'the settings name a key and a word')
