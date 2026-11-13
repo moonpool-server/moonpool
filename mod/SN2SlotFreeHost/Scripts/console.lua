@@ -124,6 +124,16 @@ local function denied(st, line)
   end
 end
 
+-- A line the game's own screens wrote (a button, a pick from a list): already exact, so it runs for
+-- its sender as it is. Only the deny list applies.
+function M.exact(st, req)
+  local out = { lines = {}, runs = {} }
+  local word = denied(st, req.text)
+  if word then out.lines[1] = M.msg(st, 'denied', { word = word }); return out end
+  out.runs[1] = { player = req.sender.name, line = req.text }
+  return out
+end
+
 -- Who a line runs as: a list of player names, or nil and a reply.
 local function targets(st, game, who, sender)
   local word = st.targets[lower(who)]

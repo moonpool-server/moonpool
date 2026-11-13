@@ -654,8 +654,8 @@ end
 local function admin_call(name, args)
   if name == 'mp' then
     if not CFG.enabled_set.player then return false, nil, console.msg(CONSOLE, 'console_off') end
-    local r = console.handle(CONSOLE, { sender = { name = args.sender.name, key = args.sender.eos }, text = args.line },
-      console_game())
+    local req = { sender = { name = args.sender.name, key = args.sender.eos }, text = args.line }
+    local r = args.exact and console.exact(CONSOLE, req) or console.handle(CONSOLE, req, console_game())
     -- Each line can stall the server for a second or so, so they go line_gap_ms apart.
     local gap = tonumber(CATALOG.line_gap_ms) or 1000
     for i, run in ipairs(r.runs) do
@@ -833,6 +833,49 @@ LoopAsync(5000, function()
     end
   end)
   return admin_hooked and color_hooked
+end)
+
+-- The game itself carries a cheat line from any client to the server through this call, and runs it
+-- with no check; a client mod that shows the game's hidden cheat panel is enough to send one. Here the
+-- line is emptied before the game runs it, for everyone. An admin's line then runs as it is unless the
+-- console's deny list names it; anyone else's is dropped and logged.
+local CHEAT_HOOK = '/Script/Subnautica2.SN2PlayerController:ServerCheat'
+local cheat_hooked = false
+local function controller_identity(pc)
+  local name, connection
+  pcall(function() name = ps_name(pc.PlayerState) end)
+  pcall(function() connection = pc.NetConnection:GetFName():ToString() end)
+  return { name = name or '?', eos = admin_signal.connection_id(ADMIN, connection) }
+end
+LoopAsync(5000, function()
+  if cheat_hooked then return true end
+  ExecuteInGameThread(function()
+    if cheat_hooked then return end
+    local fn = StaticFindObject(CHEAT_HOOK)
+    if not (fn and fn:IsValid()) then return end
+    RegisterHook(CHEAT_HOOK, function(Context, Msg)
+      local text
+      pcall(function() text = Msg:get():ToString() end)
+      local emptied = pcall(function() Msg:set('') end)
+      local sender = controller_identity(Context:get())
+      if not emptied then
+        log(string.format('cheat gate: COULD NOT STOP a line from %s (eos %s): %s', sender.name,
+          tostring(sender.eos), tostring(text)))
+        return
+      end
+      if type(text) ~= 'string' or text == '' then return end
+      if not admin_signal.authorized(ADMIN.admins, sender) then
+        log(string.format('cheat gate: dropped %s from %s (eos %s): not an admin', text, sender.name,
+          tostring(sender.eos)))
+        return
+      end
+      log(string.format('cheat gate: %s from admin %s', text, sender.name))
+      admin_call('mp', { sender = sender, line = text, exact = true })
+    end)
+    cheat_hooked = true
+    log('cheat gate registered on ' .. CHEAT_HOOK)
+  end)
+  return cheat_hooked
 end)
 
 -- Empty-server policy (idle.lua): FreezeTime with nobody in, UnfreezeTime on a join, and an
