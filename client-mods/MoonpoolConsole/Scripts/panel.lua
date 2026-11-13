@@ -43,7 +43,7 @@ local function live(class)
   return out
 end
 
-local panel, shown, trimmed, hooked, commands
+local panel, shown, trimmed, hooked, commands, items
 
 local function input_mode(pc, widget, ui)
   local lib = StaticFindObject(G.widgets)
@@ -136,6 +136,108 @@ local function hook_typed_lines()
   end)
 end
 
+-- What the game's data says about each item a list row can stand for: its display name and whether
+-- the game calls it published. Read once.
+local function item_facts()
+  if items then return items end
+  items = {}
+  for _, asset in ipairs(live(G.item_class)) do
+    local id, label = asset:GetFName():ToString(), ''
+    pcall(function() label = asset[G.item_label]:ToString() end)
+    local ok, published = ucall(asset, G.is_published)
+    items[id] = { label = label, published = not ok or published ~= false }
+  end
+  return items
+end
+
+-- The rows of the game's open pick lists.
+local function open_rows()
+  local found = {}
+  for _, class in ipairs(CFG.close.lists) do
+    for _, list in ipairs(live(class)) do
+      local ok, open = ucall(list, G.is_activated)
+      local rows, count
+      if ok and open then pcall(function() rows = list[G.list_rows] end) end
+      if valid(rows) then _, count = ucall(rows, G.child_count) end
+      if count then found[#found + 1] = { rows = rows, count = count } end
+    end
+  end
+  return found
+end
+
+-- A list's rows, read from the game once per list and kept while its row count stays the same:
+-- each row's object, what it is searched by, whether its item is published, and whether it shows.
+local known = {}
+local function rows_of(list)
+  local key = list.rows:GetAddress()
+  local kept = known[key]
+  if kept and kept.count == list.count then return kept end
+  kept = { count = list.count }
+  local facts = item_facts()
+  for i = 0, list.count - 1 do
+    local got, row = ucall(list.rows, G.child_at, i)
+    if got and valid(row) then
+      local id = ''
+      pcall(function() id = row[G.row_item]:ToString() end)
+      local fact = facts[id] or { label = '', published = true }
+      kept[#kept + 1] = { row = row, text = route.search_text(id, fact.label, CFG.search.strip),
+        published = fact.published }
+    end
+  end
+  known[key] = kept
+  return kept
+end
+
+-- The search: a row of an open list shows only if it answers the query and, unless the settings say
+-- otherwise, the game calls its item published. Rows are the game's own; they are only shown or
+-- hidden, and only a row whose state changes is touched. When nothing answers as written, the
+-- letters only have to appear in order. Returns how many rows show, of how many.
+local function filter(query, loose, lists)
+  lists = lists or open_rows()
+  local showing, all = 0, 0
+  for _, list in ipairs(lists) do
+    for _, r in ipairs(rows_of(list)) do
+      local show = (r.published or CFG.search.show_unpublished) and route.matches(r.text, query, loose)
+      if show ~= r.shows and valid(r.row) and ucall(r.row, G.set_visibility, show and G.row_shown or G.hidden) then
+        r.shows = show
+      end
+      all, showing = all + 1, showing + (show and 1 or 0)
+    end
+  end
+  if showing == 0 and all > 0 and not loose then return filter(query, true, lists) end
+  return showing, all
+end
+
+-- While the panel shows, what is typed is read every search.every_ms. A list is left alone until
+-- its number of rows has held still for search.settle_ms: the game builds a list's rows over several
+-- frames, and reading one too early crashed the game. After that the lists are gone through again
+-- only when the typed text or the number of rows changes. One loop at a time: a newer load of this
+-- script ends the older one's.
+_G.MoonpoolConsoleLoads = (_G.MoonpoolConsoleLoads or 0) + 1
+local load, following, last, seen, still = _G.MoonpoolConsoleLoads, false, nil, nil, 0
+local function follow_typing()
+  if following or not CFG.search.live then return end
+  following = true
+  LoopAsync(CFG.search.every_ms, function()
+    if not shown or load ~= _G.MoonpoolConsoleLoads then following = false; return true end
+    ExecuteInGameThread(function()
+      if not (shown and valid(panel)) then return end
+      local lists, rows = open_rows(), 0
+      for _, list in ipairs(lists) do rows = rows + list.count end
+      still = rows == seen and still + CFG.search.every_ms or 0
+      seen = rows
+      if still < CFG.search.settle_ms then return end
+      local ok, typed_now = ucall(panel, G.typed)
+      local text = ok and typed_now and typed_now:ToString() or ''
+      local now = text .. '|' .. rows
+      if now == last then return end
+      last = now
+      pcall(filter, text, false, lists)
+    end)
+    return false
+  end)
+end
+
 -- Closing the panel closes what it opened. The game keeps its pick lists in a stack: closing the top
 -- one brings the one under it back a moment later, so the open one is closed, then the next after
 -- close.wait_ms, until none is open (at most close.most times).
@@ -175,9 +277,10 @@ local function toggle()
   if want then
     if not trimmed then trim(w) end
     hook_typed_lines()
+    follow_typing()
   else
     close_opened(pc)
   end
 end
 
-return { toggle = toggle, typed = typed, config = CFG, say = say }
+return { toggle = toggle, typed = typed, filter = filter, config = CFG, say = say }
