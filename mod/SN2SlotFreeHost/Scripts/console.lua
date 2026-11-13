@@ -134,6 +134,17 @@ function M.exact(st, req)
   return out
 end
 
+-- A line that reached the host through the game's own cheat call. One that starts with the console's
+-- word (signal_word) is a console line: everything after the word is handled like any other. Any
+-- other line is the game's own and runs as it is.
+function M.forwarded(st, req, game)
+  local word, rest = tostring(req.text or ''):match('^%s*(%S+)%s*(.*)$')
+  if word and st.cat.signal_word and lower(word) == lower(st.cat.signal_word) then
+    return M.handle(st, { sender = req.sender, text = rest }, game)
+  end
+  return M.exact(st, req)
+end
+
 -- Who a line runs as: a list of player names, or nil and a reply.
 local function targets(st, game, who, sender)
   local word = st.targets[lower(who)]

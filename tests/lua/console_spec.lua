@@ -125,6 +125,11 @@ check(#r.runs == 0 and r.lines[1]:find('find', 1, true), 'an empty line shows he
 r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'Item DA_TestItem 2' })
 check(#r.runs == 1 and r.runs[1].line == 'Item DA_TestItem 2' and r.runs[1].player == 'dir',
   'an exact line is not looked up')
+r = console.forwarded(st, { sender = me, text = 'Give "copper" 5' }, game)
+check(r.runs[1] and r.runs[1].line == 'Give "copper" 5', 'a forwarded game line is not looked up')
+r = console.forwarded(st, { sender = me, text = catalog.signal_word .. ' Give "copper" 5' }, game)
+check(r.runs[1] and r.runs[1].line == 'Give DA_Copper_ItemType 5',
+  'a forwarded line with the console word is a console line')
 r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'CrashServer' })
 check(#r.runs == 0 and #r.lines == 1, 'an exact line on the deny list never runs')
 
