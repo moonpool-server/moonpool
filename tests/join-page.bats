@@ -129,7 +129,7 @@ JSON
   printf 'png bytes' >"$DATA_DIR/templates/banner.png"
   run render
   [ "$status" -eq 0 ]
-  [[ "$output" == *'<main class="card"><img class="banner" src="banner.png" alt=""><h1>'* ]]
+  [[ "$output" == *'<main class="card"><img class="banner" src="banner.png" alt=""><p class="readout">'* ]]
   [ "$(cat "$DATA_DIR/public/banner.png")" = 'png bytes' ]
   rm "$DATA_DIR/templates/banner.png"
   run render
@@ -164,4 +164,12 @@ JSON
   own=$(printf '%s' "$output" | grep -o 'theme\.css?[0-9a-f]*')
   [ "${#own}" -eq 22 ] && [ "$own" != "$shipped" ]
   grep -q -- '--ink: #000000' "$DATA_DIR/public/theme.css"
+}
+
+@test "the page names the game, at the top and in its title" {
+  command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
+  run render
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'<title>Join Slot1 · Subnautica 2</title>'* ]]
+  [[ "$output" == *'<p class="readout"><span class="game">Subnautica 2</span>'*'<h1>Join Slot1</h1>'* ]]
 }
