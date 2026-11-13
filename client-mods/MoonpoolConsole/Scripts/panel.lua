@@ -113,6 +113,9 @@ local function trim(w)
   each_part(w, function(widget, part, kind)
     if route.hidden(kind, part, CFG.panel) then parts[#parts + 1] = widget end
     if part == CFG.layout.part then block = widget end
+    if part == CFG.hint.part and ucall(widget, G.set_text, FText(CFG.hint.text)) then
+      ucall(widget, G.set_visibility, G.shown)
+    end
   end)
   for _, o in ipairs(parts) do ucall(o, G.set_visibility, G.hidden) end
   if valid(block) then dock(block) end

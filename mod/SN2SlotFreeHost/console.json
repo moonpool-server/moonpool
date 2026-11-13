@@ -158,6 +158,22 @@
           "kind": "tags"
         }
       ]
+    },
+    "normal": {
+      "aliases": [
+        "off",
+        "normal"
+      ],
+      "lines": [
+        "DayOnly 0",
+        "RemoveTag Cheat.UnlockRecipes",
+        "RemoveTag Cheat.InfiniteKnowledge",
+        "RemoveTag Cheat.AllBioAbilities",
+        "RemoveTag Cheat.FreeBuild",
+        "RemoveTag Cheat.NoSuffocate",
+        "RemoveTag Cheat.NoStarve",
+        "RemoveTag Cheat.NoDehydrate"
+      ]
     }
   },
   "deny": [
