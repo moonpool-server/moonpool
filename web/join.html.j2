@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 {%- if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif -%}
-<title>Join {{ world }}</title><meta property="og:title" content="Join {{ world }}"><meta property="og:type" content="website"><link rel="icon" href="data:,"><link rel="stylesheet" href="theme.css"><style>
+<title>Join {{ world }}</title><meta property="og:title" content="Join {{ world }}"><meta property="og:type" content="website"><link rel="icon" href="data:,"><link rel="stylesheet" href="theme.css?{{ theme }}"><style>
 html{background:var(--ink);color:var(--text);font:var(--size-body)/var(--leading) var(--font-text)}
 body{margin:0;min-height:100vh;padding:clamp(var(--gap-4),5vw,var(--gap-6));box-sizing:border-box}
 .page{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--join-column)),1fr));gap:var(--gap-6);max-width:var(--page-max);margin:0 auto;align-items:start}

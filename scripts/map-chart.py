@@ -342,14 +342,14 @@ def still(page, bg, public, cache):
     return out.getvalue()
 
 
-def render_page(template, page, public_url):
+def render_page(template, page, public_url, theme=""):
     """The page with its link-preview tags filled in; absolute addresses need the public url."""
     world = page["world"] or "World map"
     about = ("Where players were on %s about %d minutes ago." % (world, page["delay_minutes"])
              if page["explored"] is not None else "A map of %s." % world)
     image = (public_url.rstrip("/") + "/map.png") if public_url else "map.png"
     return (template.replace("{{WORLD}}", html.escape(world)).replace("{{ABOUT}}", html.escape(about))
-            .replace("{{IMAGE}}", html.escape(image)))
+            .replace("{{IMAGE}}", html.escape(image)).replace("{{THEME}}", html.escape(theme)))
 
 
 def main():
@@ -395,9 +395,9 @@ def main():
                                      page_data["backgrounds"]], sort_keys=True).encode()).hexdigest()[:16]
     page_data["still"] = sig
     write_json(public / "map.json", page_data)
-    publish_theme(data, public, Path(__file__).resolve().parent.parent / "web")
+    theme = publish_theme(data, public, Path(__file__).resolve().parent.parent / "web")
     load_colours(public)
-    write_atomic(public / "map.html", render_page(page.read_text(encoding="utf-8"), page_data, os.environ.get("MAP_PUBLIC_URL", "")))
+    write_atomic(public / "map.html", render_page(page.read_text(encoding="utf-8"), page_data, os.environ.get("MAP_PUBLIC_URL", ""), theme))
     if chart.get("still") != sig or not (public / "map.png").exists():
         cache = data / "map-tiles"
         cache.mkdir(exist_ok=True)
