@@ -12,17 +12,22 @@ return {
   word = 'mp',
   -- Calls into the game fail now and then on this build; each is tried this many times.
   tries = 40,
-  -- Where the panel sits: under the game's centred pick lists, as wide as they are, so the command
-  -- line reads as the list's search box. From left to right as shares of the screen's width, standing on the line at
-  -- bottom (a share of its height), with margins in the game's own layout units. part is the game's
-  -- name for the block that holds the whole panel.
-  layout = { part = 'VerticalBox_199', left = 0.409, right = 0.591, bottom = 0.93,
+  -- Where the panel sits: beside the game's centred pick lists, level with their upper half, where the
+  -- game draws nothing of its own (under the lists it would cover the hotbar and the action hints).
+  -- From left to right as shares of the screen's width, standing on the line at bottom (a share of
+  -- its height), with margins in the game's own layout units. part is the game's name for the block
+  -- that holds the whole panel.
+  layout = { part = 'VerticalBox_199', left = 0.60, right = 0.78, bottom = 0.42,
     margin = { left = 0.0, right = 0.0, bottom = 0.0 } },
+  -- What the panel's own label over the command line says (part: the game's name for that label; the
+  -- game rewrites the line under the command line itself, so the hint cannot go there).
+  hint = { part = 'CommonTextBlock_2',
+    text = 'Type to filter: name or category. Esc: back.' },
   -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
   panel = {
     hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
     keep = { 'Input', 'autocomplete', 'Description', 'ItemButton', 'SpawnButton', 'EquipButton', 'MacroButton',
-      'HistoryButton', 'HorizontalBox_0' },
+      'HistoryButton', 'HorizontalBox_0', 'CommonTextBlock_2' },
   },
   -- What closing also closes: the game's pick lists (by class; the game stacks them, so they are
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
@@ -64,6 +69,7 @@ return {
     widgets = '/Script/UMG.Default__WidgetBlueprintLibrary',
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
+    set_text = '/Script/UMG.TextBlock:SetText',
     typed = '/Script/Subnautica2.SN2CheatInput:GetTypedString',
     list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
     row_item = 'Context',               -- what a row stands for: an item's name in the game's data
