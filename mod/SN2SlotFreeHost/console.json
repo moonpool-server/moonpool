@@ -20,6 +20,14 @@
     "."
   ],
   "max_lines": 12,
+  "undo": {
+    "verbs": [
+      "spawn",
+      "summon"
+    ],
+    "keep": 10,
+    "within_m": 100
+  },
   "cheat_prefix": "Cheat.",
   "tags": [
     "Cheat.UnlockRecipes",
@@ -97,6 +105,10 @@
     "help": [
       "help",
       "h?"
+    ],
+    "undo": [
+      "undo",
+      "u"
     ]
   },
   "commands": {
@@ -213,7 +225,10 @@
     "console_off": "The console is off: add player to enabled_commands in sn2headless.json",
     "choose": "{query}? {choices}",
     "no_choice": "Pick 1 to {count}",
-    "ambiguous": "{query} could be: {matches}"
+    "ambiguous": "{query} could be: {matches}",
+    "undo_none": "Nothing of yours to undo",
+    "undo_done": "Removed {name}, {meters} m away",
+    "undo_gone": "No {name} within {meters} m"
   },
   "on_ambiguous": "ask",
   "max_choices": 6

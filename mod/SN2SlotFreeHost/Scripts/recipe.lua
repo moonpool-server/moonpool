@@ -442,8 +442,10 @@ local UNLOCK_GAME = {
 -- One FindAllOf('DataAsset') builds every lookup: walking all objects per name froze the game
 -- thread for a minute on a join and crashed UE4SS. Rebuilt at most once a minute on a scan miss.
 local ASSET_INDEX, ASSET_INDEX_AT = nil, -60
+local ITEM_MARK = '_ItemType'  -- in the name of every item type's data
 local function build_asset_index()
-  local idx, names, scans = { names = {}, scans = {}, items = {} }, 0, 0
+  local idx, names, scans, classes = { names = {}, scans = {}, items = {}, classes = {} }, 0, 0, 0
+  local ksl = StaticFindObject('/Script/Engine.Default__KismetSystemLibrary')
   local started = os.clock()
   local ok, all = pcall(FindAllOf, 'DataAsset')
   for _, o in ipairs(ok and type(all) == 'table' and all or {}) do
@@ -460,6 +462,19 @@ local function build_asset_index()
         if type(display) ~= 'string' or display == '' then display = base:gsub('_', ' '):gsub('(%l)(%u)', '%1 %2') end
         idx.items[#idx.items + 1] = { id = short, name = display }
       end
+      -- What an item puts in the world when spawned, from its own data: the class's name. Every item
+      -- type, the game's test ones too, so that whatever its Spawn list can make can be undone.
+      if short:find(ITEM_MARK, 1, true) then
+        local class
+        for _ = 1, 3 do  -- calls into the game fail now and then
+          if not class then
+            pcall(function()
+              class = ksl:Conv_SoftClassReferenceToString(o.ActorClass):ToString():match('([%w_]+)$')
+            end)
+          end
+        end
+        if class then idx.classes[k] = class; classes = classes + 1 end
+      end
       if short:match('^DA_.+_ScanData$') then
         local okn, display = pcall(function() return o.Name:ToString() end)
         if okn and type(display) == 'string' and display ~= '' then
@@ -472,7 +487,8 @@ local function build_asset_index()
       end
     end
   end
-  log(string.format('asset index: %d data assets, %d scan data, %.0f ms', names, scans, (os.clock() - started) * 1000))
+  log(string.format('asset index: %d data assets, %d scan data, %d spawn classes, %.0f ms', names, scans, classes,
+    (os.clock() - started) * 1000))
   return idx
 end
 asset_index = function(rebuild)
@@ -684,9 +700,40 @@ local function world_tags()
   return on
 end
 
+-- Undo: the nearest thing of the class the player's spawn created, within undo.within_m of them, is
+-- taken out of the world. Places are read as status.json reads them (status.loc): off the root
+-- component, because K2_GetActorLocation fails on this build; a thing attached to another reads its
+-- place relative to it. Returns the line to answer with.
+local function remove_nearest(player, what)
+  local limit = tonumber(CATALOG.undo and CATALOG.undo.within_m) or 100
+  local best, best_m, seen = nil, nil, 0
+  local pc = controller_named(player)
+  local pawn
+  pcall(function() pawn = pc.Pawn end)
+  local here = valid(pawn) and status.loc(pawn)
+  local ok, all = pcall(FindAllOf, what.class)
+  for _, actor in ipairs(here and ok and type(all) == 'table' and all or {}) do
+    local at = valid(actor) and status.loc(actor)
+    if at then
+      seen = seen + 1
+      local m = math.sqrt((at.x - here.x) ^ 2 + (at.y - here.y) ^ 2 + (at.z - here.z) ^ 2) / 100
+      if m <= limit and (not best_m or m < best_m) then best, best_m = actor, m end
+    end
+  end
+  local gone = best and pcall(function() best:K2_DestroyActor() end)
+  log(string.format('console: undo for %s: %s, %d in the world, %s', player, what.class, seen,
+    not here and 'the player has no place' or not best and ('none within ' .. limit .. ' m')
+    or string.format('%s at %.0f m', gone and 'removed' or 'NOT removed', best_m)))
+  if not gone then return console.msg(CONSOLE, 'undo_gone', { name = what.name, meters = limit }) end
+  return console.msg(CONSOLE, 'undo_done', { name = what.name, meters = math.floor(best_m + 0.5) })
+end
+
 -- What the console can see, read from the live game when a line comes in.
 local function console_game()
-  return { host = HOST_NAME, list = function(kind)
+  return { host = HOST_NAME, class_of = function(name)
+    local idx = asset_index()
+    return idx and idx.classes[tostring(name):lower()]
+  end, list = function(kind)
     if kind == 'players' then
       local out = {}
       for _, p in ipairs(players()) do
@@ -710,8 +757,15 @@ local function admin_call(name, args)
   if name == 'mp' then
     if not CFG.enabled_set.player then return false, nil, console.msg(CONSOLE, 'console_off') end
     local req = { sender = { name = args.sender.name, key = args.sender.eos }, text = args.line }
-    local r = args.forwarded and console.forwarded(CONSOLE, req, console_game())
-      or console.handle(CONSOLE, req, console_game())
+    local game = console_game()
+    local r = args.forwarded and console.forwarded(CONSOLE, req, game) or console.handle(CONSOLE, req, game)
+    for _, run in ipairs(r.runs) do  -- what the sender spawns for themselves can be undone
+      if run.player == args.sender.name then
+        local kept = console.spawned(CONSOLE, args.sender.eos or args.sender.name, run.line, game)
+        if kept then log('console: ' .. run.player .. ' can undo ' .. kept.name .. ' (' .. kept.class .. ')') end
+      end
+    end
+    if r.undo then r.lines[#r.lines + 1] = remove_nearest(args.sender.name, r.undo) end
     -- Each line can stall the server for a second or so, so they go line_gap_ms apart.
     local gap = tonumber(CATALOG.line_gap_ms) or 1000
     for i, run in ipairs(r.runs) do

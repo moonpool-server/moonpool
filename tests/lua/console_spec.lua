@@ -27,7 +27,8 @@ check(#missing == 0,
 local data = {
   items = { { id = 'DA_Titanium_ItemType', name = 'Titanium' },
             { id = 'DA_TitaniumIngot_ItemType', name = 'Titanium Ingot' },
-            { id = 'DA_Copper_ItemType', name = 'Copper' } },
+            { id = 'DA_Copper_ItemType', name = 'Copper' },
+            { id = 'DA_Raft_ItemType', name = 'Raft' } },
   places = { { id = 'Lifepod', name = 'Lifepod' } },
   players = { { id = 'a', name = 'dirtbikr59', eos = '0002', ping = 40 },
               { id = 'b', name = 'Johnny Pappis', eos = '0003', ping = 60 } },
@@ -134,6 +135,25 @@ r = run('ExecuteForAll ClearSaves')
 check(#r.runs == 0, 'a command that would run another on every game is refused')
 r = run('RunMacro Anything')
 check(#r.runs == 0, 'a macro started on the host, whose lines nobody checks, is refused')
+
+-- Undo: a spawn line that names an item with a world class is remembered per player, newest last.
+local u = console.new(catalog)
+game.class_of = function(name) return ({ da_raft_itemtype = 'BP_Raft_C' })[name:lower()] end
+check(console.spawned(u, 'k', 'Give DA_Raft_ItemType 1', game) == nil, 'a line that is not a spawn is not remembered')
+check(console.spawned(u, 'k', 'Spawn DA_Copper_ItemType', game) == nil,
+  'an item that puts nothing in the world is not remembered')
+local got = console.spawned(u, 'k', 'spawn DA_Raft_ItemType 1', game)
+check(got and got.class == 'BP_Raft_C' and got.name == 'DA_Raft_ItemType',
+  'a spawn is remembered with the class its item puts in the world')
+check(console.spawned(u, 'k', 'Spawn DA_RAFT_ItemType', game) ~= nil, 'whatever the case of the name')
+r = console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'undo' }, game)
+check(r.undo and r.undo.class == 'BP_Raft_C' and #r.runs == 0,
+  'undo hands back the newest spawn and runs nothing itself')
+console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'u' }, game)
+r = console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'undo' }, game)
+check(not r.undo and r.lines[1] == catalog.messages.undo_none, 'with nothing left, undo says so')
+r = console.handle(u, { sender = { name = 'other', key = 'o' }, text = 'undo' }, game)
+check(not r.undo, 'one player cannot undo the spawn of another')
 
 -- A line from the game's own screens runs as it is, for its sender; the deny list still holds.
 r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'Item DA_TestItem 2' })

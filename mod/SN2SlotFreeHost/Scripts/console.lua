@@ -38,7 +38,7 @@ local function aliases(t)
 end
 
 function M.new(catalog)
-  return { cat = catalog, last = {}, pending = {},
+  return { cat = catalog, last = {}, pending = {}, spawns = {},
     verbs = aliases(catalog.verbs), commands = aliases(catalog.commands), kinds = aliases(catalog.kinds),
     targets = aliases(catalog.targets), repeats = aliases({ ['.'] = catalog['repeat'] or {} }) }
 end
@@ -134,6 +134,24 @@ function M.exact(st, req)
   return out
 end
 
+-- A line that ran for a player: when it is one of the game's spawn commands (undo.verbs) and names
+-- an item whose data says what it puts in the world (game.class_of), that is remembered, newest
+-- last, so undo can take it out again. key: the player's stable key.
+function M.spawned(st, key, line, game)
+  local tokens = M.tokens(line)
+  local undo = st.cat.undo or {}
+  local is_spawn = false
+  local first = tokens[1] and lower(tokens[1].text)
+  for _, verb in ipairs(undo.verbs or {}) do is_spawn = is_spawn or first == lower(verb) end
+  local class = is_spawn and tokens[2] and game.class_of and game.class_of(tokens[2].text)
+  if not class then return nil end
+  local mine = st.spawns[key] or {}
+  st.spawns[key] = mine
+  mine[#mine + 1] = { class = class, name = tokens[2].text }
+  while #mine > (undo.keep or 10) do table.remove(mine, 1) end
+  return mine[#mine]
+end
+
 -- A message one player's game asks the host to pass to other players' games. The game's
 -- ExecuteForAll sends a command this way, on a cheat channel, and every game that gets it runs it as
 -- its own player: an admin's game would then send it on with an admin's rights. So a message on a
@@ -224,6 +242,12 @@ function M.handle(st, req, game)
     for name, c in pairs(st.cat.commands or {}) do short[#short + 1] = (c.aliases or {})[1] or name end
     table.sort(short)
     say(M.msg(st, 'help', { shortcuts = table.concat(short, ' ') }))
+    return out
+  end
+  if verb == 'undo' then  -- the caller takes the thing out of the world and says so
+    local mine = st.spawns[key] or {}
+    out.undo = table.remove(mine)
+    if not out.undo then say(M.msg(st, 'undo_none')) end
     return out
   end
   if verb == 'who' then
