@@ -60,6 +60,7 @@ check(not route.hidden('TextBox', 'Input', rules), 'a kind that is not listed st
 
 -- The shipped settings keep the command line and what opens the pick lists.
 local function shown(kind_, part_) return not route.hidden(kind_, part_, cfg.panel) end
+check(#cfg.hint.listing > 0, 'the hint says what typing does while a list shows')
 check(shown('CommonTextBlock', cfg.hint.part) and #cfg.hint.text > 0,
   'the hint has words and its label stays on the panel')
 check(shown('CommonTextBlock', 'Input') and shown('CommonTextBlock', 'autocomplete'), 'the command line stays')

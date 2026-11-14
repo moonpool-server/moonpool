@@ -31,9 +31,11 @@ return {
   run_key = 'RETURN',
   -- What the panel's own label over the command line says (part: the game's name for that label; the
   -- game rewrites the line under the command line itself, so the hint cannot go there): text with no
-  -- list open, filtering while one is, with {query} for what has been typed.
+  -- list open, listing while one is. filtering is the list's own line under its title, with {query}
+  -- for what has been typed.
   hint = { part = 'CommonTextBlock_2',
-    text = 'Pick a list, then type to filter it. Esc: back.',
+    text = 'Type a command and press Enter, or pick a list. Esc closes.',
+    listing = 'Typing filters the list below. Esc: back to the command line.',
     filtering = 'Filter: {query}_    {shown} of {all}    Up/Down choose, Enter runs, Esc back' },
   -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
   panel = {
