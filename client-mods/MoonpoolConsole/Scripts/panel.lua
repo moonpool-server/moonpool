@@ -344,6 +344,19 @@ end
 -- Closing the panel closes what it opened. The game keeps its pick lists in a stack: closing the top
 -- one brings the one under it back a moment later, so the open one is closed, then the next after
 -- close.wait_ms, until none is open (at most close.most times).
+-- When the last list is closed and the panel is hidden, the world gets the input back once more: the
+-- game re-activates each list under a closed one, and an activated menu holds the mouse look and the
+-- movement. One still held then is let go, and that is logged.
+local function give_back()
+  local pc = not shown and live(G.controller)[1]
+  if not pc then return end
+  input_mode(pc, panel, false)
+  for _, part in ipairs(CFG.give_back) do
+    local ok, held = ucall(pc, part.held)
+    if ok and held then ucall(pc, part.release); say('gave_back', { what = part.name }) end
+  end
+end
+
 local function close_lists(left)
   local closed = false
   for _, class in ipairs(CFG.close.lists) do
@@ -356,6 +369,8 @@ local function close_lists(left)
     ExecuteWithDelay(CFG.close.wait_ms, function()
       ExecuteInGameThread(function() pcall(close_lists, left - 1) end)
     end)
+  else
+    give_back()
   end
 end
 
