@@ -1604,11 +1604,13 @@ function Invoke-Join {
     $k = $_; $s = $k.Split('/')[0]; $n = $k.Substring($s.Length + 1)
     -not ($s -eq $serverId -and ($keepNames -contains $n))
   })
+  $offered = @(@(Get-Prop $manifest 'mods' @()) | ForEach-Object { [string](Get-Prop $_ 'name' '') })
   foreach ($k in $goneMods) {
     $s = $k.Split('/')[0]; $n = $k.Substring($s.Length + 1)
     # A loader the player already had leaves only a record behind; nothing of theirs goes.
     if (-not @($ledger.files.Keys | Where-Object { $ledger.files[$_].mod -eq $n })) { continue }
-    if ($s -eq $serverId) { $changes.Add("removing $n (no longer on this server)") }
+    if ($s -eq $serverId -and $offered -contains $n) { $changes.Add("removing $n (you left it out)") }
+    elseif ($s -eq $serverId) { $changes.Add("removing $n (no longer on this server)") }
     else { $changes.Add("removing $n (another server's mod)") }
   }
 

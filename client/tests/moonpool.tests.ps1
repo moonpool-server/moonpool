@@ -236,7 +236,7 @@ try {
 
   Write-Host 'an optional mod can be left out, the choice is remembered, and taken back'
   $r = Invoke-Join $w -Extra "-Skip 'Bar'"
-  Check ($r.Code -eq 0 -and $r.Out -match 'removing Bar') "skip removes Bar (got: $($r.Out.Trim()))"
+  Check ($r.Code -eq 0 -and $r.Out -match 'removing Bar \(you left it out\)' -and $r.Out -notmatch 'no longer on this server') "skip removes Bar and says why (got: $($r.Out.Trim()))"
   Check (-not (Test-Path -LiteralPath (Join-Path $w.Mods 'Bar'))) 'Bar folder gone'
   $r = Invoke-Join $w
   Check ($r.Code -eq 0 -and $r.Out -match 'leaving out optional mod Bar' -and -not (Test-Path -LiteralPath (Join-Path $w.Mods 'Bar'))) 'the choice holds on the next run'
