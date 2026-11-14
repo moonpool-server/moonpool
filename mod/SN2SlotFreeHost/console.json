@@ -43,7 +43,11 @@
     "Cheat.NoCost",
     "Cheat.UnlimitedPower",
     "Cheat.UnlimitedBattery",
-    "Cheat.UnlimitedHealth"
+    "Cheat.UnlimitedHealth",
+    "Cheat.GodMode",
+    "Cheat.Invisible",
+    "Cheat.Fly",
+    "Cheat.NoClip"
   ],
   "cheat_channel": "GameplayMessage.Cheat",
   "cheat_message_pattern": "String=\"(.-)\"",
@@ -185,7 +189,6 @@
       ],
       "lines": [
         "DayOnly 0",
-        "FastBuild 0",
         "RemoveGlobalTag Cheat.UnlockRecipes",
         "RemoveGlobalTag Cheat.InfiniteKnowledge",
         "RemoveGlobalTag Cheat.AllBioAbilities",
@@ -198,10 +201,10 @@
         "RemoveGlobalTag Cheat.UnlimitedPower",
         "RemoveGlobalTag Cheat.UnlimitedBattery",
         "RemoveGlobalTag Cheat.UnlimitedHealth",
-        "RemoveTag Cheat.GodMode",
-        "RemoveTag Cheat.Invisible",
-        "RemoveTag Cheat.Fly",
-        "RemoveTag Cheat.NoClip"
+        "RemoveGlobalTag Cheat.GodMode",
+        "RemoveGlobalTag Cheat.Invisible",
+        "RemoveGlobalTag Cheat.Fly",
+        "RemoveGlobalTag Cheat.NoClip"
       ]
     }
   },
@@ -248,11 +251,5 @@
     "undo_gone": "No {name} within {meters} m"
   },
   "on_ambiguous": "ask",
-  "max_choices": 6,
-  "player_tags": [
-    "Cheat.GodMode",
-    "Cheat.Invisible",
-    "Cheat.Fly",
-    "Cheat.NoClip"
-  ]
+  "max_choices": 6
 }
