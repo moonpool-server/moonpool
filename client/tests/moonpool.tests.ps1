@@ -262,6 +262,10 @@ try {
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $wd.Mods 'Bar\Scripts\main.lua'))) 'taking it installs it'
   $r = Invoke-Join $wd
   Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $wd.Mods 'Bar\Scripts\main.lua'))) 'and the choice holds over the default'
+  $baz = Mod $wd 'Baz' 'Baz.zip' 'Baz' '' $false; $baz.default_on = $false
+  Write-Manifest $wd @((Mod $wd 'Foo' 'Foo.zip' 'Foo' 'Foo'), $bar, $baz)
+  $r = Invoke-Join $wd
+  Check ($r.Code -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $wd.Mods 'Baz')) -and (Test-Path -LiteralPath (Join-Path $wd.Mods 'Bar\Scripts\main.lua'))) 'one the host lists later is left out too, for a player who already chose'
 
   Write-Host 'a mod the admin dropped is removed; a file the player edited is left alone'
   Set-Content -LiteralPath (Join-Path $w.Mods 'Bar\Scripts\main.lua') -Value 'my own tweak' -NoNewline

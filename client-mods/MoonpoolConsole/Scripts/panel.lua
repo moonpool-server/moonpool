@@ -45,7 +45,7 @@ local function live(class)
   return out
 end
 
-local panel, shown, trimmed, hooked, commands, items
+local panel, shown, trimmed, hooked, commands, items, hint, backdrop
 local open_rows  -- defined with the search, used by the typed line before it
 
 local function input_mode(pc, widget, ui)
@@ -74,38 +74,37 @@ local function make_panel(pc)
   return w
 end
 
--- The game lays its panel out across the middle of the screen. The block that holds everything is
--- given a place of its own from config.lua: a share of the screen's width, standing on a bottom line.
-local function dock(block)
+-- A widget placed in the palette's column (config.lua layout): from top to bottom as shares of the
+-- screen, or, with no bottom, hanging from top at its own height.
+local function dock(widget, top, bottom)
   local slot
-  pcall(function() slot = block.Slot end)
+  pcall(function() slot = widget.Slot end)
   if not valid(slot) then return end
   local at = CFG.layout
-  ucall(slot, G.set_anchors, { Minimum = { X = at.left, Y = at.bottom }, Maximum = { X = at.right, Y = at.bottom } })
-  ucall(slot, G.set_alignment, { X = 0.0, Y = 1.0 })
-  ucall(slot, G.set_auto_size, true)
-  ucall(slot, G.set_offsets,
-    { Left = at.margin.left, Top = -at.margin.bottom, Right = at.margin.right, Bottom = 0.0 })
+  ucall(slot, G.set_anchors, { Minimum = { X = at.left, Y = top }, Maximum = { X = at.right, Y = bottom or top } })
+  ucall(slot, G.set_alignment, { X = 0.0, Y = 0.0 })
+  ucall(slot, G.set_auto_size, bottom == nil)
+  ucall(slot, G.set_offsets, { Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0 })
 end
 
 -- The panel's own widgets, each handed to visit with its name and kind: from the root down through
 -- the containers, a few dozen lookups. (Looking through every object the game has loaded instead
 -- stalled the game for a moment on the first press.) Buttons are not containers, so what is inside
 -- them is left alone.
-local function each_part(w, visit)
+local function each_part(w, visit, depth)
   local container = StaticFindObject(G.container)
-  local function walk(widget)
+  local function walk(widget, d)
     visit(widget, widget:GetFName():ToString(), widget:GetClass():GetFName():ToString())
-    if not widget:IsA(container) then return end
+    if not widget:IsA(container) or d >= (depth or math.huge) then return end
     local ok, count = ucall(widget, G.child_count)
     for i = 0, (ok and count or 0) - 1 do
       local got, child = ucall(widget, G.child_at, i)
-      if got and valid(child) then walk(child) end
+      if got and valid(child) then walk(child, d + 1) end
     end
   end
   local root
   pcall(function() root = w[G.tree][G.root] end)
-  if valid(root) and valid(container) then walk(root) end
+  if valid(root) and valid(container) then walk(root, 0) end
 end
 
 local function trim(w)
@@ -113,13 +112,22 @@ local function trim(w)
   each_part(w, function(widget, part, kind)
     if route.hidden(kind, part, CFG.panel) then parts[#parts + 1] = widget end
     if part == CFG.layout.part then block = widget end
-    if part == CFG.hint.part and ucall(widget, G.set_text, FText(CFG.hint.text)) then
-      ucall(widget, G.set_visibility, G.shown)
-    end
+    if part == CFG.hint.part then hint = widget end
+    if part == CFG.backdrop.part then backdrop = widget end
   end)
   for _, o in ipairs(parts) do ucall(o, G.set_visibility, G.hidden) end
-  if valid(block) then dock(block) end
+  if valid(block) then dock(block, CFG.layout.top) end
+  if valid(backdrop) then
+    dock(backdrop, CFG.layout.top, CFG.list.top)
+    ucall(backdrop, G.set_blur, CFG.backdrop.strength)
+    ucall(backdrop, G.set_visibility, G.shown)
+  end
+  if valid(hint) then ucall(hint, G.set_visibility, G.shown) end
   trimmed = true
+end
+
+local function say_hint(text)
+  if valid(hint) then ucall(hint, G.set_text, FText(text)) end
 end
 
 -- The game's own command names, from this player's cheat manager class and the classes under it.
@@ -182,7 +190,7 @@ function open_rows()
       local rows, count
       if ok and open then pcall(function() rows = list[G.list_rows] end) end
       if valid(rows) then _, count = ucall(rows, G.child_count) end
-      if count then found[#found + 1] = { rows = rows, count = count, key = list:GetAddress() } end
+      if count then found[#found + 1] = { list = list, rows = rows, count = count, key = list:GetAddress() } end
     end
   end
   return found
@@ -214,7 +222,7 @@ end
 -- Rows are the game's own; they are only shown or hidden, and only a row whose state changes is
 -- touched. Returns how many rows show, of how many, and whether every change went through.
 local function filter(query, lists)
-  local showing, all, done = 0, 0, true
+  local all, done, visible = 0, true, {}
   for _, list in ipairs(lists or open_rows()) do
     for _, r in ipairs(rows_of(list)) do
       local show = (r.published or CFG.search.show_unpublished) and route.matches(r.text, query)
@@ -222,40 +230,106 @@ local function filter(query, lists)
         if valid(r.row) and ucall(r.row, G.set_visibility, show and G.row_shown or G.hidden) then r.shows = show
         else done = false end
       end
-      all, showing = all + 1, showing + (show and 1 or 0)
+      all = all + 1
+      if show then visible[#visible + 1] = r.row end
     end
   end
-  return showing, all, done
+  return #visible, all, done, visible
 end
 
--- While the panel shows, what is typed is read every search.every_ms. A list is left alone until
--- its number of rows has held still for search.settle_ms: the game builds a list's rows over several
--- frames, and reading one too early crashed the game. After that the lists are gone through again
--- only when the typed text or the number of rows changes. One loop at a time: a newer load of this
--- script ends the older one's.
+-- While the panel shows, the open lists are looked at every search.every_ms. A list is left alone
+-- until its rows have held still for search.settle_ms: the game builds a list's rows over several
+-- frames, and reading one too early crashed the game. A list that has just opened is placed under the
+-- panel's block and its frame darkened. What is typed while a list is open (key, below)
+-- is kept in query, cleared whenever the set of open lists changes; the rows are gone through again
+-- only when query or the lists change, and the first row that shows is given the keyboard, so Enter
+-- runs it and nav moves from it. One loop at a time: a newer load of this script ends the older one's.
 _G.MoonpoolConsoleLoads = (_G.MoonpoolConsoleLoads or 0) + 1
-local load, following, last, seen, still = _G.MoonpoolConsoleLoads, false, nil, nil, 0
-local function follow_typing()
+local load, following, last, seen, still, query = _G.MoonpoolConsoleLoads, false, nil, nil, 0, ''
+-- The chosen row is shown in the game's own selected style; the keyboard stays on the command line,
+-- because the game's Enter on a list runs the list's own selection, not the row that shows as chosen.
+local visible, chosen = {}, 0
+local function mark(row, on)
+  if not valid(row) then return end
+  ucall(row, G.selectable, true)
+  ucall(row, G.select, on, false)
+end
+local function choose(n)
+  if #visible == 0 then return end
+  mark(visible[chosen], false)
+  chosen = math.max(1, math.min(#visible, n))
+  mark(visible[chosen], true)
+end
+local function apply(lists, rows)
+  if rows == '' or still < CFG.search.settle_ms then return end
+  local now = query .. '|' .. rows
+  if now == last then return end
+  local went, showing, all, done, rows_shown = pcall(filter, query, lists)
+  if not went then return end
+  if done then last = now end
+  mark(visible[chosen], false)
+  visible, chosen = rows_shown, 0
+  say_hint(route.fill(CFG.hint.filtering, { query = query, shown = showing, all = all }))
+  choose(1)
+end
+local function lists_now()
+  local lists, rows = open_rows(), ''
+  for _, list in ipairs(lists) do rows = rows .. list.key .. ':' .. list.count .. ' ' end
+  return lists, rows
+end
+local function place(lists)
+  for _, list in ipairs(lists) do
+    each_part(list.list, function(widget, part)
+      if part == CFG.list.part then
+        dock(widget, CFG.list.top, CFG.list.bottom)
+        ucall(widget, G.set_tint, CFG.list.tint)
+      end
+    end, 1)
+  end
+end
+local function follow_lists()
   if following or not CFG.search.live then return end
   following = true
   LoopAsync(CFG.search.every_ms, function()
     if not shown or load ~= _G.MoonpoolConsoleLoads then following = false; return true end
     ExecuteInGameThread(function()
       if not (shown and valid(panel)) then return end
-      local lists, rows = open_rows(), ''
-      for _, list in ipairs(lists) do rows = rows .. list.key .. ':' .. list.count .. ' ' end
-      still = rows == seen and still + CFG.search.every_ms or 0
+      local lists, rows = lists_now()
+      if rows ~= seen then
+        still, query, visible, chosen, known = 0, '', {}, 0, {}  -- the game reuses a list with new rows
+        place(lists)
+        -- A pick closes the list and, with it, the panel's place in the game's menus: Esc would then
+        -- open the game's own menu as well, so the panel is made the active menu again.
+        if rows == '' then say_hint(CFG.hint.text); ucall(panel, G.activate) end
+      else
+        still = still + CFG.search.every_ms
+      end
       seen = rows
-      if still < CFG.search.settle_ms then return end
-      local ok, typed_now = ucall(panel, G.typed)
-      local text = ok and typed_now and typed_now:ToString() or ''
-      local now = text .. '|' .. rows
-      if now == last then return end
-      local went, _, _, done = pcall(filter, text, lists)
-      if went and done then last = now end
+      apply(lists, rows)
     end)
     return false
   end)
+end
+
+-- A typing key while the panel shows a list: char is what it types, nil takes one back. With no list
+-- open it does nothing, and the key keeps its meaning for whatever has the keyboard.
+local function key(char)
+  if not (shown and seen and seen ~= '') then return end
+  query = char and (query .. char) or query:sub(1, -2)
+  apply(lists_now())
+end
+
+-- Up or Down while a list shows: the choice moves over the rows that show. Enter runs the chosen row
+-- through the list's own model, as a click on it does.
+local function nav(step)
+  if shown and seen and seen ~= '' then choose(chosen + step) end
+end
+local function run()
+  local row = shown and seen and seen ~= '' and visible[chosen]
+  local name
+  if valid(row) then pcall(function() name = row[G.row_item]:ToString() end) end
+  local model = name and live(G.list_model)[1]
+  if model then ucall(model, G.pick, name) end
 end
 
 -- Closing the panel closes what it opened. The game keeps its pick lists in a stack: closing the top
@@ -279,9 +353,9 @@ end
 -- The game's diagnostic windows close by its own commands.
 local function close_opened(pc)
   close_lists(CFG.close.most)
-  local run = StaticFindObject(G.system)
+  local system = StaticFindObject(G.system)
   for _, line in ipairs(CFG.close.commands) do
-    call(line, function() run:ExecuteConsoleCommand(pc, line, pc) end)
+    call(line, function() system:ExecuteConsoleCommand(pc, line, pc) end)
   end
 end
 
@@ -303,7 +377,9 @@ local function toggle()
   if want then
     if not trimmed then trim(w) end
     hook_typed_lines()
-    follow_typing()
+    say_hint(CFG.hint.text)
+    seen = nil
+    follow_lists()
   else
     close_opened(pc)
   end
@@ -316,4 +392,5 @@ local function back()
   if #open_rows() > 0 then close_lists(CFG.close.most) else toggle() end
 end
 
-return { toggle = toggle, back = back, typed = typed, filter = filter, config = CFG, say = say }
+return { toggle = toggle, back = back, key = key, nav = nav, run = run, typed = typed, filter = filter,
+  config = CFG, say = say }
