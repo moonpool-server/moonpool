@@ -12,19 +12,26 @@ return {
   word = 'mp',
   -- Calls into the game fail now and then on this build; each is tried this many times.
   tries = 40,
-  -- Where the panel sits: beside the game's centred pick lists, level with their upper half, where the
-  -- game draws nothing of its own (under the lists it would cover the hotbar and the action hints).
-  -- From left to right as shares of the screen's width, standing on the line at bottom (a share of
-  -- its height), with margins in the game's own layout units. part is the game's name for the block
-  -- that holds the whole panel.
-  layout = { part = 'VerticalBox_199', left = 0.60, right = 0.78, bottom = 0.42,
-    margin = { left = 0.0, right = 0.0, bottom = 0.0 } },
+  -- The panel and the game's pick lists make one column, so the tabs, the filter and the results are
+  -- one palette in one place. All as shares of the screen: the column runs from left to right; the
+  -- panel's block (part: the game's name for it: tabs, filter line, command line) hangs from top; an
+  -- open list's frame (list.part) fills from list.top to list.bottom, above the hotbar, darkened by
+  -- list.tint (multiplied into the game's own frame colour). The panel's own blur (backdrop.part, blur
+  -- strength) sits behind the block. It cannot go behind the list: the panel stays above the game's
+  -- lists, because below them the game takes Esc for its own menu.
+  layout = { part = 'VerticalBox_199', left = 0.36, right = 0.64, top = 0.215 },
+  list = { part = 'CommonBorder_0', top = 0.335, bottom = 0.86, tint = { R = 0.45, G = 0.45, B = 0.5, A = 1.0 } },
+  backdrop = { part = 'BackgroundBlur_82', strength = 30.0 },
+  -- With a list open, nav keys move the choice over the rows that show and run_key runs it. The game's
+  -- own arrows count the rows the filter hid, and its Enter runs the list's own selection.
+  nav = { UP_ARROW = -1, DOWN_ARROW = 1 },
+  run_key = 'RETURN',
   -- What the panel's own label over the command line says (part: the game's name for that label; the
   -- game rewrites the line under the command line itself, so the hint cannot go there): text with no
   -- list open, filtering while one is, with {query} for what has been typed.
   hint = { part = 'CommonTextBlock_2',
-    text = 'Open a list, then type to filter it. Esc: back.',
-    filtering = 'Filter: {query}_   Backspace erases, Esc goes back.' },
+    text = 'Pick a list, then type to filter it. Esc: back.',
+    filtering = 'Filter: {query}_    {shown} of {all}    Up/Down choose, Enter runs, Esc back' },
   -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
   panel = {
     hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
@@ -104,5 +111,11 @@ return {
     hidden = 1,
     row_shown = 0,                      -- a list row that shows takes clicks (Visible)
     layer = 1000,                       -- above the game's own screens
+    set_tint = '/Script/UMG.Border:SetBrushColor',
+    selectable = '/Script/CommonUI.CommonButtonBase:SetIsSelectable',
+    select = '/Script/CommonUI.CommonButtonBase:SetIsSelected',
+    list_model = 'SN2CheatListViewModel', -- what a pick list shows and runs
+    pick = '/Script/Subnautica2.SN2CheatListViewModel:SelectItem',
+    set_blur = '/Script/UMG.BackgroundBlur:SetBlurStrength',
   },
 }

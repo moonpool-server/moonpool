@@ -32,3 +32,5 @@ bind(CFG.back_key, panel.back)
 -- With a list open the keyboard belongs to the list, so the typing keys are read here (config.lua).
 for name, char in pairs(CFG.search.keys) do bind(name, function() panel.key(char) end) end
 bind(CFG.search.erase, function() panel.key(nil) end)
+for name, step in pairs(CFG.nav) do bind(name, function() panel.nav(step) end) end
+bind(CFG.run_key, panel.run)
