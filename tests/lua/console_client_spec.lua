@@ -44,6 +44,12 @@ local knife = 'UWEItemType /Game/Data/ItemType/Tools/DA_Knife_ItemType.DA_Knife_
 check(knife:match(cfg.search.category) == 'Tools',
   'the category is the folder the item lives in')
 check(cfg.search.every_ms > 0 and cfg.search.show_unpublished == false, 'unpublished items are hidden as shipped')
+local typed_chars = {}
+for _, ch in pairs(cfg.search.keys) do typed_chars[ch] = true end
+check(typed_chars.a and typed_chars.z and typed_chars['0'] and typed_chars[' '] and cfg.search.erase,
+  'with a list open, letters, digits and space type into the filter and one key takes one back')
+check(route.fill(cfg.hint.filtering, { query = 'tit' }):find('tit', 1, true) ~= nil,
+  'the label over the command line shows what has been typed')
 check(cfg.search.settle_ms >= cfg.search.every_ms, 'a list is given time to finish building before it is read')
 
 local rules = { hide = { 'Button', 'Blur' }, keep = { 'ItemButton' } }

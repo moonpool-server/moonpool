@@ -45,7 +45,7 @@ local function live(class)
   return out
 end
 
-local panel, shown, trimmed, hooked, commands, items
+local panel, shown, trimmed, hooked, commands, items, hint
 local open_rows  -- defined with the search, used by the typed line before it
 
 local function input_mode(pc, widget, ui)
@@ -113,13 +113,16 @@ local function trim(w)
   each_part(w, function(widget, part, kind)
     if route.hidden(kind, part, CFG.panel) then parts[#parts + 1] = widget end
     if part == CFG.layout.part then block = widget end
-    if part == CFG.hint.part and ucall(widget, G.set_text, FText(CFG.hint.text)) then
-      ucall(widget, G.set_visibility, G.shown)
-    end
+    if part == CFG.hint.part then hint = widget end
   end)
   for _, o in ipairs(parts) do ucall(o, G.set_visibility, G.hidden) end
   if valid(block) then dock(block) end
+  if valid(hint) then ucall(hint, G.set_visibility, G.shown) end
   trimmed = true
+end
+
+local function say_hint(text)
+  if valid(hint) then ucall(hint, G.set_text, FText(text)) end
 end
 
 -- The game's own command names, from this player's cheat manager class and the classes under it.
@@ -228,34 +231,54 @@ local function filter(query, lists)
   return showing, all, done
 end
 
--- While the panel shows, what is typed is read every search.every_ms. A list is left alone until
--- its number of rows has held still for search.settle_ms: the game builds a list's rows over several
--- frames, and reading one too early crashed the game. After that the lists are gone through again
--- only when the typed text or the number of rows changes. One loop at a time: a newer load of this
--- script ends the older one's.
+-- While the panel shows, the open lists are looked at every search.every_ms. A list is left alone
+-- until its rows have held still for search.settle_ms: the game builds a list's rows over several
+-- frames, and reading one too early crashed the game. What is typed while a list is open (key, below)
+-- is kept in query, cleared whenever the set of open lists changes, and the rows are gone through
+-- again only when query or the lists change. One loop at a time: a newer load of this script ends
+-- the older one's.
 _G.MoonpoolConsoleLoads = (_G.MoonpoolConsoleLoads or 0) + 1
-local load, following, last, seen, still = _G.MoonpoolConsoleLoads, false, nil, nil, 0
-local function follow_typing()
+local load, following, last, seen, still, query = _G.MoonpoolConsoleLoads, false, nil, nil, 0, ''
+local function apply(lists, rows)
+  if still < CFG.search.settle_ms then return end
+  local now = query .. '|' .. rows
+  if now == last then return end
+  local went, _, _, done = pcall(filter, query, lists)
+  if went and done then last = now end
+end
+local function lists_now()
+  local lists, rows = open_rows(), ''
+  for _, list in ipairs(lists) do rows = rows .. list.key .. ':' .. list.count .. ' ' end
+  return lists, rows
+end
+local function follow_lists()
   if following or not CFG.search.live then return end
   following = true
   LoopAsync(CFG.search.every_ms, function()
     if not shown or load ~= _G.MoonpoolConsoleLoads then following = false; return true end
     ExecuteInGameThread(function()
       if not (shown and valid(panel)) then return end
-      local lists, rows = open_rows(), ''
-      for _, list in ipairs(lists) do rows = rows .. list.key .. ':' .. list.count .. ' ' end
-      still = rows == seen and still + CFG.search.every_ms or 0
+      local lists, rows = lists_now()
+      if rows ~= seen then
+        still, query = 0, ''
+        say_hint(rows == '' and CFG.hint.text or route.fill(CFG.hint.filtering, { query = '' }))
+      else
+        still = still + CFG.search.every_ms
+      end
       seen = rows
-      if still < CFG.search.settle_ms then return end
-      local ok, typed_now = ucall(panel, G.typed)
-      local text = ok and typed_now and typed_now:ToString() or ''
-      local now = text .. '|' .. rows
-      if now == last then return end
-      local went, _, _, done = pcall(filter, text, lists)
-      if went and done then last = now end
+      apply(lists, rows)
     end)
     return false
   end)
+end
+
+-- A typing key while the panel shows a list: char is what it types, nil takes one back. With no list
+-- open it does nothing, and the key keeps its meaning for whatever has the keyboard.
+local function key(char)
+  if not (shown and seen and seen ~= '') then return end
+  query = char and (query .. char) or query:sub(1, -2)
+  say_hint(route.fill(CFG.hint.filtering, { query = query }))
+  apply(lists_now())
 end
 
 -- Closing the panel closes what it opened. The game keeps its pick lists in a stack: closing the top
@@ -303,7 +326,8 @@ local function toggle()
   if want then
     if not trimmed then trim(w) end
     hook_typed_lines()
-    follow_typing()
+    say_hint(CFG.hint.text)
+    follow_lists()
   else
     close_opened(pc)
   end
@@ -316,4 +340,4 @@ local function back()
   if #open_rows() > 0 then close_lists(CFG.close.most) else toggle() end
 end
 
-return { toggle = toggle, back = back, typed = typed, filter = filter, config = CFG, say = say }
+return { toggle = toggle, back = back, key = key, typed = typed, filter = filter, config = CFG, say = say }
