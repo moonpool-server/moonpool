@@ -24,7 +24,7 @@ return {
   backdrop = { part = 'BackgroundBlur_82', strength = 30.0 },
   -- With a list open, nav keys move the choice over the rows that show and run_key runs it. The game's
   -- own arrows count the rows the filter hid, and its Enter runs the list's own selection.
-  nav = { UP = -1, DOWN = 1 },
+  nav = { UP_ARROW = -1, DOWN_ARROW = 1 },
   run_key = 'RETURN',
   -- What the panel's own label over the command line says (part: the game's name for that label; the
   -- game rewrites the line under the command line itself, so the hint cannot go there): text with no

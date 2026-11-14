@@ -72,7 +72,8 @@ local at = cfg.layout
 check(type(at.part) == 'string' and at.left >= 0 and at.left < at.right and at.right <= 1
   and at.top < cfg.list.top and cfg.list.top < cfg.list.bottom and cfg.list.bottom <= 1,
   'one column: the block hangs from the top, the list fills below it, all inside the screen')
-check(cfg.nav.UP == -1 and cfg.nav.DOWN == 1, 'Up and Down move the choice one row')
+check(cfg.nav.UP_ARROW == -1 and cfg.nav.DOWN_ARROW == 1 and cfg.run_key == 'RETURN',
+  'the arrow keys move the choice one row and Enter runs it (UE4SS key names)')
 check(not route.hidden('VerticalBox', at.part, cfg.panel), 'the block the layout places is not hidden')
 check(#cfg.close.lists >= 1 and cfg.close.most >= 1 and cfg.close.wait_ms >= 0, 'closing names what it closes')
 
