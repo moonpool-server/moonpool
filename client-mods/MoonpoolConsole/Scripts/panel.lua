@@ -46,6 +46,7 @@ local function live(class)
 end
 
 local panel, shown, trimmed, commands, items, hint, backdrop
+local line = ''  -- what the command line holds, read after each key (key below)
 local open_rows  -- defined with the search, used by the typed line before it
 
 local function input_mode(pc, widget, ui)
@@ -150,11 +151,11 @@ end
 -- the game's commands as it is, anything else for the host's console. The game's own handling of
 -- Enter does not run it: the panel is not in the game's menu stack, and the game logs that it cannot
 -- find it there.
-local function typed(line)
+local function typed(said)
   local pc = live(G.controller)[1]
   if not pc or #open_rows() > 0 then return nil end  -- with a list open the line is its search
-  local where, text = route.route(line, game_commands(pc), CFG.word)
-  local send = where == route.CONSOLE and text or line
+  local where, text = route.route(said, game_commands(pc), CFG.word)
+  local send = where == route.CONSOLE and text or said
   -- Sent once, never retried: a call that failed after it left would run the line twice.
   if not pcall(function() pc:ServerCheat(send) end) then
     say('failed', { what = G.server_cheat, tries = 1, error = send })
@@ -301,7 +302,12 @@ local function follow_lists()
         place(lists)
         -- A pick closes the list and, with it, the panel's place in the game's menus: Esc would then
         -- open the game's own menu as well, so the panel is made the active menu again.
-        if rows == '' then say_hint(CFG.hint.text); ucall(panel, G.activate) end
+        -- The command line gets the keyboard back too, or what is typed next goes to the world.
+        if rows == '' then
+          say_hint(CFG.hint.text); ucall(panel, G.activate); ucall(panel, G.focus); line = ''
+        else
+          say_hint(CFG.hint.listing)
+        end
       else
         still = still + CFG.search.every_ms
       end
@@ -315,7 +321,6 @@ end
 -- A typing key while the panel shows: with a list open, char is what it types into the filter (nil
 -- takes one back). With none open the key has gone to the command line, which is read again here: the
 -- game runs a line on Enter in its own code, which the mod cannot hook, and has cleared it by then.
-local line = ''
 local function key(char)
   if not shown then return end
   if not (seen and seen ~= '') then

@@ -99,6 +99,17 @@ Every word, shortcut and reply comes from `console.json`. To change them, put yo
 
 `off` (or `normal`) is a shortcut in `console.json` that puts back what can be put back by name: it runs `DayOnly 0` and `RemoveGlobalTag` for each cheat tag in `tags`. On this build every cheat, god mode and invisibility included, is a world tag, so `off` turns it off for everyone. It removes tags rather than running `god` or `fastbuild` again, because those commands toggle and ignore a number (`FastBuild 0` turns fast build on). The game's `QuickNav` macro also changes this PC's fog and speed, which only its `NormalNav` macro puts back. The game's `RemoveTag` and `AddTag` change a tag on the one player who runs them, not the world's: the game answers "removed" and the world's cheat stays on, so `tag+`, `tag-` and `off` use the `Global` commands, which are the ones `cheats` reads. `FastSwim` changes only the admin's own PC and is not a tag; run it again to turn it off. So after `Superman` or `SculptDebug`, `off` clears everything but fast swim, and after `QuickNav` the game's `NormalNav` puts back fog, speed and swimming.
 
+The game's own macros (its `Content/Macros` folder on each admin's PC, one command per line; a file added there shows in the Macro list) and how each is undone, as run from the panel on this build:
+
+| Macro | What it does | Undo |
+|---|---|---|
+| Base Pack, Equipment Pack, Starting Items | gives or equips items (Starting Items' `OxygenTankSmall` is not found on this build) | nothing to undo |
+| QuickNav | no fog, speed 10, fast swim on this PC; day, frozen at noon, for the world | the game's `NormalNav` |
+| Superman | `god`, `fastbuild 1`, `unlockall`, `invisible` (all toggles: a cheat already on turns off), fast swim | `off`; `FastSwim` again for swimming |
+| SculptDebug | habitat builder, then the toggles `god`, `freebuild`, `unlimitedpower` | `off` |
+| SculptDebugNoSupports | SculptDebug, then `BaseToggleSupportCheck` | `off`, and `BaseToggleSupportCheck` once more: the game keeps no tag for it and says nothing, so the host cannot tell whether it is on |
+| damagedebug | four `giveability` lines | nothing: the game answers "Could not find blueprint" for each on this build |
+
 Cheat lines an admin's game forwards (a typed line, a pick from a list, each line of a macro) wait in a queue of their own: one every `cheat_gap_s` (1 as shipped, at most one per poll of the mod, every 2 s), at most `cheat_per_sender` (12) waiting per admin, so a macro of the game runs whole. Each admin can give one order every 3 seconds. The host then runs at most one order every 10 seconds, whoever sent it (`admin_gap_s` in the mod's `config.json`), because each console command can stall the server for a second or two. Orders wait their turn: up to 3 per admin and 20 in all, beyond which the signal answers Busy. A signal renamed by someone not in `ADMINS` is ignored without a reply so nobody can paint other players' signals red
 
 ### The game's own cheat panel
