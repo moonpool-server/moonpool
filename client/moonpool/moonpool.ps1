@@ -910,16 +910,18 @@ function Test-GameBuild($Manifest, [string]$Acf) {
 function Get-Choices([string]$Path, $Manifest) {
   $raw = Read-Json $Path $null
   $skipped = New-Object System.Collections.Generic.List[string]
-  if ($null -eq $raw) {
-    # Nothing chosen yet for this server: an optional mod the host marked default_on false starts left out.
-    foreach ($m in @(Get-Prop $Manifest 'mods' @())) {
-      if (-not [bool](Get-Prop $m 'required' $true) -and -not [bool](Get-Prop $m 'default_on' $true)) { $skipped.Add([string](Get-Prop $m 'name' '')) }
-    }
+  # An optional mod the host marked default_on false starts left out for a player who has not been
+  # shown it yet: on a first join, and when the host lists it later.
+  $seen = @(Get-Prop $raw 'seen' @())
+  foreach ($m in @(Get-Prop $Manifest 'mods' @())) {
+    $n = [string](Get-Prop $m 'name' '')
+    if (-not [bool](Get-Prop $m 'required' $true) -and -not [bool](Get-Prop $m 'default_on' $true) -and $seen -notcontains $n) { $skipped.Add($n) }
   }
-  foreach ($n in @(Get-Prop $raw 'skipped' @())) { if ($n) { $skipped.Add([string]$n) } }
+  foreach ($n in @(Get-Prop $raw 'skipped' @())) { if ($n -and -not $skipped.Contains([string]$n)) { $skipped.Add([string]$n) } }
   foreach ($n in $Keep) { while ($skipped.Contains($n)) { [void]$skipped.Remove($n) } }
   foreach ($n in $Skip) { if (-not $skipped.Contains($n)) { $skipped.Add($n) } }
-  if ($Skip.Count -gt 0 -or $Keep.Count -gt 0) { Write-Json $Path ([ordered]@{ skipped = @($skipped); seen = @(Get-Prop $raw 'seen' @()) }) }
+  # A mod named here has been answered for, so its default no longer applies.
+  if ($Skip.Count -gt 0 -or $Keep.Count -gt 0) { Write-Json $Path ([ordered]@{ skipped = @($skipped); seen = @(@($seen) + @($Keep) + @($Skip) | Select-Object -Unique) }) }
   return ,$skipped
 }
 
