@@ -42,6 +42,14 @@ return {
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
   -- commands, its diagnostic windows.
   close = { lists = { 'WBP_CheatListSelector_C' }, most = 100, wait_ms = 100, commands = { 'CloseDiag' } },
+  -- After everything is closed: what the world needs back, each with the game's function that says it
+  -- is still held and the one that lets it go.
+  give_back = {
+    { name = 'mouse look', held = '/Script/Engine.Controller:IsLookInputIgnored',
+      release = '/Script/Engine.Controller:ResetIgnoreLookInput' },
+    { name = 'movement', held = '/Script/Engine.Controller:IsMoveInputIgnored',
+      release = '/Script/Engine.Controller:ResetIgnoreMoveInput' },
+  },
   -- While one of the game's lists is open, the keyboard belongs to the list, not the command line, so
   -- this mod reads the typing keys itself (keys: UE4SS Key names, each with the character it types;
   -- erase: the key that takes one back) and hides the rows that do not answer what was typed. Items
@@ -70,6 +78,7 @@ return {
     missing = 'the game has no {what}',
     not_made = 'the game did not create the panel',
     error = 'the panel could not be shown or closed: {error}',
+    gave_back = '{what} was still held after the panel closed; handed back to the game',
   },
   -- The game's own names this mod uses. They change only when the game does.
   game = {
