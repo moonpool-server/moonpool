@@ -146,16 +146,20 @@ local function game_commands(pc)
   return out
 end
 
--- A line typed in the panel: the game's own commands are left to the game; the rest goes to the server.
+-- A line typed in the panel goes to the host as a cheat line, the way the game sends its own: one of
+-- the game's commands as it is, anything else for the host's console. The game's own handling of
+-- Enter does not run it: the panel is not in the game's menu stack, and the game logs that it cannot
+-- find it there.
 local function typed(line)
   local pc = live(G.controller)[1]
   if not pc or #open_rows() > 0 then return nil end  -- with a list open the line is its search
   local where, text = route.route(line, game_commands(pc), CFG.word)
+  local send = where == route.CONSOLE and text or line
   -- Sent once, never retried: a call that failed after it left would run the line twice.
-  if where == route.CONSOLE and not pcall(function() pc:ServerCheat(text) end) then
-    say('failed', { what = G.server_cheat, tries = 1, error = text })
+  if not pcall(function() pc:ServerCheat(send) end) then
+    say('failed', { what = G.server_cheat, tries = 1, error = send })
   end
-  return where, text
+  return where, send
 end
 
 -- What the game's data says about each item a list row can stand for: its display name and whether
