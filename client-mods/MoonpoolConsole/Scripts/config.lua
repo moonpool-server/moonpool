@@ -46,7 +46,11 @@ return {
   -- What closing also closes: the game's pick lists (by class; the game stacks them, so they are
   -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
   -- commands, its diagnostic windows.
-  close = { lists = { 'WBP_CheatListSelector_C' }, most = 100, wait_ms = 100, commands = { 'CloseDiag' } },
+  -- modal: the game's own command that closes its top list. Only that undoes what the game set up when
+  -- it opened the list; deactivating the list alone left the mouse with the game's menus, so the view
+  -- no longer turned. A list still open after it is deactivated.
+  close = { lists = { 'WBP_CheatListSelector_C' }, most = 100, wait_ms = 100, commands = { 'CloseDiag' },
+    modal = 'HideModal' },
   -- After everything is closed: what the world needs back, each with the game's function that says it
   -- is still held and the one that lets it go.
   give_back = {
