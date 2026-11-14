@@ -298,7 +298,9 @@ class DownloadsAndLinks(unittest.TestCase):
             with zipfile.ZipFile(archive) as z:
                 self.assertEqual(sorted(z.namelist()), ["Scripts/config.lua", "Scripts/main.lua", "Scripts/panel.lua",
                                                        "Scripts/route.lua"])
-            self.assertEqual(source["url"], "files/MoonpoolConsole.zip")
+            self.assertEqual(source["url"], "files/MoonpoolConsole.zip?sha256=" + source["hashes"][0]["value"][:16],
+                             "the address changes with the content, so a cache cannot serve an old zip")
+            self.assertTrue((public / "files" / "MoonpoolConsole.zip").is_file(), "and the zip it names is still served")
             own = data / "client-mods" / "MoonpoolConsole" / "Scripts"; own.mkdir(parents=True)
             (own / "main.lua").write_text("print('mine')")
             _, archive = PUBLISH.resolve_local({"name": "MoonpoolConsole"}, {"type": "local"}, data, public,

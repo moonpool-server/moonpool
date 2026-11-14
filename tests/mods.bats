@@ -53,9 +53,13 @@ make_zip() { # out.zip version path...
   [ "$(jq -r '.enabled, .mods, .required, .ue4ss' <<<"$output")" = $'true\n1\n1\ntrue' ]
   m="$DATA_DIR/public/mods.json"
   [ "$(jq -r '.schema, .game.buildid, .game.branch, .session.lobby_id' "$m")" = $'3\n4242\nexperimental\n16' ]
-  [ "$(jq -r '.mods[0] | .name, .kind, .folder, .prefix, .required, .source.type, .source.url' "$m")" = \
-    $'Loader\nue4ss\nLoader\n\ntrue\nlocal\nfiles/Loader.zip' ]
-  [ "$(jq -r '.mods[0].source.hashes[0].value' "$m")" = "$(sha256sum "$DATA_DIR/public/files/Loader.zip" | cut -d' ' -f1)" ]
+  [ "$(jq -r '.mods[0] | .name, .kind, .folder, .prefix, .required, .source.type' "$m")" = \
+    $'Loader\nue4ss\nLoader\n\ntrue\nlocal' ]
+  # The address names the content (a cache in front of the server keeps files for hours), and the zip
+  # it names is still served.
+  sum=$(sha256sum "$DATA_DIR/public/files/Loader.zip" | cut -d' ' -f1)
+  [ "$(jq -r '.mods[0].source.hashes[0].value' "$m")" = "$sum" ]
+  [ "$(jq -r '.mods[0].source.url' "$m")" = "files/Loader.zip?sha256=${sum:0:16}" ]
   unzip -l "$DATA_DIR/public/files/Loader.zip" | grep -q 'Scripts/main.lua'
   [ "$(jq -r '.ue4ss.asset, .ue4ss.allowed_builds[0]' "$m")" = $'UE4SS_v3.0.1-1188-gf885e8d2.zip\n'"$EXE_SHA" ]
   # No verified copy on the host: the mirror address. With one: served from the host itself.
