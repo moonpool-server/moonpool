@@ -244,7 +244,7 @@ _G.MoonpoolConsoleLoads = (_G.MoonpoolConsoleLoads or 0) + 1
 local load, following, last, seen, still, query = _G.MoonpoolConsoleLoads, false, nil, nil, 0, ''
 -- The chosen row is shown in the game's own selected style; the keyboard stays on the command line,
 -- because the game's Enter on a list runs the list's own selection, not the row that shows as chosen.
-local visible, chosen = {}, 0
+local visible, chosen, labels = {}, 0, {}
 local function mark(row, on)
   if not valid(row) then return end
   ucall(row, G.selectable, true)
@@ -265,7 +265,10 @@ local function apply(lists, rows)
   if done then last = now end
   mark(visible[chosen], false)
   visible, chosen = rows_shown, 0
-  say_hint(route.fill(CFG.hint.filtering, { query = query, shown = showing, all = all }))
+  local said = FText(route.fill(CFG.hint.filtering, { query = query, shown = showing, all = all }))
+  for _, label in ipairs(labels) do  -- shown in the list itself, under its title
+    if valid(label) then ucall(label, G.set_text, said); ucall(label, G.set_visibility, G.shown) end
+  end
   choose(1)
 end
 local function lists_now()
@@ -274,13 +277,15 @@ local function lists_now()
   return lists, rows
 end
 local function place(lists)
+  labels = {}
   for _, list in ipairs(lists) do
     each_part(list.list, function(widget, part)
       if part == CFG.list.part then
         dock(widget, CFG.list.top, CFG.list.bottom)
         ucall(widget, G.set_tint, CFG.list.tint)
       end
-    end, 1)
+      if part == CFG.list.label then labels[#labels + 1] = widget end
+    end, CFG.list.depth)
   end
 end
 local function follow_lists()

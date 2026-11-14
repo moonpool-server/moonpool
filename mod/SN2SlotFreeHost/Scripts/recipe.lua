@@ -605,6 +605,9 @@ local ADMIN = admin_signal.new({ console_word = CATALOG.signal_word, admins = os
 local ADMIN_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetPingDisplayName'
 local COLOR_HOOK = '/Script/UWEPingSystem.UWEPingSystemCommandComponent:ServerSetThumbnailColor'
 local admin_queue = admin_pace.new(tonumber(CFG.admin_gap_s) or 10)
+-- Cheat lines an admin's game forwards (a typed line, a pick, each line of a macro) have their own
+-- queue, so a macro is not cut off after three lines nor spread over a minute (console.json).
+local cheat_queue = admin_pace.new(tonumber(CATALOG.cheat_gap_s) or 1, tonumber(CATALOG.cheat_per_sender))
 local admin_hooked, color_hooked = false, false
 -- The answer stays on the signal this long, then its own name and colour come back.
 local REPLY_SECONDS = 8
@@ -877,11 +880,13 @@ end
 
 -- One queued command per call, at most one per admin_gap_s (admin_pace.lua).
 local function admin_drain()
+  local line = admin_pace.take(cheat_queue, os.time())
+  if line then -- from the game's cheat call: the gate already checked the sender
+    admin_call('mp', { sender = line.sender, line = line.text, forwarded = true })
+    admin_pace.mark(cheat_queue, os.time())
+  end
   local item = admin_pace.take(admin_queue, os.time())
-  if item and item.forwarded then -- from the game's cheat call: the gate already checked the sender
-    admin_call('mp', { sender = item.sender, line = item.text, forwarded = true })
-    admin_pace.mark(admin_queue, os.time())
-  elseif item then
+  if item then
     local sender = item.sender
     local r = admin_signal.run(ADMIN, sender, item.text, { now = os.time, call = admin_call })
     if r and r.silent then
@@ -1018,7 +1023,7 @@ LoopAsync(5000, function()
         return
       end
       -- It waits its turn in the same paced queue as the signal commands.
-      local queued, why = admin_pace.push(admin_queue, { sender = sender, text = text, forwarded = true },
+      local queued, why = admin_pace.push(cheat_queue, { sender = sender, text = text, forwarded = true },
         sender.eos or sender.name)
       log(string.format('cheat gate: %s from admin %s: %s', text, sender.name, queued and 'queued' or why))
     end, cheat_restore)

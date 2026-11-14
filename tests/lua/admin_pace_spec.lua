@@ -41,4 +41,8 @@ pace.push(z, 1, 'a'); pace.push(z, 2, 'b')
 check(pace.take(z, 5) == 1 and pace.take(z, 5) == 2, 'gap 0: one per take')
 
 if failures > 0 then os.exit(1) end
+local wide = pace.new(1, 12)
+for i = 1, 12 do assert(pace.push(wide, i, 'a'), 'a queue with its own cap takes up to it') end
+local took, said = pace.push(wide, 13, 'a')
+assert(not took and said == 'sender_busy', 'and refuses the next')
 print('admin_pace: ok')
