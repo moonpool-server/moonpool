@@ -415,8 +415,12 @@ def resolve_local(entry, install, data, public, name):
     zip_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", name) + ".zip"
     archive = out_dir / zip_name
     put(archive, zip_bytes((path.relative_to(folder).as_posix(), path.read_bytes()) for path in files))
-    return {"type": "local", "page": entry.get("source") or "", "url": f"files/{zip_name}", "file_name": zip_name,
-            "size": archive.stat().st_size, "hashes": [{"algorithm": "sha256", "value": sha256(archive)}]}, archive
+    digest = sha256(archive)
+    # The address names the content: a cache in front of the server (a CDN keeps files for hours) would
+    # otherwise hand out the old zip under the same name, and every player's download fails its check.
+    return {"type": "local", "page": entry.get("source") or "", "url": f"files/{zip_name}?sha256={digest[:16]}",
+            "file_name": zip_name, "size": archive.stat().st_size,
+            "hashes": [{"algorithm": "sha256", "value": digest}]}, archive
 
 
 # ---- the manifest -----------------------------------------------------------------
@@ -657,7 +661,8 @@ def publish(args):
     os.replace(temp_sig, public / "mods.json.sig")
     os.replace(temp, manifest_path)
     # A file off the list stops being served: only what the signed list names stays public.
-    listed = {Path(u).name for u in [m["source"]["url"] for m in mods] + [(loader or {}).get("url", "")]}
+    # (An address may carry a ?sha256= part; the file is the path before it.)
+    listed = {Path(u.split("?", 1)[0]).name for u in [m["source"]["url"] for m in mods] + [(loader or {}).get("url", "")]}
     for served in (public / "files").glob("*"):
         if served.is_file() and served.name not in listed:
             served.unlink()
