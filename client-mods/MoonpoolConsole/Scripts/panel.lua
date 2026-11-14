@@ -45,7 +45,7 @@ local function live(class)
   return out
 end
 
-local panel, shown, trimmed, hooked, commands, items, hint, backdrop
+local panel, shown, trimmed, commands, items, hint, backdrop
 local open_rows  -- defined with the search, used by the typed line before it
 
 local function input_mode(pc, widget, ui)
@@ -153,17 +153,9 @@ local function typed(line)
   local where, text = route.route(line, game_commands(pc), CFG.word)
   -- Sent once, never retried: a call that failed after it left would run the line twice.
   if where == route.CONSOLE and not pcall(function() pc:ServerCheat(text) end) then
-    say('failed', { what = G.typed_line, tries = 1, error = text })
+    say('failed', { what = G.server_cheat, tries = 1, error = text })
   end
   return where, text
-end
-
-local function hook_typed_lines()
-  if hooked or not valid(StaticFindObject(G.typed_line)) then return end
-  hooked = pcall(RegisterHook, G.typed_line, function(_, Cmd)
-    local ok, err = pcall(function() typed(Cmd:get():ToString()) end)
-    if not ok then say('error', { error = err }) end
-  end)
 end
 
 -- What the game's data says about each item a list row can stand for: its display name and whether
@@ -311,10 +303,17 @@ local function follow_lists()
   end)
 end
 
--- A typing key while the panel shows a list: char is what it types, nil takes one back. With no list
--- open it does nothing, and the key keeps its meaning for whatever has the keyboard.
+-- A typing key while the panel shows: with a list open, char is what it types into the filter (nil
+-- takes one back). With none open the key has gone to the command line, which is read again here: the
+-- game runs a line on Enter in its own code, which the mod cannot hook, and has cleared it by then.
+local line = ''
 local function key(char)
-  if not (shown and seen and seen ~= '') then return end
+  if not shown then return end
+  if not (seen and seen ~= '') then
+    local ok, text = ucall(panel, G.typed)
+    if ok and text then line = text:ToString() end
+    return
+  end
   query = char and (query .. char) or query:sub(1, -2)
   apply(lists_now())
 end
@@ -325,6 +324,12 @@ local function nav(step)
   if shown and seen and seen ~= '' then choose(chosen + step) end
 end
 local function run()
+  if shown and not (seen and seen ~= '') then  -- no list: the line typed into the command line
+    local text = line
+    line = ''
+    if text ~= '' then typed(text) end
+    return
+  end
   local row = shown and seen and seen ~= '' and visible[chosen]
   local name
   if valid(row) then pcall(function() name = row[G.row_item]:ToString() end) end
@@ -354,8 +359,8 @@ end
 local function close_opened(pc)
   close_lists(CFG.close.most)
   local system = StaticFindObject(G.system)
-  for _, line in ipairs(CFG.close.commands) do
-    call(line, function() system:ExecuteConsoleCommand(pc, line, pc) end)
+  for _, command in ipairs(CFG.close.commands) do
+    call(command, function() system:ExecuteConsoleCommand(pc, command, pc) end)
   end
 end
 
@@ -376,7 +381,8 @@ local function toggle()
   input_mode(pc, w, want)
   if want then
     if not trimmed then trim(w) end
-    hook_typed_lines()
+    ucall(w, G.focus)  -- the command line takes the keyboard, or what is typed goes to the world
+    line = ''
     say_hint(CFG.hint.text)
     seen = nil
     follow_lists()

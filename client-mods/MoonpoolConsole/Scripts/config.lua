@@ -55,7 +55,8 @@ return {
     keys = { A = 'a', B = 'b', C = 'c', D = 'd', E = 'e', F = 'f', G = 'g', H = 'h', I = 'i', J = 'j', K = 'k',
       L = 'l', M = 'm', N = 'n', O = 'o', P = 'p', Q = 'q', R = 'r', S = 's', T = 't', U = 'u', V = 'v',
       W = 'w', X = 'x', Y = 'y', Z = 'z', ZERO = '0', ONE = '1', TWO = '2', THREE = '3', FOUR = '4',
-      FIVE = '5', SIX = '6', SEVEN = '7', EIGHT = '8', NINE = '9', SPACE = ' ' },
+      FIVE = '5', SIX = '6', SEVEN = '7', EIGHT = '8', NINE = '9', SPACE = ' ', OEM_PERIOD = '.',
+      OEM_MINUS = '-', OEM_COMMA = ',', OEM_TWO = '/' },
     erase = 'BACKSPACE',
     -- An item's category is the folder its data lives in (Tools, Resource, Equipment): typing it
     -- narrows the list. A Lua pattern over the item's full name.
@@ -74,7 +75,9 @@ return {
   game = {
     panel = '/Game/Blueprints/UI/Cheat/WBP_CheatInput.WBP_CheatInput_C',
     panel_class = 'WBP_CheatInput_C',
-    typed_line = '/Game/Blueprints/UI/Cheat/WBP_CheatInput.WBP_CheatInput_C:Exec',
+    server_cheat = 'SN2PlayerController:ServerCheat', -- named when sending a line fails
+    typed = '/Script/Subnautica2.SN2CheatInput:GetTypedString',
+    focus = '/Script/UMG.Widget:SetFocus',
     controller = 'PlayerController',
     template_prefix = 'Default__',      -- a class's own template object, never a live one
     -- Where the walk up the cheat manager's classes ends. Subnautica's own commands are sent on to the
