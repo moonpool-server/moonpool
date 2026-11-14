@@ -24,25 +24,22 @@ end
 check(#missing == 0,
   'every message key the code uses is in console.json (missing: ' .. table.concat(missing, ' ') .. ')')
 
--- The game's AddTag and RemoveTag change a tag on one player; the world's cheats (tags) change only
--- with the Global commands. A per-player command is for a tag listed under player_tags.
-local mine = {}
-for _, t in ipairs(catalog.player_tags) do mine[t] = true end
-local wrong = {}
+-- On this build every cheat tag is the world's (the game logs "Adding global tag Cheat.GodMode" for
+-- god); AddTag and RemoveTag change a tag on one player only, so no shortcut uses them.
+local per_player = {}
 for name, c in pairs(catalog.commands) do
   for _, line in ipairs(c.lines) do
-    local tag = line:match('^AddTag (%S+)') or line:match('^RemoveTag (%S+)')
-    if tag and not mine[tag] then wrong[#wrong + 1] = name .. ':' .. tag end
+    if line:match('^AddTag ') or line:match('^RemoveTag ') then per_player[#per_player + 1] = name end
   end
 end
-check(#wrong == 0, 'a world cheat is never changed with a per-player command (' .. table.concat(wrong, ' ') .. ')')
+check(#per_player == 0,
+  'no shortcut changes a world cheat with a per-player command (' .. table.concat(per_player, ' ') .. ')')
 local off = table.concat(catalog.commands.normal.lines, '|')
 for _, tag in ipairs(catalog.tags) do
-  check(off:find('RemoveGlobalTag ' .. tag, 1, true) ~= nil, 'off removes the world cheat ' .. tag)
+  check(off:find('RemoveGlobalTag ' .. tag, 1, true) ~= nil, 'off removes ' .. tag)
 end
-for _, tag in ipairs(catalog.player_tags) do
-  check(off:find('RemoveTag ' .. tag, 1, true) ~= nil, 'off removes the player cheat ' .. tag)
-end
+-- FastBuild, God and the like are toggles that ignore a number: "FastBuild 0" turns fast build on.
+check(not off:lower():find('fastbuild ', 1, true), 'off never toggles a cheat, it removes its tag')
 check(catalog.cheat_per_sender >= 7, 'a macro of the game (seven lines at most) fits in the cheat queue')
 
 local data = {
