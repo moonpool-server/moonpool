@@ -24,20 +24,26 @@ end
 check(#missing == 0,
   'every message key the code uses is in console.json (missing: ' .. table.concat(missing, ' ') .. ')')
 
--- The game's AddTag and RemoveTag change a tag on one player; the cheats the console lists are the
--- world's, which only the Global commands change.
-local per_player = {}
+-- The game's AddTag and RemoveTag change a tag on one player; the world's cheats (tags) change only
+-- with the Global commands. A per-player command is for a tag listed under player_tags.
+local mine = {}
+for _, t in ipairs(catalog.player_tags) do mine[t] = true end
+local wrong = {}
 for name, c in pairs(catalog.commands) do
   for _, line in ipairs(c.lines) do
-    if line:match('^AddTag ') or line:match('^RemoveTag ') then per_player[#per_player + 1] = name end
+    local tag = line:match('^AddTag (%S+)') or line:match('^RemoveTag (%S+)')
+    if tag and not mine[tag] then wrong[#wrong + 1] = name .. ':' .. tag end
   end
 end
-check(#per_player == 0,
-  'no shortcut changes a world cheat with a per-player command (' .. table.concat(per_player, ' ') .. ')')
+check(#wrong == 0, 'a world cheat is never changed with a per-player command (' .. table.concat(wrong, ' ') .. ')')
 local off = table.concat(catalog.commands.normal.lines, '|')
 for _, tag in ipairs(catalog.tags) do
-  check(off:find('RemoveGlobalTag ' .. tag, 1, true) ~= nil, 'off removes ' .. tag)
+  check(off:find('RemoveGlobalTag ' .. tag, 1, true) ~= nil, 'off removes the world cheat ' .. tag)
 end
+for _, tag in ipairs(catalog.player_tags) do
+  check(off:find('RemoveTag ' .. tag, 1, true) ~= nil, 'off removes the player cheat ' .. tag)
+end
+check(catalog.cheat_per_sender >= 7, 'a macro of the game (seven lines at most) fits in the cheat queue')
 
 local data = {
   items = { { id = 'DA_Titanium_ItemType', name = 'Titanium' },

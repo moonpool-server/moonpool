@@ -20,7 +20,10 @@ return {
   -- strength) sits behind the block. It cannot go behind the list: the panel stays above the game's
   -- lists, because below them the game takes Esc for its own menu.
   layout = { part = 'VerticalBox_199', left = 0.36, right = 0.64, top = 0.215 },
-  list = { part = 'CommonBorder_0', top = 0.335, bottom = 0.86, tint = { R = 0.45, G = 0.45, B = 0.5, A = 1.0 } },
+  -- list.label: the list's own line under its title, where the filter and its count are shown; depth:
+  -- how far into the list's widgets its frame and that line are.
+  list = { part = 'CommonBorder_0', label = 'Description', depth = 3, top = 0.335, bottom = 0.86,
+    tint = { R = 0.45, G = 0.45, B = 0.5, A = 1.0 } },
   backdrop = { part = 'BackgroundBlur_82', strength = 30.0 },
   -- With a list open, nav keys move the choice over the rows that show and run_key runs it. The game's
   -- own arrows count the rows the filter hid, and its Enter runs the list's own selection.

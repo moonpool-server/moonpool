@@ -7,8 +7,9 @@ local M = {}
 M.MAX_QUEUED = 20
 M.MAX_PER_SENDER = 3
 
-function M.new(gap_s)
-  return { items = {}, gap_s = gap_s or 0, last_run = nil }
+-- per_sender: how many items one sender may have waiting (MAX_PER_SENDER when not given).
+function M.new(gap_s, per_sender)
+  return { items = {}, gap_s = gap_s or 0, last_run = nil, per_sender = per_sender or M.MAX_PER_SENDER }
 end
 
 -- Adds ITEM for sender KEY. Returns true, or false and 'queue_full' or 'sender_busy'.
@@ -18,7 +19,7 @@ function M.push(q, item, key)
   for _, it in ipairs(q.items) do
     if it.key == key then mine = mine + 1 end
   end
-  if mine >= M.MAX_PER_SENDER then return false, 'sender_busy' end
+  if mine >= q.per_sender then return false, 'sender_busy' end
   q.items[#q.items + 1] = { key = key, item = item }
   return true
 end
