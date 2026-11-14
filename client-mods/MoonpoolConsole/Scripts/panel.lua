@@ -369,10 +369,18 @@ end
 
 local function close_lists(left)
   local closed = false
+  local pc = live(G.controller)[1]
   for _, class in ipairs(CFG.close.lists) do
     for _, list in ipairs(live(class)) do
       local ok, open = ucall(list, G.is_activated)
-      if ok and open then closed = ucall(list, G.deactivate) or closed end
+      if ok and open then
+        if pc then
+          local system = StaticFindObject(G.system)
+          call(CFG.close.modal, function() system:ExecuteConsoleCommand(pc, CFG.close.modal, pc) end)
+        end
+        local _, open_yet = ucall(list, G.is_activated)
+        closed = (not open_yet or ucall(list, G.deactivate)) or closed
+      end
     end
   end
   if closed and left > 1 then
