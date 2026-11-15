@@ -21,6 +21,12 @@ case "$WINE_RUNTIME:$WINE_SYNC" in
 ' "$WINE_SYNC" "$WINE_RUNTIME" >&2
      unset WINEFSYNC WINEESYNC ;;
 esac
+# How Wine waits, in one word for the log: at most one of the two is set, and either may be unset.
+wine_sync_name() {
+  if [ -n "${WINEFSYNC:-}" ]; then echo fsync
+  elif [ -n "${WINEESYNC:-}" ]; then echo esync
+  else echo wineserver; fi
+}
 
 GAME_APP_ID="${GAME_APP_ID:-${STEAM_APPID:-1962700}}"
 # Nothing listens on it: players join through the game's own peer session.

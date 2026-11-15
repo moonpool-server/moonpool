@@ -117,7 +117,7 @@ if ! set_net_tick_rate "${UE_LOG%/Logs/*}/Config/Windows/Engine.ini" "${NET_MAX_
   log "NET_MAX_TICK_RATE must be a positive integer or empty"; exit 2
 fi
 [ -z "${NET_MAX_TICK_RATE:-}" ] || log "net.MaxNetTickRate=$NET_MAX_TICK_RATE written; applied only if the game log says Set CVar"
-log "wine: $(wine --version 2>/dev/null) ($WINE_RUNTIME), sync: ${WINEFSYNC:+fsync}${WINEESYNC:+esync}$([ -n "${WINEFSYNC}${WINEESYNC}" ] || echo wineserver)"
+log "wine: $(wine --version 2>/dev/null) ($WINE_RUNTIME), sync: $(wine_sync_name)"
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
 apply_local_paks
 # The last run's lobby is gone: a player sent to it gets "session is no longer available".
