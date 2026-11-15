@@ -751,6 +751,16 @@ policy_env() {
   [[ -f "$SN2_CONTROL_DIR/receipts/request.json" ]]
 }
 
+# --- how Wine waits, for the launch log (scripts/common.sh wine_sync_name) ----
+@test "the launch log names how Wine waits whichever of fsync and esync is set, with unset variables an error" {
+  for case in "WINEFSYNC=1:fsync" "WINEESYNC=1:esync" "true:wineserver"; do
+    run bash -c "set -u; . '$BATS_TEST_DIRNAME/../scripts/common.sh' 2>/dev/null; unset WINEFSYNC WINEESYNC; ${case%%:*}; wine_sync_name"
+    [ "$status" -eq 0 ]; [ "$output" = "${case##*:}" ] || { echo "$case gave: $output"; false; }
+  done
+  # shellcheck disable=SC2016 # the script's own text
+  grep -qF 'sync: $(wine_sync_name)' "$BATS_TEST_DIRNAME/../scripts/launch-headless.sh"
+}
+
 # --- the viewer's password (scripts/common.sh viewer_password) ----------------
 @test "viewer password: VNC_PASSWORD wins, else one is made once at mode 600 and kept" {
   f="$BATS_TEST_TMPDIR/viewer-password"
