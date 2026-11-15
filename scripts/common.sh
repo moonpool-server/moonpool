@@ -53,6 +53,7 @@ resolve_preset VOICE_WARN true false
 resolve_preset IDLE_FREEZE_MINUTES 10 0
 resolve_preset IDLE_STOP_HOURS '' ''
 resolve_preset NET_MAX_CLIENT_RATE 300000 ''
+resolve_preset IDLE_MAX_FPS 10 0
 HOST_PRUNE="${HOST_PRUNE:-true}"
 HIDE_HOST_BODY="${HIDE_HOST_BODY:-true}"
 AUTO_ACCEPT_FRIENDS="${AUTO_ACCEPT_FRIENDS:-0}"
