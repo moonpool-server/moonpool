@@ -8,9 +8,9 @@ Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. T
 
 8 players is a guess at 6 cores 12 GB 60 GB and 25 Mbit. `metrics.csv` in the data volume shows what your host really uses
 
-An empty server still runs the game at full frame rate: about 3.3 cores on the one host it was measured on. `IDLE_MAX_FPS=10` in `.env` lowers the frame cap after the world has been empty as long as the idle freeze waits (10 minutes) and puts `SERVER_MAX_FPS` back when a player's login shows in the game log; there the empty server dropped to about 1 core, and a join made while it was lowered took as long as the others that night. It is off unless you set it
+An empty server still runs the game at full frame rate: about 3.3 cores on the one host it was measured on. `IDLE_MAX_FPS=10` in `.env` lowers the frame cap after the world has been empty as long as the idle freeze waits (10 minutes) and puts `SERVER_MAX_FPS` back when a player's login shows in the game log; there the empty server dropped to about 1 core, and a join made while it was lowered took as long as one made at full rate. If the host can't send the command yet, it tries again on the next check. It is off unless you set it
 
-A joining player's loading screen waits for the world's data, which the server sends at most `NET_MAX_CLIENT_RATE` bytes a second to each player: 300000 as shipped, where the game's own default is 100000. On one host a join sent about 1.4 MB, the busiest second about 160 KiB, and the loading screen took 15 s instead of 31 s. Each player who is joining can use up to that much of your upload at once; set it empty for the game's default
+A joining player's loading screen waits for the world's data, which the server sends at most `NET_MAX_CLIENT_RATE` bytes a second to each player: 300000 with the friends preset, and the game's own 100000 with `PRESET=stock`. On a test host a join sent about 1.4 MB, the busiest second about 160 KiB, and the loading screen took 15 s instead of 31 s. Each player who is joining can use up to that much of your upload at once; `NET_MAX_CLIENT_RATE=100000` gives the game's default under the friends preset
 
 ## Signing in
 

@@ -18,6 +18,15 @@ function M.wake(s)
   return { 'fast' }
 end
 
+-- The game command for an action was not sent (no host body yet): forget the action, so the
+-- next tick that still calls for it returns it again.
+function M.undo(s, act)
+  if act == 'slow' then s.slow = false
+  elseif act == 'fast' then s.slow = true
+  elseif act == 'freeze' then s.frozen = false
+  elseif act == 'unfreeze' then s.frozen = true end
+end
+
 -- `normal` hands the clock back with the empty timer restarted.
 function M.hold(s, held)
   s.held = held and true or false

@@ -52,6 +52,7 @@ resolve_preset LIFEPOD_JOIN_HOLD true false
 resolve_preset VOICE_WARN true false
 resolve_preset IDLE_FREEZE_MINUTES 10 0
 resolve_preset IDLE_STOP_HOURS '' ''
+resolve_preset NET_MAX_CLIENT_RATE 300000 ''
 HOST_PRUNE="${HOST_PRUNE:-true}"
 HIDE_HOST_BODY="${HIDE_HOST_BODY:-true}"
 AUTO_ACCEPT_FRIENDS="${AUTO_ACCEPT_FRIENDS:-0}"
@@ -126,8 +127,8 @@ set_net_tick_rate() {
   set_ini_key "$ini" ConsoleVariables net.MaxNetTickRate "$value"
 }
 # NET_MAX_CLIENT_RATE: the most bytes a second the server sends one player, in the driver sections of
-# Engine.ini (the stock 100000 held a join's world data to about 30 s on one host; 300000 halved it).
-# The game rewrites Engine.ini, so this is written before each start; empty takes it out again.
+# Engine.ini; the stock 100000 paces a join's world data. The game rewrites Engine.ini, so this is
+# written before each start; empty takes it out again.
 set_net_client_rate() {
   local ini=$1 value=$2
   mkdir -p "${ini%/*}"

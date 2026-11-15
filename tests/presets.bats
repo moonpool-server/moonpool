@@ -6,22 +6,22 @@ setup() {
 
 resolved() {
   # shellcheck disable=SC2016 # expanded by the deliberately separate bash -c process
-  env -i PATH="$PATH" "$@" bash -c '. "$1/scripts/common.sh"; printf "%s|%s|%s|%s|%s|%s|%s|%s" "$PLAYER_SLOTS" "$STORY_GOALS" "$UNLOCK_REPLAY" "$LIFEPOD_JOIN_HOLD" "$VOICE_WARN" "$VOICE_RANGE_M" "$IDLE_FREEZE_MINUTES" "$IDLE_STOP_HOURS"' bash "$ROOT"
+  env -i PATH="$PATH" "$@" bash -c '. "$1/scripts/common.sh"; printf "%s|%s|%s|%s|%s|%s|%s|%s|%s" "$PLAYER_SLOTS" "$STORY_GOALS" "$UNLOCK_REPLAY" "$LIFEPOD_JOIN_HOLD" "$VOICE_WARN" "$VOICE_RANGE_M" "$IDLE_FREEZE_MINUTES" "$IDLE_STOP_HOURS" "$NET_MAX_CLIENT_RATE"' bash "$ROOT"
 }
 
 @test "friends and stock resolve their documented defaults" {
   run resolved PRESET=friends
   [ "$status" -eq 0 ]
-  [ "$output" = "4|true|true|true|true|100|10|" ]
+  [ "$output" = "4|true|true|true|true|100|10||300000" ]
   run resolved PRESET=stock
   [ "$status" -eq 0 ]
-  [ "$output" = "4|false|false|false|false|100|0|" ]
+  [ "$output" = "4|false|false|false|false|100|0||" ]
 }
 
 @test "an explicit switch wins over the preset" {
-  run resolved PRESET=stock PLAYER_SLOTS=12 STORY_GOALS=true UNLOCK_REPLAY=true LIFEPOD_JOIN_HOLD=true VOICE_WARN=true VOICE_RANGE_M=125 IDLE_FREEZE_MINUTES=7 IDLE_STOP_HOURS=2
+  run resolved PRESET=stock PLAYER_SLOTS=12 STORY_GOALS=true UNLOCK_REPLAY=true LIFEPOD_JOIN_HOLD=true VOICE_WARN=true VOICE_RANGE_M=125 IDLE_FREEZE_MINUTES=7 IDLE_STOP_HOURS=2 NET_MAX_CLIENT_RATE=150000
   [ "$status" -eq 0 ]
-  [ "$output" = "12|true|true|true|true|125|7|2" ]
+  [ "$output" = "12|true|true|true|true|125|7|2|150000" ]
 }
 
 @test "an unknown preset is refused by name" {
