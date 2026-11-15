@@ -1068,14 +1068,14 @@ end)
 
 -- Empty-server policy (idle.lua): FreezeTime with nobody in, UnfreezeTime on a join, and an
 -- optional stop request that the join watcher carries out.
--- IDLE_MAX_FPS: the frame cap while nobody is in, set after the same wait as the freeze (10 minutes
--- when the freeze is off) and lifted to SERVER_MAX_FPS when a player logs in.
+-- IDLE_MAX_FPS: the frame cap while nobody is in (0 = off), set IDLE_SLOW_MINUTES after the last
+-- player leaves and lifted to SERVER_MAX_FPS when a player logs in.
 local IDLE_FPS = idle.seconds(os.getenv('SN2_IDLE_MAX_FPS'), 1)
 local ACTIVE_FPS = idle.seconds(os.getenv('SN2_SERVER_MAX_FPS'), 1) or 60
 local IDLE = idle.new({
   freeze_s = idle.seconds(os.getenv('SN2_IDLE_FREEZE_MINUTES') or '10', 60),
   stop_s = idle.seconds(os.getenv('SN2_IDLE_STOP_HOURS'), 3600),
-  slow_s = IDLE_FPS and (idle.seconds(os.getenv('SN2_IDLE_FREEZE_MINUTES') or '10', 60) or 600),
+  slow_s = IDLE_FPS and (idle.seconds(os.getenv('SN2_IDLE_SLOW_MINUTES'), 60) or 120),
 })
 -- Runs an idle action's command as the host; one that is not sent is undone, to be tried next tick.
 local function idle_run(act, host_name, line, why)
