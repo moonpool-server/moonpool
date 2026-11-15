@@ -1,10 +1,10 @@
 # Running Moonpool
 
-Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. This covers the rest
+Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. This guide covers sizing, the Steam sign-in, letting players in, mods, in-game admin, backups, moving and updating the server, the map, changing the pages, and what to do when something goes wrong.
 
 ## Size
 
-4 players need about 4 cores 8 GB of memory 40 GB of SSD and 10 Mbit upload. Measured at 2 players it used 2.3 cores and 6 GB and the 4 player line is scaled up from that
+On a test host with 2 players the server used 2.3 cores and 6 GB of memory. For 4 players, plan on about 4 cores, 8 GB of memory, 40 GB of SSD and 10 Mbit upload. That 4-player line is scaled up from the 2-player measurement, not measured.
 
 8 players is a guess at 6 cores 12 GB 60 GB and 25 Mbit. `metrics.csv` in the data volume shows what your host really uses
 
@@ -24,7 +24,16 @@ Lost the machine? Deauthorize devices in Steam and change the password. `docker 
 
 ## Joining
 
-The game needs no forwarded port. Invite each player with `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request, you accept it in the viewer (`AUTO_ACCEPT_FRIENDS=1` has Moonpool accept invited players within a minute, using the host's Steam web session), and they hit Join Game or use the join page. `ALLOWLIST_ONLY=false` lets in anyone who asks. With `AUTO_ACCEPT_FRIENDS=0`, Moonpool reads the waiting requests once a minute through the same Steam web session the lobby lookup uses, without accepting or refusing any, and shows how many of them it would let in (invited players, or anyone with `ALLOWLIST_ONLY=false`, never a banned one) on the Discord card and in `bin/moonpool status`, which also names up to five when `SHOW_PLAYER_NAMES=true`. Anyone already friends with the account can join either way until you remove them from its friends in the viewer, or with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
+The game needs no forwarded port. To let a player in:
+
+1. Invite them: `bin/moonpool players invite <steamid64 or profile link>`.
+2. They send the hosting account a friend request.
+3. You accept it in the viewer. With `AUTO_ACCEPT_FRIENDS=1`, Moonpool accepts invited players within a minute instead, using the host's Steam web session.
+4. They press Join Game or use the join page.
+
+`ALLOWLIST_ONLY=false` lets in anyone who asks, not only invited players. With `AUTO_ACCEPT_FRIENDS=0`, Moonpool still reads the waiting requests once a minute through that web session, without accepting or refusing any. The Discord card and `bin/moonpool status` show how many it would let in (never a banned player), and `status` names up to five when `SHOW_PLAYER_NAMES=true`.
+
+Anyone already friends with the account can join until you remove them from its friends in the viewer or with `bin/moonpool ban add`. Everyone needs the same `STEAM_BRANCH` and game build
 
 `moonpool ban add <name>` removes a matching player whenever they join, and `players kick` only removes them for now. `ban add <steamid64>` also takes them off the host's friends list, but only with `AUTO_ACCEPT_FRIENDS=1`; without it they can still join until you remove them in the viewer
 
@@ -99,7 +108,27 @@ Admins give orders from inside the game with nothing installed: rename any PDA s
 !mp .                     the last line again
 ```
 
-Every word, shortcut and reply comes from `console.json`. To change them, put your own `console.json` in the data volume with only the keys you change, then recreate the host: it is merged over the shipped one. Shortcuts are data too: `commands` maps a word to the game's console lines, with arguments looked up by kind. `on_ambiguous: first` takes the best match without asking. The `deny` list stops commands that crash or wipe the world; an empty list allows everything. Lines from one order run `line_gap_ms` apart (1000 by default), because each can stall the server for a second or so. Replies come back in the signal's name, which shows about 40 characters, and as a game notification on the sender's screen. Kits are the game's own: `RunMacro <name>` runs a text file from the game's `Content/Macros` folder, one console line per row, and the cheat panel has a Macro button that lists them; the files are read on the admin's PC, and each line is checked by the host as it arrives. `!mp l commands` lists the game's own console commands, read from the host's cheat manager class once the host is in the world. `!mp c` lists the world cheats that are on, of the tags named under `tags` in `console.json` (the game answers for one tag at a time and has no list of its own); the same names are in `status.json` as `cheats`. Places aren't listed
+Every word, shortcut and reply comes from `console.json` (the shipped one is `mod/SN2SlotFreeHost/console.json`). To change them, put your own `console.json` in the data volume with only the keys you change, then recreate the host. It is merged over the shipped one key by key: entries in an object such as `commands` are added to the shipped ones, and a list such as `deny` replaces the shipped list. For example, a shortcut `full` that heals and fills oxygen:
+
+```json
+{
+  "commands": {
+    "full": { "aliases": ["full"], "lines": ["HealMe", "attr oxygen 100"] }
+  }
+}
+```
+
+- `commands` maps a word to the game's console lines. Arguments are looked up by kind; `give` in the shipped file shows how.
+- `on_ambiguous: first` takes the best match without asking.
+- `deny` stops commands that crash or wipe the world. An empty list allows everything, but only in the shipped file: an empty list in your own `console.json` is ignored and the shipped list stays.
+- `line_gap_ms` (1000 as shipped) is the gap between the lines of one order, because each can stall the server for a second or so.
+
+Replies come back in the signal's name, which shows about 40 characters, and as a game notification on the sender's screen.
+
+- Kits are the game's own: `RunMacro <name>` runs a text file from the game's `Content/Macros` folder, one console line per row, and the cheat panel has a Macro button that lists them. The files are read on the admin's PC, and the host checks each line as it arrives.
+- `!mp l commands` lists the game's own console commands, read from the host's cheat manager class once the host is in the world.
+- Places aren't listed: the host gives the console no places yet, so `!mp l places` and `!mp f` find none.
+- `!mp c` lists the world cheats that are on, of the tags named under `tags` in `console.json`. The game answers for one tag at a time and has no list of its own. The same names are in `status.json` as `cheats`.
 
 `off` (or `normal`) is a shortcut in `console.json` that puts back what can be put back by name: it runs `DayOnly 0` and `RemoveGlobalTag` for each cheat tag in `tags`. On this build every cheat, god mode and invisibility included, is a world tag, so `off` turns it off for everyone. It removes tags rather than running `god` or `fastbuild` again, because those commands toggle and ignore a number (`FastBuild 0` turns fast build on). The game's `QuickNav` macro also changes this PC's fog and speed, which only its `NormalNav` macro puts back. The game's `RemoveTag` and `AddTag` change a tag on the one player who runs them, not the world's: the game answers "removed" and the world's cheat stays on, so `tag+`, `tag-` and `off` use the `Global` commands, which are the ones `cheats` reads. `FastSwim` changes only the admin's own PC and is not a tag; run it again to turn it off. So after `Superman` or `SculptDebug`, `off` clears everything but fast swim, and after `QuickNav` the game's `NormalNav` puts back fog, speed and swimming.
 
@@ -124,7 +153,21 @@ A line that starts with the console's word (`signal_word` in `console.json`, `mp
 
 `undo` (or `u`) takes back the sender's last spawn: when an admin's own line is one of the game's spawn commands (`undo.verbs` in `console.json`) and names an item, the host remembers the class that item puts in the world, read from the item's own data, the last `undo.keep` per admin, until the host restarts. `undo` then removes the nearest thing of that class within `undo.within_m` metres of the admin and says how far away it was. It goes by class and distance, not by which one was spawned: with several of the same thing close by, the nearest goes, whoever placed it. Every remembered spawn and every undo is in the host's log (`console: ... can undo`, `console: undo for`).
 
-Tried on the live host with one player: ten admin lines in a row each ran once, with no crash in the two minutes after; with the admin list emptied, that player's `HealMe`, `GetCoords` and `mp who` were dropped and the game ran nothing; a denied command sent through `ExecuteForAll` was refused and the host could still save; an engine cheat sent as a console line (`mp DestroyAll <class>`) removed a vehicle that had taken the host from about 700 frames per ten seconds to about 20. Six posters spawned from the panel were each removed by `undo`, at 2 to 3 m, with no crash in the two minutes after. Not yet tried: the relay check with a second player (with one player the game handles `ExecuteForAll` on that player's own PC and never calls the host), the removal of a sender after a line that could not be stopped, and the skip for a player who is not in the world yet. An earlier version changed the line's text in place instead; that corrupted the game's memory and crashed the host after about three lines.
+Tested on the live host with one player:
+
+- Ten admin lines in a row each ran once, with no crash in the two minutes after.
+- With the admin list emptied, that player's `HealMe`, `GetCoords` and `mp who` were dropped and the game ran nothing.
+- A denied command sent through `ExecuteForAll` was refused, and the host could still save.
+- An engine cheat sent as a console line (`mp DestroyAll <class>`) removed a vehicle that had slowed the host from about 700 frames per ten seconds to about 20.
+- Six posters spawned from the panel were each removed by `undo`, at 2 to 3 m, with no crash in the two minutes after.
+
+Not tested:
+
+- The relay check with a second player. With one player the game handles `ExecuteForAll` on that player's own PC and never calls the host.
+- Removing a sender after a line that could not be stopped.
+- Skipping a line for a player who is not in the world yet.
+
+The gate takes the cheat manager away instead of changing the line's text, because changing the text in place corrupted the game's memory and crashed the host.
 
 ### The admin panel (client mod MoonpoolConsole)
 
@@ -204,7 +247,13 @@ docker compose up -d
 
 Steam can update the game whenever it runs. If the world has saves, Steam starts only after they are copied. A scheduled restart (`RESTART_CRON`) restarts the game alone and never updates it, so when the card shows a new build players can't join on, run `bin/moonpool server restart`, which recreates the container after a countdown warning players (`--now` skips it). `UPDATE_WITHOUT_BACKUP=true` skips that check. `AUTO_UPDATE=false` only stops Moonpool asking Steam to validate the game; Steam can still update it, so it does not hold a build. Check nobody's online before you recreate the host
 
-A new build only hosts if the loader works on it. The public branch uses a loader that needs nothing from you. Other branches aren't supported out of the box. The newest experimental build in the README's table hosted with the default loader plus a `MemberVariableLayout.ini` and a `VTableLayout.ini` in `ue4ss-local` in the data volume, which is copied over the loader's files on every launch. The member layout was measured from that build and the vtable layout came from the build before it. Without the member layout the loader crashed before the hosting mod loaded; with only the member layout the game crashed at the loader's first garbage-collection pass. Either way the host came up, reported no hosted world and waited. The files in `ue4ss-local` stay in the volume through game updates, so a later build can keep hosting if they still fit it. If they don't, the loader crashes again, the card says Not hosting, and that build needs layout files that fit it. Making them isn't automatic: measuring the object array from the running game didn't give the same answer twice on one test server, a file with only the measured object-array sections didn't host, and the field sections it also needs can't be read once the loader has crashed. The older pinned loader instead takes a whole set for the build in a folder under `ue4ss-layouts`, with `MemberVariableLayout.ini` `VTableLayout.ini` `UE4SS-settings.ini` `UE4SS_Signatures` and the game exe's SHA-256 in `exe.sha256`. This project doesn't ship these files or help make them
+A new build only hosts if the loader works on it. The public branch uses a loader that needs nothing from you. Other branches aren't supported out of the box: on an experimental build you may have to supply a `MemberVariableLayout.ini` and a `VTableLayout.ini` that fit that build, in `ue4ss-local` in the data volume. That folder is copied over the loader's files on every launch and stays in the volume through game updates.
+
+- The newest experimental build in the README's table hosted with the default loader plus those two files. The member layout was measured from that build; the vtable layout came from the build before it.
+- Without the member layout the loader crashed before the hosting mod loaded. With only the member layout the game crashed at the loader's first garbage-collection pass. Either way the host came up, reported no hosted world and waited.
+- After a game update the same files may still fit. If they don't, the loader crashes again, the card says Not hosting, and that build needs layout files that fit it.
+
+Moonpool can't make these files for you: on a test server, measuring the object array from the running game gave a different answer each time, a file with only those sections didn't host, and the field sections it also needs can't be read once the loader has crashed. The older pinned loader instead takes a whole set for the build in a folder under `ue4ss-layouts`, with `MemberVariableLayout.ini` `VTableLayout.ini` `UE4SS-settings.ini` `UE4SS_Signatures` and the game exe's SHA-256 in `exe.sha256`. This project doesn't ship these files or help make them
 
 ## Console commands
 
@@ -251,7 +300,21 @@ For mentions on important alerts, make a role people can opt into and set `DISCO
 
 ## Map
 
-`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card. It shows one marker per player where they were `MAP_DELAY_MINUTES` ago (15 unless set; 0 shows the last recorded position), colored by depth and numbered ("Player 1"; their names with `MAP_PLAYER_NAMES=true`, never with `SHOW_PLAYER_NAMES=false`), plus lifepods and the PDA signals everyone in the game can see, each with its name at its exact position. Bases aren't drawn on their own: the position the game gives a base can be far from its rooms, so name a signal at the base to mark it. Signals hidden by default, such as story places nobody has found yet, and in-game admin commands are not shown. A signal shows only once it has stood at one place for the delay, so one that moves, such as a vehicle's, shows only where it was left; with `MAP_PLAYERS=false`, signals the game marks as following something are left out too. Someone who left stays as a faded marker for an hour. `MAP_PLAYERS=false` leaves players and the explored places out of the page and its data, `MAP_SIGNALS=false` the signals. Everything the page draws is in `map.json`, which anyone with the link can fetch, so the fog hides nothing from someone who reads it. With a map picture behind it, the default view darkens everywhere nobody has visited yet, and clears in soft patches on the same delay. The Discord picture is fogged the same way. Anyone with the link can see it all
+`WEB_MAP=true` adds a page at `/map` and a Map button on the Discord card.
+
+**Who can see it.** Anyone with the link can open the page and fetch `map.json`, which holds everything the page draws. The fog is only a view: someone who reads `map.json` sees what it covers.
+
+**What it shows:**
+
+- One marker per player where they were `MAP_DELAY_MINUTES` ago (15 unless set; 0 shows the last recorded position), colored by depth. Players are numbered ("Player 1"). `MAP_PLAYER_NAMES=true` shows their names instead, but never with `SHOW_PLAYER_NAMES=false`. Someone who left stays as a faded marker for an hour.
+- Lifepods, and the PDA signals everyone in the game can see, each with its name at its exact position. A signal shows only once it has stood at one place for the delay, so one that moves, such as a vehicle's, shows only where it was left.
+- Fog, when a map picture is behind it: the default view darkens everywhere nobody has visited yet and clears in soft patches on the same delay. The Discord picture is fogged the same way.
+
+**What it leaves out:**
+
+- Bases. The position the game gives a base can be far from its rooms, so name a signal at the base to mark it.
+- Signals hidden by default, such as story places nobody has found yet, and in-game admin commands.
+- With `MAP_PLAYERS=false`: players, the explored places, and signals the game marks as following something. With `MAP_SIGNALS=false`: the signals. Both leave these out of `map.json` as well as the page.
 
 Moonpool ships no map picture. To put one behind the dots, copy a map file into the data volume; its `credit` line is shown on the page, so name the picture's author and licence there:
 
@@ -267,7 +330,21 @@ For your own picture pick two spots far apart that you can find in game. Stand o
 
 The page carries link preview tags and a still at `/map.png`, so a pasted link shows the map in Discord and the like. `/map?embed=1` hides the card of players and places for an iframe.
 
-The address follows the view: `#x=..&y=..&z=..` is the centre in game metres and the zoom, `hide=fog,signals` the layers switched off, so a copied link opens the same place with the same layers. Markers that would overlap merge into one numbered marker; the card lists every player and place, with a box to narrow the list by name, and a click on one goes there. A click on a player follows them: the map stays on them at each check, `follow=<name>` goes into the address, the last 240 places that open page has seen them at are joined into a path, and the browser is asked to keep the screen on until the follow ends (not every browser does). Hiding Players hides the followed player too. With `SHOW_PLAYER_NAMES=false` the numbers are handed out again whenever the set of players shown changes, so a follow can land on someone else. An open page asks for new data every `MAP_REFRESH_SECONDS` (60 unless set, never under 10); the host writes the data every 30 seconds, so less than 30 gains nothing. Players are still shown `MAP_DELAY_MINUTES` behind, so for a map beside the game that shows about where you are, set the delay to 0 and accept that everyone with the link sees the same. The page's libraries and icon font load in the viewer's browser from cdnjs.cloudflare.com and cdn.jsdelivr.net (listed in `NOTICE`). The still is drawn on your host from the same tiles so it's your call too
+**The address** follows the view: `#x=..&y=..&z=..` is the centre in game metres and the zoom, and `hide=fog,signals` lists the layers switched off. A copied link opens the same place with the same layers.
+
+**Markers and the card.** Markers that would overlap merge into one numbered marker. The card lists every player and place, with a box to narrow the list by name, and a click on one goes there.
+
+**Following a player.** A click on a player follows them:
+
+- The map stays on them at each check, and `follow=<name>` goes into the address.
+- The last 240 places that open page has seen them at are joined into a path.
+- The browser is asked to keep the screen on until the follow ends. Not every browser does.
+
+Hiding Players hides the followed player too. With `SHOW_PLAYER_NAMES=false` the numbers are handed out again whenever the set of players shown changes, so a follow can land on someone else.
+
+**Refresh.** An open page asks for new data every `MAP_REFRESH_SECONDS` (60 unless set, never under 10). The host writes the data every 30 seconds, so less than 30 gains nothing. Players are still shown `MAP_DELAY_MINUTES` behind. For a map beside the game that shows about where you are, set the delay to 0; everyone with the link then sees that too.
+
+**Requests to other sites.** The page's libraries and icon font load in the viewer's browser from cdnjs.cloudflare.com and cdn.jsdelivr.net (listed in `NOTICE`). The still at `/map.png` is drawn on your host from the same tiles, so the choice of tiles is your call there too
 
 The example points at [joric's Subnautica 2 tileset](https://github.com/joric/subnautica2_tileset), which your players' browsers load from joric's site. It's a community capture of the game from May 2026, before the experimental branch opened. It needs no lining up but newer builds may differ and no capture made on experimental is known. Its Unlicense covers joric's work and can't speak for the game's own rights, so that part is your call
 
@@ -301,8 +378,9 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`
 - The game won't install: `bin/moonpool diag screenshot shot.png`
-- `bin/moonpool logs web` says `clock jumped -1 secs` over and over: the PC's own clock is off. Seen on Docker Desktop for Windows with the Windows Time service stopped and Windows 1 s ahead: two time syncs inside Docker's Linux pulled the clock apart, one jump every 28 s. `Start-Service w32time; w32tm /resync /force` on the PC ended it within minutes. The game kept time by the hardware clock, which stayed right, so it showed only in logs
-- Players say it's choppy: `docker compose exec sn2 python3 /opt/sn2/bin/tick-report.py --from 2026-11-12T20:00 --window 10` reads the logs the host already keeps (times in UTC). Per window it gives the slow frames the game logged (`MaxTickInterval`) with their median, p95, p99 and how many went over 0.5 s and 1 s, the player moves the server dropped as too old (`ServerMove expired`), the game's autosaves, the host's own saves, the console commands run as a player, and the player count. Compare windows with the same number of players. Console commands run as a player can stall the server: on the test host a batch of 81 in twenty minutes gave 30 frames over 1 s and 758 dropped moves, against 8 to 10 and 104 to 370 in the windows around it. Keep big batches for when nobody's on
+- `bin/moonpool logs web` says `clock jumped -1 secs` over and over. Cause: the PC's own clock is off, and two time syncs inside Docker's Linux pull the clock back and forth. On a test host this was Docker Desktop for Windows with the Windows Time service stopped. Fix: on the PC, `Start-Service w32time; w32tm /resync /force`. There the game kept time by the hardware clock, which stayed right, so it showed only in logs
+- Players say it's choppy: `docker compose exec sn2 python3 /opt/sn2/bin/tick-report.py --from 2026-11-12T20:00 --window 10` reads the logs the host already keeps (times in UTC). Per window it gives the slow frames the game logged (`MaxTickInterval`) with their median, p95, p99 and how many went over 0.5 s and 1 s, the player moves the server dropped as too old (`ServerMove expired`), the game's autosaves, the host's own saves, the console commands run as a player, and the player count. Compare windows with the same number of players.
+- Players say it's choppy while admins run many console commands. Cause: each console command run as a player can stall the server (on a test host, 81 in twenty minutes gave 30 frames over 1 s, against 8 to 10 in the windows around it). Fix: run big batches when nobody's on
 
 Known gaps: `Warp` is refused by this build so there's no way to move a player. The hold during the launch cinematic hasn't been proven
 
