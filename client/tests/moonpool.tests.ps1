@@ -202,6 +202,22 @@ try {
   Check ((Text (Join-Path $sigs 'GUObjectHashTables.lua')).Trim() -eq 'old' -and -not (Test-Path -LiteralPath "$sigs.moonpool-off")) 'it is back, unchanged, once the game closes'
   Remove-Item -LiteralPath $sigs -Recurse -Force
 
+  Write-Host "the game's shader warm-up is sped up for the session only, and a value the player set is kept"
+  $cfg = Join-Path $w.Game 'Subnautica2\Saved\Config\Windows'
+  New-Item -ItemType Directory -Path $cfg -Force | Out-Null
+  $ini = Join-Path $cfg 'Engine.ini'; $mine = "[Core.System]`r`nPaths=../x`r`n"
+  [IO.File]::WriteAllText($ini, $mine)
+  $during = Join-Path $w.Root 'engine-during.txt'
+  $r = Invoke-Join $w -Game "Copy-Item -LiteralPath '$ini' -Destination '$during'"
+  Check ($r.Code -eq 0 -and (Text $during) -match '(?m)^r\.ShaderPipelineCache\.BackgroundBatchSize=100\r?$' -and (Text $during).StartsWith($mine)) "set while the game runs, the player's lines kept (got: $(Text $during))"
+  Check ((Text $ini) -eq $mine) "gone again once the game closes (got: $(Text $ini))"
+  Check ($r.Out -match 'shader warm-up') 'says what it changed'
+  $own = $mine + "[ConsoleVariables]`r`nr.ShaderPipelineCache.BackgroundBatchSize=8`r`n"
+  [IO.File]::WriteAllText($ini, $own)
+  $r = Invoke-Join $w -Game "Copy-Item -LiteralPath '$ini' -Destination '$during'"
+  Check ($r.Code -eq 0 -and (Text $during) -eq $own -and (Text $ini) -eq $own) "the player's own value is left alone, during and after (got: $(Text $during))"
+  Remove-Item -LiteralPath (Join-Path $w.Game 'Subnautica2\Saved') -Recurse -Force
+
   Write-Host 'second run with nothing changed writes nothing and downloads nothing'
   $before = Snapshot $w.Win64
   Remove-Item -LiteralPath (Join-Path $w.Server 'ue4ss.zip')   # a download now would fail

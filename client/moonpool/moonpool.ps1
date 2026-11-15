@@ -784,8 +784,33 @@ function Write-Ledger([string]$Path, $Ledger) {
 # switched, so a player's own loader and mods are never touched. Returns what stayed in use.
 function Test-Switchable([string]$Path) { (@('dwmapi.dll', 'enabled.txt') -contains (Split-Path -Leaf $Path)) -or ($TrioExtensions -contains [IO.Path]::GetExtension($Path)) }
 
+# The game compiles its shader pipelines once it reaches the menu, one per frame, and holds a server invite
+# until they are done: about three minutes measured. A bigger batch does the same work (under a second) in
+# a few seconds. The game rewrites Engine.ini when it closes and drops this, so it is written for each
+# session and taken out when the mods go off (after a crash too). A value the player set is left alone.
+$WarmupBlock = "`r`n[ConsoleVariables]`r`nr.ShaderPipelineCache.BackgroundBatchSize=100`r`n"
+function Switch-ShaderWarmup([bool]$On, $Ledger) {
+  $roots = @($Ledger.files.Keys | ForEach-Object { if ($_ -match '^(.*\\Subnautica2)\\(Binaries|Content)\\') { $Matches[1] } } | Sort-Object -Unique)
+  foreach ($root in $roots) {
+    $dir = Join-Path $root 'Saved\Config\Windows'
+    if (-not (Test-Path -LiteralPath $dir)) { continue }  # the game has not run yet; it has nothing to hold
+    $ini = Join-Path $dir 'Engine.ini'
+    try {
+      $text = ''; if (Test-Path -LiteralPath $ini) { $text = [IO.File]::ReadAllText($ini) }
+      if ($On) {
+        if ($text -match '(?im)^\s*r\.ShaderPipelineCache\.BackgroundBatchSize\s*=') { continue }
+        [IO.File]::WriteAllText($ini, $text + $WarmupBlock)
+        Say 'set the game to finish its shader warm-up in seconds before joining (Engine.ini; taken out when the game closes)'
+      } elseif ($text.Contains($WarmupBlock)) {
+        [IO.File]::WriteAllText($ini, $text.Replace($WarmupBlock, ''))
+      }
+    } catch { Say "could not change the game's Engine.ini ($($_.Exception.Message)); joining may wait a few minutes for the game's shaders" }
+  }
+}
+
 function Switch-MoonpoolMods([bool]$On) {
   $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
+  Switch-ShaderWarmup $On $ledger
   $left = @(); $stuck = @()
   foreach ($path in @($ledger.files.Keys)) {
     if (-not (Test-Switchable $path)) { continue }
