@@ -95,7 +95,7 @@ The server
   server save                  force an asynchronous world save on the host controller
 
 Looking inside
-  logs [game|steam|services|join_watch] [-f]
+  logs [game|steam|services|join_watch|web] [-f]
                                tail a log from the volume (default: game)
   diag verify-fresh            read-only check of its own logs that a fresh install hosted by itself
   diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
@@ -1468,7 +1468,7 @@ def logs(a):
             follow = True
         else:
             which = arg
-    if which not in ("game", "steam", "services", "join_watch"):
+    if which not in ("game", "steam", "services", "join_watch", "web"):
         usage_error(f"unknown log: {which}")
     f = Path(E.get("SN2_LOG_DIR") or cfg()["LOG_DIR"]) / f"{which}.log"
     if not f.is_file():

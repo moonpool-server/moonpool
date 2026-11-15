@@ -169,6 +169,33 @@ bin/moonpool server import SaveGames/ Reef    # another name for it
 
 It snapshots the current saves, re-hosts on the imported world and waits for the game to say it loaded and for the session to come up. The game only loads a save from its own build and branch, so bring a world from the same branch as the server and update the game on that PC first. A save it can't load is taken back out and the previous world hosted again. To take a world home `bin/moonpool server export` writes a zip, from a quiet copy of the saves, to drop into a player's SaveGames folder
 
+## Move the server to another PC
+
+Everything the server is lives in three places: the image, the two volumes (`<project>_sn2-data` with the game, the Steam sign-in and the saves, and `<project>_sn2-signing` with the manifest key; `<project>` is `COMPOSE_PROJECT_NAME`, `moonpool` unless you set it) and `.env`. Move all three and the new PC hosts the same world at the same address; with a token tunnel the address moves with `.env` and the router needs no change. Done once between two Windows PCs with Docker Desktop, about 28 GB over a home network in half an hour:
+
+```sh
+# old PC: nobody on, then save and stop
+bin/moonpool players && bin/moonpool server save
+docker compose stop
+
+# new PC, in a checkout of the same commit, with the old PC's .env copied in (it holds your secrets)
+ssh old "docker save <the image in SN2_IMAGE> moonpool:backup" | docker load
+docker compose create      # makes the volumes with compose's own labels, starts nothing
+for v in sn2-data sn2-signing; do
+  ssh old "docker run --rm -v moonpool_$v:/d alpine tar -C /d -cf - ." |
+    docker run --rm -i -v moonpool_$v:/d alpine tar -C /d -xpf -
+done
+docker compose up -d
+```
+
+- Compare before you start it: `find /d -type f | wc -l` in both copies of `sn2-data`, and the size and time of the save
+- The new PC's volumes must be empty first: tar adds to what is there and leaves a stale file in place
+- From Git Bash on Windows put `MSYS_NO_PATHCONV=1` in front of the `docker run` lines, or `/d` is rewritten into a Windows path
+- Steam signed in by itself on the new PC from the copied sign-in. If it asks again, sign in on the viewer page as the first time
+- Never start both: they share one Steam account and one tunnel. On the old PC `docker update --restart=no` on its containers keeps a reboot from bringing it back
+- Copy `backups/` too if you want the older archives; the new PC starts its own every 30 minutes
+- The image also builds on the new PC (`docker build --build-arg WINE_RUNTIME=tkg -t <the image in SN2_IMAGE> .` in the checkout, ticks stayed smooth with a player on); the move itself ran the copied image
+
 ## Updates
 
 Steam can update the game whenever it runs. If the world has saves, Steam starts only after they are copied. A scheduled restart (`RESTART_CRON`) restarts the game alone and never updates it, so when the card shows a new build players can't join on, run `bin/moonpool server restart`, which recreates the container after a countdown warning players (`--now` skips it). `UPDATE_WITHOUT_BACKUP=true` skips that check. `AUTO_UPDATE=false` only stops Moonpool asking Steam to validate the game; Steam can still update it, so it does not hold a build. Check nobody's online before you recreate the host
@@ -270,6 +297,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 - Join Game is missing: check in the viewer that Steam is signed in and on the right branch
 - A player connects and drops: compare branch and build then `bin/moonpool logs join_watch`
 - The game won't install: `bin/moonpool diag screenshot shot.png`
+- `bin/moonpool logs web` says `clock jumped -1 secs` over and over: the PC's own clock is off. Seen on Docker Desktop for Windows with the Windows Time service stopped and Windows 1 s ahead: two time syncs inside Docker's Linux pulled the clock apart, one jump every 28 s. `Start-Service w32time; w32tm /resync /force` on the PC ended it within minutes. The game kept time by the hardware clock, which stayed right, so it showed only in logs
 - Players say it's choppy: `docker compose exec sn2 python3 /opt/sn2/bin/tick-report.py --from 2026-11-12T20:00 --window 10` reads the logs the host already keeps (times in UTC). Per window it gives the slow frames the game logged (`MaxTickInterval`) with their median, p95, p99 and how many went over 0.5 s and 1 s, the player moves the server dropped as too old (`ServerMove expired`), the game's autosaves, the host's own saves, the console commands run as a player, and the player count. Compare windows with the same number of players. Console commands run as a player can stall the server: on the test host a batch of 81 in twenty minutes gave 30 frames over 1 s and 758 dropped moves, against 8 to 10 and 104 to 370 in the windows around it. Keep big batches for when nobody's on
 
 Known gaps: `Warp` is refused by this build so there's no way to move a player. The hold during the launch cinematic hasn't been proven

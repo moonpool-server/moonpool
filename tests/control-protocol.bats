@@ -2140,6 +2140,16 @@ golden() { # ERROR CODE EXIT NEXT_ACTION, through a kick as the host
   [ "$(field data.protocol_error)" = bad_nonce ]
 }
 
+@test "logs shows the web server's log by name and refuses a name it does not keep" {
+  mkdir -p "$BATS_TEST_TMPDIR/logs"; printf 'first
+clock jumped -1 secs
+' >"$BATS_TEST_TMPDIR/logs/web.log"
+  SN2_LOG_DIR="$BATS_TEST_TMPDIR/logs" run "$CTL" logs web
+  [ "$status" -eq 0 ]; [[ "$output" == *"clock jumped -1 secs"* ]]
+  SN2_LOG_DIR="$BATS_TEST_TMPDIR/logs" run "$CTL" logs passwords
+  [ "$status" -ne 0 ]; [[ "$output" == *"unknown log: passwords"* ]]
+}
+
 @test "error map: a timeout names the logs and warns against a blind resubmit" {
   SN2_TIMEOUT=1 run "$CTL" --json players kick Someone
   envelope; verdict timeout failed 75 false
