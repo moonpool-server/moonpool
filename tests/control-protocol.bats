@@ -254,15 +254,15 @@ make_backup() {
   local out=$1; shift
   local d="$BATS_TEST_TMPDIR/bk"
   mkdir -p "$d"
-  for f in "$@"; do mkdir -p "$d/$(dirname "$f")"; echo new >"$d/$f"; done
+  for f in "$@"; do mkdir -p "$d/$(dirname "$f")"; echo GSWU-new >"$d/$f"; done
   tar -czf "$out" -C "$d" .
 }
 
 @test "saves lists worlds newest first, skipping settings files" {
   save_env
-  echo a >"$SN2_SAVE_DIR/Slot1.sav"; touch -d '2026-10-30 10:00:00' "$SN2_SAVE_DIR/Slot1.sav"
-  echo bb >"$SN2_SAVE_DIR/Slot2.sav"; touch -d '2026-10-31 16:00:27' "$SN2_SAVE_DIR/Slot2.sav"
-  echo x >"$SN2_SAVE_DIR/GameSettings.sav"
+  echo GSWU-a >"$SN2_SAVE_DIR/Slot1.sav"; touch -d '2026-10-30 10:00:00' "$SN2_SAVE_DIR/Slot1.sav"
+  echo GSWU-bb >"$SN2_SAVE_DIR/Slot2.sav"; touch -d '2026-10-31 16:00:27' "$SN2_SAVE_DIR/Slot2.sav"
+  echo GVAS-x >"$SN2_SAVE_DIR/GameSettings.sav"
   TZ=UTC run "$CTL" server saves
   [ "$status" -eq 0 ]
   [[ ${lines[0]} == SAVE* ]]
@@ -297,7 +297,7 @@ make_backup() {
 }
 
 # A player's world as a zip, and the game's later word on loading it in a fake log.
-world_zip() { (cd "$BATS_TEST_TMPDIR" && mkdir -p w && echo world >w/savegame_2.sav && echo bak >w/savegame_2_0.bak && python3 -m zipfile -c "$1" w/savegame_2.sav w/savegame_2_0.bak); }
+world_zip() { (cd "$BATS_TEST_TMPDIR" && mkdir -p w && echo GSWU-world >w/savegame_2.sav && echo bak >w/savegame_2_0.bak && python3 -m zipfile -c "$1" w/savegame_2.sav w/savegame_2_0.bak); }
 # The game empties its log in place on a restart, so the new result lands in a shorter file.
 game_says() { export SN2_UE_LOG="$BATS_TEST_TMPDIR/game.log"; printf 'LogSaveSystem: Loading save slot: %s\nLogGameMode: Save system initialize with result: (LoadGameSucceeded)\n' "$1" >"$SN2_UE_LOG"; (sleep 1; printf 'LogSaveSystem: Loading save slot: %s
 LogGameMode: Save system initialize with result: (%s)
@@ -305,45 +305,60 @@ LogGameMode: Save system initialize with result: (%s)
 
 @test "import puts a player's world in, re-hosts on it, and keeps it when the game loads it" {
   save_env
-  echo old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
   world_zip "$BATS_TEST_TMPDIR/w.zip"
   game_says savegame_2 LoadGameSucceeded
   printf '{"hosted":true,"ts":9999999999}' >"$SN2_CONTROL_DIR/readiness.json"
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
   [ "$status" -eq 0 ]; [[ $output == *"savegame_2 loaded and is hosted"* ]]
-  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = world ]; [ -f "$SN2_SAVE_DIR/savegame_2_0.bak" ]
-  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = savegame_2 ]; [ "$(cat "$STAGED/Slot1.sav")" = old ]
+  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = GSWU-world ]; [ -f "$SN2_SAVE_DIR/savegame_2_0.bak" ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = savegame_2 ]; [ "$(cat "$STAGED/Slot1.sav")" = GSWU-old ]
 }
 
 @test "import takes back out a world the game cannot load and hosts the previous one again" {
   save_env
-  echo old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
   world_zip "$BATS_TEST_TMPDIR/w.zip"
   game_says Reef LoadGameFailed
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip" Reef
   [ "$status" -eq 77 ]
   [[ $output == *"could not load Reef (LoadGameFailed)"* ]]
   [ ! -e "$SN2_SAVE_DIR/Reef.sav" ]; [ ! -e "$SN2_SAVE_DIR/Reef_0.bak" ]
-  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = Slot1 ]; [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = old ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = Slot1 ]; [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]
+}
+
+@test "import of a whole SaveGames folder takes the world, not a newer settings file" {
+  save_env
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  local w="$BATS_TEST_TMPDIR/SaveGames"; mkdir -p "$w"
+  echo GSWU-world >"$w/savegame_2.sav"; echo bak >"$w/savegame_2_0.bak"
+  touch -d '2026-07-15 10:00:00' "$w/savegame_2.sav"
+  echo GVAS-voice >"$w/VoiceChatClientInfo.sav.sav"; echo GVAS-login >"$w/RecentLoginPlatform_live_ab.sav"
+  echo telemetry >"$w/_offlinetelemetry_live_abGameTelemetry.sav"
+  game_says savegame_2 LoadGameSucceeded
+  printf '{"hosted":true,"ts":9999999999}' >"$SN2_CONTROL_DIR/readiness.json"
+  run "$CTL" server import "$w"
+  [ "$status" -eq 0 ]; [[ $output == *"savegame_2 loaded and is hosted"* ]]
+  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = GSWU-world ]; [ ! -e "$SN2_SAVE_DIR/VoiceChatClientInfo.sav.sav" ]
 }
 
 @test "import refuses a name the server already has and changes nothing" {
   save_env
-  echo old >"$SN2_SAVE_DIR/savegame_2.sav"
+  echo GSWU-old >"$SN2_SAVE_DIR/savegame_2.sav"
   world_zip "$BATS_TEST_TMPDIR/w.zip"
   run "$CTL" server import "$BATS_TEST_TMPDIR/w.zip"
   [ "$status" -eq 77 ]; [[ $output == *"already has a world called savegame_2"* ]]
-  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = old ]
+  [ "$(cat "$SN2_SAVE_DIR/savegame_2.sav")" = GSWU-old ]
 }
 
 @test "restore refuses a backup without a .sav and changes nothing" {
   save_env
-  echo old >"$SN2_SAVE_DIR/Slot1.sav"
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/bad.tar.gz" userdata/123/remote/x.vdf
   run "$CTL" server restore "$BATS_TEST_TMPDIR/bad.tar.gz"
   [ "$status" -eq 77 ]
   [[ $output == *"holds no save (.sav) file"* ]]
-  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "old" ]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]
   [ ! -e "$STAGED" ]
 }
 
@@ -357,19 +372,19 @@ LogGameMode: Save system initialize with result: (%s)
 
 @test "restore stages the current saves first, then puts the backup back and re-hosts" {
   save_env
-  echo old >"$SN2_SAVE_DIR/Slot1.sav"
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
   run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot1
   [ "$status" -eq 0 ]
-  [ "$(cat "$STAGED/Slot1.sav")" = "old" ]
-  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "new" ]
+  [ "$(cat "$STAGED/Slot1.sav")" = GSWU-old ]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-new ]
   [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = "Slot1" ]
   [[ $output == *"current saves were staged first"* ]]
 }
 
 @test "restore warns online players before stopping and names the backup" {
   save_env
-  echo old >"$SN2_SAVE_DIR/Slot1.sav"
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"
   make_backup "$BATS_TEST_TMPDIR/reef-backup.tar.gz" saves/Slot1.sav
   printf '{"hosted":true}' >"$SN2_CONTROL_DIR/readiness.json"
   printf '{"players":[{"name":"SN2 Host"},{"name":"Ada"}]}' >"$SN2_CONTROL_DIR/status.json"
@@ -399,33 +414,33 @@ EOF
   PATH="$tools:$PATH" run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 0 ]
   [ ! -e "$SN2_SAVE_DIR/Slot1.sav" ]
-  [ "$(cat "$SN2_SAVE_DIR/Slot2.sav")" = "new" ]
+  [ "$(cat "$SN2_SAVE_DIR/Slot2.sav")" = GSWU-new ]
 }
 
 @test "restore all replaces live saves after keeping a dated safety copy" {
   save_env
-  echo old-one >"$SN2_SAVE_DIR/Slot1.sav"
-  echo old-extra >"$SN2_SAVE_DIR/Slot9.sav"
+  echo GSWU-old-one >"$SN2_SAVE_DIR/Slot1.sav"
+  echo GSWU-old-extra >"$SN2_SAVE_DIR/Slot9.sav"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" sn2-staging/20261103T130000Z/SaveGames/Slot1.sav
   run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 0 ]
-  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "new" ]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-new ]
   [ ! -e "$SN2_SAVE_DIR/Slot9.sav" ]
   safety=("$BATS_TEST_TMPDIR"/saves.pre-restore-*)
   [ "${#safety[@]}" -eq 1 ]
-  [ "$(cat "${safety[0]}/Slot1.sav")" = "old-one" ]
-  [ "$(cat "${safety[0]}/Slot9.sav")" = "old-extra" ]
+  [ "$(cat "${safety[0]}/Slot1.sav")" = GSWU-old-one ]
+  [ "$(cat "${safety[0]}/Slot9.sav")" = GSWU-old-extra ]
 }
 
 @test "restore stops when the snapshot of the current saves fails" {
   save_env
-  echo old >"$SN2_SAVE_DIR/Slot1.sav"
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"
   printf '#!/bin/sh\nexit 1\n' >"$SN2_BIN/save-stage.sh"
   make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
   run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz"
   [ "$status" -eq 77 ]
   [[ $output == *"could not snapshot"* ]]
-  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = "old" ]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]
 }
 
 # ---- friends, invite and cmd -----------------------------------------------

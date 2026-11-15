@@ -164,14 +164,19 @@ Two worlds must not share a `BACKUP_DIR`: they overwrite each other's archives. 
 
 ## Bring your world
 
-A world you already play in co-op can move onto the server, so it's there when the old host is offline. On the PC that hosted it, open `%LOCALAPPDATA%\Subnautica2\Saved\SaveGames` (for the experimental branch also look in the game's own `Subnautica2\Saved\SaveGames` folder under its Steam library) and take the newest world, a `.sav` like `savegame_2.sav` with its numbered `.bak` files. Zip them or copy the folder to the server, then
+Move a co-op world onto the server so it's there when its old host is offline.
+
+1. On the PC that hosted it, close the game and open its SaveGames folder: `%LOCALAPPDATA%\Subnautica2\Saved\SaveGames` on the public branch, `<Steam library>\steamapps\common\Subnautica2\Subnautica2\Saved\SaveGames` on experimental.
+2. Zip the folder, or copy it to the server, and import it:
 
 ```sh
-bin/moonpool server import savegame_2.zip
-bin/moonpool server import SaveGames/ Reef    # another name for it
+bin/moonpool server import SaveGames.zip          # the newest world in it
+bin/moonpool server import savegame_2.sav Reef    # one world, renamed
 ```
 
-It snapshots the current saves, re-hosts on the imported world and waits for the game to say it loaded and for the session to come up. The game only loads a save from its own build and branch, so bring a world from the same branch as the server and update the game on that PC first. A save it can't load is taken back out and the previous world hosted again. To take a world home `bin/moonpool server export` writes a zip, from a quiet copy of the saves, to drop into a player's SaveGames folder
+Worlds are the `savegame_<n>.sav` files; import ignores the folder's other `.sav` files. It snapshots the current saves, hosts the new world and checks the game loaded it. If not, the previous world is hosted again. The game loads only saves from its own branch and build, so update the game on the old PC first.
+
+`bin/moonpool server export` zips the hosted world (`Slot1.sav` by default). Loading that on a player's PC hasn't been tried.
 
 ## Move the server to another PC
 
