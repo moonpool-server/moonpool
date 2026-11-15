@@ -46,6 +46,22 @@ eq(sp.tick(s, 1879, true, { 'C' }, 0), '', 'before every_s: no save')
 eq(sp.tick(s, 1880, true, { 'C' }, 0), 'save', 'every_s after the leave save: scheduled save')
 eq(sp.tick(s, 2000, true, { 'C' }, 0), '', 'the schedule restarted')
 
+-- Empty: one save after the last leave, then none on the schedule until someone is in again.
+eq(sp.tick(s, 2010, true, {}, 0), 'save', 'the last player leaves: saved')
+eq(sp.tick(s, 2610, true, {}, 0), '', 'empty since that save: the schedule skips')
+eq(sp.tick(s, 9000, true, {}, 0), '', 'still empty hours later: no save')
+eq(sp.tick(s, 9010, true, { 'D' }, 0), '', 'someone in again: no save on the join')
+eq(sp.tick(s, 9609, true, { 'D' }, 0), '', 'the schedule restarted at the join')
+eq(sp.tick(s, 9610, true, { 'D' }, 0), 'save', 'still in every_s after the join: saved')
+
+-- A join and leave between two scheduled saves still gets its leave save.
+local q = sp.new({ every_s = 600 })
+eq(sp.tick(q, 0, true, {}, 0), '', 'up empty')
+eq(sp.tick(q, 700, true, {}, 0), '', 'empty from the start: no scheduled save')
+eq(sp.tick(q, 710, true, { 'E' }, 0), '', 'a join after the schedule passed: no save on the join')
+eq(sp.tick(q, 720, true, {}, 0), 'save', 'a quick leave: saved')
+eq(sp.tick(q, 1400, true, {}, 0), '', 'empty after: nothing')
+
 -- Back to the lobby (a restart): forget who was in, so the first tick up is not a leave.
 eq(sp.tick(s, 2100, false, {}, 0), '', 'lobby again')
 eq(sp.tick(s, 2130, true, {}, 0), '', 'up again with nobody: not a leave')
