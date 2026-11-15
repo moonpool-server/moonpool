@@ -1,5 +1,5 @@
 -- The in-game admin console: one line in, reply lines and console lines to run out. Pure Lua, no
--- game calls: the caller passes the live data (players, items, places, commands, tags) and runs
+-- game calls: the caller passes the live data (players, items, commands, tags) and runs
 -- what comes back. Every word and reply comes from the catalog (console.json); this file only
 -- parses, matches and plans. Admin rights are checked by the caller, before this runs.
 local fzy = require('fzy_lua')
@@ -35,6 +35,20 @@ local function aliases(t)
     for _, a in ipairs(v.aliases or v) do map[lower(a)] = name end
   end
   return map
+end
+
+-- The host's own catalog over the shipped one: an object such as commands merges key by key, anything
+-- else replaces, so a list such as deny is replaced whole, an empty one included.
+function M.merge(cat, own)
+  for k, v in pairs(own) do
+    local base = cat[k]
+    if type(v) == 'table' and type(base) == 'table' and #base == 0 and next(base) ~= nil then
+      for kk, vv in pairs(v) do base[kk] = vv end
+    else
+      cat[k] = v
+    end
+  end
+  return cat
 end
 
 function M.new(catalog)
