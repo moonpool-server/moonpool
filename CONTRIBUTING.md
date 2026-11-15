@@ -1,26 +1,26 @@
 # Contributing
 
-Issues and pull requests are welcome. One person maintains this in spare time so expect days not hours
+Issues and pull requests are welcome. One person maintains this in spare time: expect days, not hours.
 
 ## Before you open a pull request
 
-- Run `pre-commit run --all-files`. It runs shellcheck, hadolint, luacheck, yamllint, the Python tests and the bats suite. CI runs those and also scans the history for secrets, builds and scans the image and runs the launcher tests on Windows
-- Keep it to one change. A fix and a tidy up are two pull requests
-- Say how you tested it. A host that came up, a player that joined, a test that failed before and passes now
-- Never commit game files, Steam sessions, Wine prefixes, logs, saves or anything the game generated. The pre-commit hooks refuse some of these by name or extension (saves, paks, game binaries, layout files, Steam login files), not all, so check what you add yourself
+- Run `pre-commit run --all-files`: shellcheck, hadolint, luacheck, yamllint, the Python tests and the bats suite. CI also scans history for secrets, builds and scans the image, and runs the launcher tests on Windows.
+- One change per pull request. A fix and a tidy-up are two.
+- Say how you tested it: a host that came up, a player that joined, a test that failed before and passes now.
+- Never commit game files, Steam sessions, Wine prefixes, logs, saves or anything the game generated. The hooks refuse some by name or extension (saves, paks, game binaries, layout files, Steam login files), not all; check what you add.
 
 ## How a change lands
 
-Every change goes through a pull request, CI has to pass and main only moves forward. The maintainer merges with squash or rebase so history stays one line per change. Release tags are protected and releases are immutable
+Every change goes through a pull request. CI must pass and main only moves forward. The maintainer squash-merges, one commit per change. Release tags are protected and releases are immutable.
 
 ## What goes where
 
-- `docker/` and `scripts/` run inside the container. Use shell for process and file work, and Python where a library does the job better than shell
-- `mod/` is the UE4SS Lua mod that runs inside the game on the host
-- `client/` is the player launcher, PowerShell because that is what every Windows PC has
-- `bin/moonpool` is the admin command, Python with no packages to install, talks to the container
-- `tests/` holds bats for shell, `tests/lua` for the mod and `test_*.py` for the Python
+- `docker/` and `scripts/`: run inside the container. Shell for process and file work, Python where a library does it better.
+- `mod/`: the UE4SS Lua mod that runs in the game on the host.
+- `client/`: the player launcher, in PowerShell, which every Windows PC has.
+- `bin/moonpool`: the admin command, Python with no packages to install; it talks to the container.
+- `tests/`: bats for shell, `tests/lua` for the mod, `test_*.py` for Python.
 
 ## Security problems
 
-Not in an issue. Use [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) as [SECURITY.md](SECURITY.md) says
+Not in an issue. Use [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) as [SECURITY.md](SECURITY.md) says.
