@@ -21,6 +21,9 @@ ARG S6_X86_64_SHA256=e6befcc96a437a3831386ecfc51808c5d3e939dc5fe3c02ae9284599e8a
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # winehq-staging needs its recommends (the 32-bit Wine libraries). Those also bring a USB
 # printer daemon and mDNS, which a headless host has no use for, so they come back out.
+# WINE_RUNTIME (below) is read here too: with tkg, WineHQ's own Wine program (/opt/wine-staging,
+# about 1.8 GB) is deleted in this same layer and only the system libraries it brought stay.
+ARG WINE_RUNTIME=winehq
 # hadolint ignore=DL3008,DL3015
 RUN dpkg --add-architecture i386 \
  && apt-get update \
@@ -42,13 +45,14 @@ RUN dpkg --add-architecture i386 \
       apt libapt-pkg7.0 \
       xvfb x11-utils xdotool x11vnc websockify autocutsel jq unzip zip 7zip procps xz-utils osslsigncode python3-minimal python3-vdf python3-jinja2 python3-requests python3-cryptography python3-yaml openssl lighttpd logrotate fonts-dejavu-core \
  && apt-get purge -y ipp-usb avahi-daemon \
+ && if [ "${WINE_RUNTIME}" = tkg ]; then rm -rf /opt/wine-staging; fi \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 # WINE_RUNTIME=tkg also unpacks Kron4ek's build of wine-tkg-staging-fsync 10.10, pinned by sha256,
 # and puts it first on PATH: Wine Staging with fsync, which WineHQ's Wine never had and later wine-tkg
-# builds dropped for ntsync. WineHQ's stays installed for its system dependencies, the 32-bit ones too.
+# builds dropped for ntsync. WineHQ's packages stay installed for their system dependencies, the 32-bit
+# ones too; their Wine program itself is gone (above).
 # Proton's Wine was tried first and left out: the Windows Steam client does not start under it
 # ("InternalAPI_Init_Internal failed"), with or without fsync. The default is winehq until measured.
-ARG WINE_RUNTIME=winehq
 ARG WINE_TKG_VERSION=10.10
 ARG WINE_TKG_SHA256=1d97bb21a931ac1839e9291bce9f321c80d1cc84183badbc1a86e6c42ebf678a
 RUN mkdir -p /opt/sn2 \
@@ -59,7 +63,8 @@ RUN mkdir -p /opt/sn2 \
         && echo "${WINE_TKG_SHA256}  /tmp/$f" | sha256sum -c - \
         && mkdir -p /opt/wine-tkg && tar -C /opt/wine-tkg --strip-components=1 -xJf "/tmp/$f" && rm -f "/tmp/$f" \
         && for b in /opt/wine-tkg/bin/*; do ln -s "$b" /usr/local/bin/; done \
-        && [ "$(command -v wineserver)" = /usr/local/bin/wineserver ] ;; \
+        && [ "$(command -v wineserver)" = /usr/local/bin/wineserver ] \
+        && wine --version ;; \
       *) echo "WINE_RUNTIME must be winehq or tkg" >&2; exit 2 ;; \
     esac \
  && echo "${WINE_RUNTIME}" > /opt/sn2/wine-runtime
