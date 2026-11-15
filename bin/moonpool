@@ -479,10 +479,20 @@ def valid_save(name):
     return re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}", name) is not None
 
 
+def is_world(f):
+    """A world save starts with GSWU. The game's other .sav files in the same folder (settings,
+    caches, sign-in and telemetry records) start with GVAS or something else, and are often newer."""
+    try:
+        with open(f, "rb") as fh:
+            return fh.read(4) == b"GSWU"
+    except OSError:
+        return False
+
+
 def list_saves(folder, deep=False):
-    """Real save files only: the game's settings and cache .sav files are not worlds."""
+    """World saves only, wherever the folder came from (this server, a player's SaveGames, a backup)."""
     files = Path(folder).rglob("*.sav") if deep else Path(folder).glob("*.sav")
-    return [f for f in files if f.is_file() and not f.name.endswith(("Settings.sav", "Cache.sav", "SavedState.sav"))]
+    return [f for f in files if f.is_file() and is_world(f)]
 
 
 def player_line(words):
