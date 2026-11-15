@@ -1068,10 +1068,26 @@ end)
 
 -- Empty-server policy (idle.lua): FreezeTime with nobody in, UnfreezeTime on a join, and an
 -- optional stop request that the join watcher carries out.
+-- IDLE_MAX_FPS: the frame cap while nobody is in, set after the same wait as the freeze (10 minutes
+-- when the freeze is off) and lifted to SERVER_MAX_FPS when a player logs in.
+local IDLE_FPS = idle.seconds(os.getenv('SN2_IDLE_MAX_FPS'), 1)
+local ACTIVE_FPS = idle.seconds(os.getenv('SN2_SERVER_MAX_FPS'), 1) or 60
 local IDLE = idle.new({
   freeze_s = idle.seconds(os.getenv('SN2_IDLE_FREEZE_MINUTES') or '10', 60),
   stop_s = idle.seconds(os.getenv('SN2_IDLE_STOP_HOURS'), 3600),
+  slow_s = IDLE_FPS and (idle.seconds(os.getenv('SN2_IDLE_FREEZE_MINUTES') or '10', 60) or 600),
 })
+local function idle_fps(act, host_name)
+  local host = controller_named(host_name)
+  if not host then return end
+  local fps = act == 'slow' and IDLE_FPS or ACTIVE_FPS
+  log('idle: ' .. (act == 'slow' and 'nobody in' or 'a player is in') .. '; frame cap ' .. fps)
+  run_as(host, 't.MaxFPS ' .. fps, host_name .. ' (idle frame cap)')
+end
+-- A login seen in the game log lifts the cap at once; the roster follows some seconds later.
+local function idle_wake()
+  for _, act in ipairs(idle.wake(IDLE)) do idle_fps(act, HOST_NAME) end
+end
 local function idle_tick(st)
   if st.state ~= 'up' then return end
   local joiners = 0
@@ -1084,7 +1100,9 @@ local function idle_tick(st)
   end
   for _, act in ipairs(idle.tick(IDLE, joiners, os.time())) do
     local host = controller_named(st.host_name)
-    if act == 'freeze' and host then
+    if act == 'slow' or act == 'fast' then
+      idle_fps(act, st.host_name)
+    elseif act == 'freeze' and host then
       log('idle: nobody in for the freeze time; FreezeTime as the host')
       run_as(host, 'FreezeTime', st.host_name .. ' (idle freeze)')
     elseif act == 'unfreeze' and host then
@@ -1335,7 +1353,9 @@ local function hold_poll()
   for _, l in ipairs(lines) do
     admin_signal.note_connection(ADMIN, l)
     local player, id = admin_signal.login_label(l)
-    if player then log('player ' .. player .. ' eos=' .. id); EOS_BY_NAME[player] = id end -- the value ADMINS takes
+    if player then -- the id is the value ADMINS takes
+      log('player ' .. player .. ' eos=' .. id); EOS_BY_NAME[player] = id; idle_wake()
+    end
     if LIFEPOD_JOIN_HOLD then hold_act(hold.line(HOLD, l, os.time())) end
     if UNLOCK_REPLAY_ENABLED then pcall(unlock_line, l) end
   end
