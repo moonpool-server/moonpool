@@ -149,8 +149,6 @@ Orders need nothing installed: rename any PDA signal to a command. The host writ
 !mp .                     the last line again
 ```
 
-Places aren't listed yet; `!mp l places` and `!mp f` find none.
-
 Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFreeHost/console.json`). Put one with only your changed keys in the data volume and recreate the host. Objects such as `commands` merge with the shipped ones; lists such as `deny` replace them.
 
 ```json
@@ -163,7 +161,7 @@ Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFree
 
 - `commands` maps a word to console lines. Arguments are looked up by kind; see `give` in the shipped file.
 - `on_ambiguous: first` takes the best match without asking.
-- `deny` blocks commands that crash or wipe the world. An empty list in your own file is ignored.
+- `deny` blocks commands that crash or wipe the world. `"deny": []` in your own file turns that off.
 - `line_gap_ms` (1000) spaces the lines of one order; each can stall the server a second or so.
 
 `off` (or `normal`) runs `DayOnly 0` and `RemoveGlobalTag` for each tag in `tags`. On this build every cheat, god mode and invisibility included, is a world tag, so `off` clears it for everyone. It can't undo:

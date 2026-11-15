@@ -582,13 +582,7 @@ local function load_catalog()
       local own = read_file(base .. 'console.local.json')
       local okl, o = pcall(json.decode, own or '')
       if own and okl and type(o) == 'table' then
-        for k, v in pairs(o) do
-          if type(v) == 'table' and type(cat[k]) == 'table' and #v == 0 then
-            for kk, vv in pairs(v) do cat[k][kk] = vv end
-          else
-            cat[k] = v
-          end
-        end
+        console.merge(cat, o)
       elseif own then
         log('console: console.local.json is not JSON; using the shipped words')
       end

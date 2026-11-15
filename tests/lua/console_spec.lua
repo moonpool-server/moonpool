@@ -185,5 +185,14 @@ check(r.runs[1] and r.runs[1].line == 'Give DA_Copper_ItemType 5',
 r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'CrashServer' })
 check(#r.runs == 0 and #r.lines == 1, 'an exact line on the deny list never runs')
 
+-- The host's own console.json: objects merge, lists replace, an empty deny list included.
+local shipped = json.decode(json.encode(catalog))
+local own = '{"deny": [], "commands": {"full": {"aliases": ["full"], "lines": ["HealMe"]}}}'
+local merged = console.merge(shipped, json.decode(own))
+check(#merged.deny == 0 and #catalog.deny > 0, 'an empty deny list in the host file clears the shipped one')
+check(merged.commands.full and merged.commands.give ~= nil, 'a host command is added beside the shipped ones')
+merged = console.merge(json.decode(json.encode(catalog)), json.decode('{"deny": ["Foo"]}'))
+check(#merged.deny == 1 and merged.deny[1] == 'Foo', 'a host deny list replaces the shipped one')
+
 if failures > 0 then os.exit(1) end
 print('console: ok')

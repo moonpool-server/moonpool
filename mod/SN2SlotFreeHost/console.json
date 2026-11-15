@@ -54,8 +54,7 @@
   "blocked_channel": "None",
   "on_gate_failure": "kick",
   "resolve_kinds": [
-    "items",
-    "places"
+    "items"
   ],
   "kinds": {
     "items": {
@@ -63,13 +62,6 @@
         "i",
         "item",
         "items"
-      ]
-    },
-    "places": {
-      "aliases": [
-        "p",
-        "place",
-        "places"
       ]
     },
     "players": {
