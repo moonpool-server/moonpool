@@ -751,6 +751,22 @@ policy_env() {
   [[ -f "$SN2_CONTROL_DIR/receipts/request.json" ]]
 }
 
+# --- the per-player send rate (scripts/common.sh set_net_client_rate) ----------
+@test "the per-player send rate is written in both driver sections once, replaced on a new value and taken out when empty" {
+  ini="$BATS_TEST_TMPDIR/cfg/Engine.ini"
+  mkdir -p "${ini%/*}"; printf '[Core.System]\nPaths=x\n' >"$ini"
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh' 2>/dev/null; set_net_client_rate '$ini' 300000 && set_net_client_rate '$ini' 300000"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^MaxClientRate=300000$' "$ini")" -eq 2 ]; [ "$(grep -c '^MaxInternetClientRate=300000$' "$ini")" -eq 2 ]
+  grep -qx '\[/Script/OnlineSubsystemUtils.IpNetDriver\]' "$ini"; grep -qx '\[/Script/SocketSubsystemEOS.NetDriverEOS\]' "$ini"
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh' 2>/dev/null; set_net_client_rate '$ini' 500000"
+  [ "$(grep -c 'ClientRate=' "$ini")" -eq 4 ]; [ "$(grep -c '=300000' "$ini")" -eq 0 ]
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh' 2>/dev/null; set_net_client_rate '$ini' ''"
+  [ "$status" -eq 0 ]; [ "$(cat "$ini")" = "$(printf '[Core.System]\nPaths=x')" ]
+  run bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh' 2>/dev/null; set_net_client_rate '$ini' 10k"
+  [ "$status" -eq 2 ]
+}
+
 # --- how Wine waits, for the launch log (scripts/common.sh wine_sync_name) ----
 @test "the launch log names how Wine waits whichever of fsync and esync is set, with unset variables an error" {
   for case in "WINEFSYNC=1:fsync" "WINEESYNC=1:esync" "true:wineserver"; do
