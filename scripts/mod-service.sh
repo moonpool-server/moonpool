@@ -22,22 +22,28 @@ publisher() {
       --branch "${STEAM_BRANCH:-public}" --public-url "$(public_url)" --server-name "${WORLD_NAME:-${HOST_NAME:-SN2 Host}}" "$@"
 }
 
-case ${1:-serve} in
-  publish) publisher publish ;;
-  pin | enable | disable) publisher "$@" ;;
-  serve)
-    mkdir -p "$DATA_DIR/public" "$RUN_DIR"
-    python3 "$(dirname "$0")/join-page.py" || true
-    cat >"$RUN_DIR/lighttpd-web.conf" <<EOF
+# The read-only player root. Only the redirect module is loaded: with no directory-listing module a
+# folder answers 403, so there is no listing to switch off.
+web_config() {
+  cat <<EOF
 server.document-root = "$DATA_DIR/public"
 server.bind = "0.0.0.0"
 server.port = ${SN2_MODS_PORT:-8081}
-server.dir-listing = "disable"
 server.modules = ( "mod_redirect" )
 url.redirect = ( "^/$" => "/join.html", "^/join$" => "/join.html", "^/map$" => "/map.html" )
 mimetype.assign = ( ".html" => "text/html; charset=utf-8", ".json" => "application/json", ".sig" => "application/octet-stream", ".zip" => "application/zip", ".png" => "image/png",
   ".css" => "text/css; charset=utf-8", ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg", ".webp" => "image/webp", ".gif" => "image/gif" )
 EOF
+}
+
+case ${1:-serve} in
+  publish) publisher publish ;;
+  pin | enable | disable) publisher "$@" ;;
+  web-config) web_config ;;
+  serve)
+    mkdir -p "$DATA_DIR/public" "$RUN_DIR"
+    python3 "$(dirname "$0")/join-page.py" || true
+    web_config >"$RUN_DIR/lighttpd-web.conf"
     lighttpd -D -f "$RUN_DIR/lighttpd-web.conf" >>"$LOG_DIR/web.log" 2>&1 & http_pid=$!
     trap 'kill "$http_pid" 2>/dev/null || true' EXIT
     # The manifest follows plugins.yaml and the live lobby: republished every 30 s,

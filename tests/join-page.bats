@@ -151,6 +151,33 @@ JSON
   [[ "$conf" == *'".css" => "text/css'* ]]
 }
 
+@test "the web server takes its config without a warning, sends / to the join page and lists no folder" {
+  command -v lighttpd >/dev/null || skip "lighttpd not installed (the pre-commit image adds it)"
+  mkdir -p "$DATA_DIR/public/files"
+  echo page >"$DATA_DIR/public/join.html"; echo zip >"$DATA_DIR/public/files/a.zip"
+  SN2_MODS_PORT=18081 bash "$ROOT/scripts/mod-service.sh" web-config >"$BATS_TEST_TMPDIR/web.conf"
+  run lighttpd -tt -f "$BATS_TEST_TMPDIR/web.conf"
+  [ "$status" -eq 0 ]; [ -z "$output" ] || { echo "lighttpd said: $output"; false; }
+  lighttpd -D -f "$BATS_TEST_TMPDIR/web.conf" & web=$!
+  ask() { python3 - "$1" <<'PY'
+import sys, urllib.request, urllib.error
+class NoFollow(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k): return None
+try:
+    r = urllib.request.build_opener(NoFollow).open("http://127.0.0.1:18081" + sys.argv[1], timeout=5)
+    print(r.status, r.headers.get("Content-Type", ""), r.headers.get("Location", ""))
+except urllib.error.HTTPError as e:
+    print(e.code, e.headers.get("Content-Type", ""), e.headers.get("Location", ""))
+PY
+  }
+  for _ in 1 2 3 4 5 6 7 8 9 10; do ask /join.html 2>/dev/null | grep -q '^200' && break; sleep 0.3; done
+  root=$(ask /); folder=$(ask /files/); zip=$(ask /files/a.zip)
+  kill "$web" 2>/dev/null || true
+  [[ "$root" == 301*"/join.html" ]] || { echo "/ gave: $root"; false; }
+  [[ "$folder" == 403* ]] || { echo "/files/ gave: $folder"; false; }
+  [[ "$zip" == "200 application/zip"* ]] || { echo "the zip gave: $zip"; false; }
+}
+
 @test "the page links theme.css by a fingerprint of its content, and a host's own theme changes it" {
   command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
   run render
