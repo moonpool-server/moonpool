@@ -56,15 +56,21 @@ end
 -- A console line run server-side as that player; the game's reply goes to its own log. A player
 -- whose character is not in the world yet (still loading in) is skipped: the game's own commands
 -- read the character without checking, and one run that early crashed the host.
-function M.run_as(pc, line, why)
+-- done (optional) is called on the game thread with true once the line was sent, false if it was not.
+function M.run_as(pc, line, why, done)
   ExecuteInGameThread(function()
     local body = false
     pcall(function() body = pc:IsValid() and pc.Pawn:IsValid() end)
-    if not body then log('console as ' .. why .. ' skipped, not in the world yet: ' .. line); return end
+    if not body then
+      log('console as ' .. why .. ' skipped, not in the world yet: ' .. line)
+      if done then done(false) end
+      return
+    end
     log('console as ' .. why .. ': ' .. line .. ' (game reply lines follow in the game log)')
     local ksl = StaticFindObject('/Script/Engine.Default__KismetSystemLibrary')
     local ok, err = pcall(function() ksl:ExecuteConsoleCommand(pc:GetWorld(), line, pc) end)
     if not ok then log('console as ' .. why .. ' failed: ' .. tostring(err)) end
+    if done then done(ok) end
   end)
 end
 

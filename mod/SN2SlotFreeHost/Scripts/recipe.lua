@@ -1077,12 +1077,18 @@ local IDLE = idle.new({
   stop_s = idle.seconds(os.getenv('SN2_IDLE_STOP_HOURS'), 3600),
   slow_s = IDLE_FPS and (idle.seconds(os.getenv('SN2_IDLE_FREEZE_MINUTES') or '10', 60) or 600),
 })
-local function idle_fps(act, host_name)
+-- Runs an idle action's command as the host; one that is not sent is undone, to be tried next tick.
+local function idle_run(act, host_name, line, why)
   local host = controller_named(host_name)
-  if not host then return end
+  if not host then idle.undo(IDLE, act); return end
+  run_as(host, line, host_name .. ' (' .. why .. ')', function(sent)
+    if not sent then idle.undo(IDLE, act) end
+  end)
+end
+local function idle_fps(act, host_name)
   local fps = act == 'slow' and IDLE_FPS or ACTIVE_FPS
   log('idle: ' .. (act == 'slow' and 'nobody in' or 'a player is in') .. '; frame cap ' .. fps)
-  run_as(host, 't.MaxFPS ' .. fps, host_name .. ' (idle frame cap)')
+  idle_run(act, host_name, 't.MaxFPS ' .. fps, 'idle frame cap')
 end
 -- A login seen in the game log lifts the cap at once; the roster follows some seconds later.
 local function idle_wake()
@@ -1099,15 +1105,14 @@ local function idle_tick(st)
     state.daylight_frozen = nil
   end
   for _, act in ipairs(idle.tick(IDLE, joiners, os.time())) do
-    local host = controller_named(st.host_name)
     if act == 'slow' or act == 'fast' then
       idle_fps(act, st.host_name)
-    elseif act == 'freeze' and host then
+    elseif act == 'freeze' then
       log('idle: nobody in for the freeze time; FreezeTime as the host')
-      run_as(host, 'FreezeTime', st.host_name .. ' (idle freeze)')
-    elseif act == 'unfreeze' and host then
+      idle_run(act, st.host_name, 'FreezeTime', 'idle freeze')
+    elseif act == 'unfreeze' then
       log('idle: a player joined; UnfreezeTime as the host')
-      run_as(host, 'UnfreezeTime', st.host_name .. ' (idle unfreeze)')
+      idle_run(act, st.host_name, 'UnfreezeTime', 'idle unfreeze')
     elseif act == 'stop' then
       log('idle: nobody in for IDLE_STOP_HOURS; asking the container to stop the game')
       write_atomic(cpath('idle-stop-request.json'), { ts = os.time(), reason = 'idle_stop_hours' })
