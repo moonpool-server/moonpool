@@ -8,6 +8,8 @@ Settings are explained in `.env.example`. Commands are in `bin/moonpool help`. T
 
 8 players is a guess at 6 cores 12 GB 60 GB and 25 Mbit. `metrics.csv` in the data volume shows what your host really uses
 
+An empty server still runs the game at full frame rate: about 3.3 cores on the one host it was measured on. `IDLE_MAX_FPS=10` in `.env` lowers the frame cap after the world has been empty as long as the idle freeze waits (10 minutes) and puts `SERVER_MAX_FPS` back when a player's login shows in the game log; there the empty server dropped to about 1 core, and a join made while it was lowered took as long as the others that night. It is off unless you set it
+
 ## Signing in
 
 The viewer controls a signed in Steam so keep it off the internet. It always asks for a password, made at first start unless you set `VNC_PASSWORD`; `bin/moonpool diag viewer` shows it. VNC uses only the first 8 characters, and its handshake is not encrypted. Inside Docker the viewer listens on every interface so the password is what keeps other containers out. Use an SSH tunnel or Tailscale to reach it from elsewhere because they're stronger than a VNC password, even if you bind it to your LAN with `VIEWER_BIND=0.0.0.0`

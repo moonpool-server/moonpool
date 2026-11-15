@@ -1,12 +1,21 @@
 -- Empty-server policy; pure Lua, no game calls. After freeze_s empty the clock freezes and the
 -- next join unfreezes it; after stop_s empty the game stops. While the operator's
--- `daylight: frozen` holds the clock, neither touches it.
+-- `daylight: frozen` holds the clock, neither touches it. After slow_s empty the frame rate is
+-- lowered ('slow') until someone is in again ('fast'); the clock's hold does not change that.
 local M = {}
 
--- cfg: { freeze_s = seconds or nil (off), stop_s = seconds or nil (off) }
+-- cfg: { freeze_s, stop_s, slow_s = seconds or nil (off) }
 function M.new(cfg)
-  return { freeze_s = cfg.freeze_s, stop_s = cfg.stop_s,
-    empty_since = nil, frozen = false, held = false, stopped = false }
+  return { freeze_s = cfg.freeze_s, stop_s = cfg.stop_s, slow_s = cfg.slow_s,
+    empty_since = nil, frozen = false, held = false, stopped = false, slow = false }
+end
+
+-- A player is logging in: the frame rate goes back up now, ahead of the roster. Returns 'fast' or nothing.
+function M.wake(s)
+  if not s.slow then return {} end
+  s.slow = false
+  s.empty_since = nil
+  return { 'fast' }
 end
 
 -- `normal` hands the clock back with the empty timer restarted.
@@ -21,12 +30,16 @@ function M.tick(s, players, now)
   local actions = {}
   if players > 0 then
     s.empty_since = nil
+    if s.slow then s.slow = false; actions[#actions + 1] = 'fast' end
     if s.frozen and not s.held then s.frozen = false; actions[#actions + 1] = 'unfreeze' end
     s.stopped = false
     return actions
   end
   if s.empty_since == nil then s.empty_since = now end
   local empty = now - s.empty_since
+  if s.slow_s and not s.slow and empty >= s.slow_s then
+    s.slow = true; actions[#actions + 1] = 'slow'
+  end
   if s.freeze_s and not s.frozen and not s.held and empty >= s.freeze_s then
     s.frozen = true; actions[#actions + 1] = 'freeze'
   end
