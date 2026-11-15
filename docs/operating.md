@@ -194,7 +194,7 @@ docker compose up -d
 - Steam signed in by itself on the new PC from the copied sign-in. If it asks again, sign in on the viewer page as the first time
 - Never start both: they share one Steam account and one tunnel. On the old PC `docker update --restart=no` on its containers keeps a reboot from bringing it back
 - Copy `backups/` too if you want the older archives; the new PC starts its own every 30 minutes
-- Building the image on the new PC instead of copying it should give the same result but was not tried
+- The image also builds on the new PC (`docker build --build-arg WINE_RUNTIME=tkg -t <the image in SN2_IMAGE> .` in the checkout, ticks stayed smooth with a player on); the move itself ran the copied image
 
 ## Updates
 
