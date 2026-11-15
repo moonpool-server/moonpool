@@ -123,6 +123,10 @@ if ! set_net_tick_rate "${UE_LOG%/Logs/*}/Config/Windows/Engine.ini" "${NET_MAX_
   log "NET_MAX_TICK_RATE must be a positive integer or empty"; exit 2
 fi
 [ -z "${NET_MAX_TICK_RATE:-}" ] || log "net.MaxNetTickRate=$NET_MAX_TICK_RATE written; applied only if the game log says Set CVar"
+if ! set_net_client_rate "${UE_LOG%/Logs/*}/Config/Windows/Engine.ini" "${NET_MAX_CLIENT_RATE-300000}"; then
+  log "NET_MAX_CLIENT_RATE must be a positive integer or empty"; exit 2
+fi
+[ -z "${NET_MAX_CLIENT_RATE-300000}" ] || log "per-player send rate: ${NET_MAX_CLIENT_RATE-300000} bytes/s (the game log's \"Client netspeed is\" shows what a joiner got)"
 log "wine: $(wine --version 2>/dev/null) ($WINE_RUNTIME), sync: $(wine_sync_name)"
 [ -f "$WIN64_DIR/ue4ss/UE4SS.log" ] && mv -f "$WIN64_DIR/ue4ss/UE4SS.log" "$WIN64_DIR/ue4ss/UE4SS.log.prev"
 apply_local_paks

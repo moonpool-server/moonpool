@@ -784,11 +784,18 @@ function Write-Ledger([string]$Path, $Ledger) {
 # switched, so a player's own loader and mods are never touched. Returns what stayed in use.
 function Test-Switchable([string]$Path) { (@('dwmapi.dll', 'enabled.txt') -contains (Split-Path -Leaf $Path)) -or ($TrioExtensions -contains [IO.Path]::GetExtension($Path)) }
 
-# The game compiles its shader pipelines once it reaches the menu, one per frame, and holds a server invite
-# until they are done: about three minutes measured. A bigger batch does the same work (under a second) in
-# a few seconds. The game rewrites Engine.ini when it closes and drops this, so it is written for each
-# session and taken out when the mods go off (after a crash too). A value the player set is left alone.
-$WarmupBlock = "`r`n[ConsoleVariables]`r`nr.ShaderPipelineCache.BackgroundBatchSize=100`r`n"
+# Settings in the game's own Engine.ini for the session, each with the server's measured reason:
+# - The game compiles its shader pipelines at the menu one per frame and holds a server invite until they
+#   are done: about three minutes; a bigger batch does the same work (under a second) in a few seconds.
+# - The game asks a server for 100000 bytes a second, which held a join's world data to about 30 s; the
+#   server sends up to 300000 (NET_MAX_CLIENT_RATE), and asking for that halved it.
+# The game rewrites Engine.ini when it closes and drops them, so they are written for each session and taken
+# out when the mods go off (after a crash too). A key the player set is left alone.
+$SessionIni = @(
+  @{ Key = 'r.ShaderPipelineCache.BackgroundBatchSize'; Block = "`r`n[ConsoleVariables]`r`nr.ShaderPipelineCache.BackgroundBatchSize=100`r`n" },
+  @{ Key = 'ConfiguredInternetSpeed'; Block = "`r`n[/Script/Engine.Player]`r`nConfiguredInternetSpeed=300000`r`n" },
+  @{ Key = 'ConfiguredLanSpeed'; Block = "`r`n[/Script/Engine.Player]`r`nConfiguredLanSpeed=300000`r`n" }
+)
 function Switch-ShaderWarmup([bool]$On, $Ledger) {
   $roots = @($Ledger.files.Keys | ForEach-Object { if ($_ -match '^(.*\\Subnautica2)\\(Binaries|Content)\\') { $Matches[1] } } | Sort-Object -Unique)
   foreach ($root in $roots) {
@@ -797,14 +804,17 @@ function Switch-ShaderWarmup([bool]$On, $Ledger) {
     $ini = Join-Path $dir 'Engine.ini'
     try {
       $text = ''; if (Test-Path -LiteralPath $ini) { $text = [IO.File]::ReadAllText($ini) }
-      if ($On) {
-        if ($text -match '(?im)^\s*r\.ShaderPipelineCache\.BackgroundBatchSize\s*=') { continue }
-        [IO.File]::WriteAllText($ini, $text + $WarmupBlock)
-        Say 'set the game to finish its shader warm-up in seconds before joining (Engine.ini; taken out when the game closes)'
-      } elseif ($text.Contains($WarmupBlock)) {
-        [IO.File]::WriteAllText($ini, $text.Replace($WarmupBlock, ''))
+      $before = $text
+      foreach ($s in $SessionIni) {
+        if ($On) {
+          if ($text -notmatch ('(?im)^\s*' + [regex]::Escape($s.Key) + '\s*=')) { $text += $s.Block }
+        } else { $text = $text.Replace($s.Block, '') }
       }
-    } catch { Say "could not change the game's Engine.ini ($($_.Exception.Message)); joining may wait a few minutes for the game's shaders" }
+      if ($text -ne $before) {
+        [IO.File]::WriteAllText($ini, $text)
+        if ($On) { Say "set the game's shader warm-up and download rate for a quicker join (Engine.ini; taken out when the game closes)" }
+      }
+    } catch { Say "could not change the game's Engine.ini ($($_.Exception.Message)); joining may take a few minutes longer" }
   }
 }
 

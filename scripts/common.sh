@@ -125,6 +125,20 @@ set_net_tick_rate() {
   case $value in *[!0-9]* | 0) return 2 ;; esac
   set_ini_key "$ini" ConsoleVariables net.MaxNetTickRate "$value"
 }
+# NET_MAX_CLIENT_RATE: the most bytes a second the server sends one player, in the driver sections of
+# Engine.ini (the stock 100000 held a join's world data to about 30 s on one host; 300000 halved it).
+# The game rewrites Engine.ini, so this is written before each start; empty takes it out again.
+set_net_client_rate() {
+  local ini=$1 value=$2
+  mkdir -p "${ini%/*}"
+  [ ! -f "$ini" ] || sed -i '/^; moonpool: per-player send rate$/,/^; moonpool: end$/d' "$ini"
+  [ -n "$value" ] || return 0
+  case $value in *[!0-9]* | 0) return 2 ;; esac
+  printf '%s\n' '; moonpool: per-player send rate' \
+    '[/Script/OnlineSubsystemUtils.IpNetDriver]' "MaxClientRate=$value" "MaxInternetClientRate=$value" \
+    '[/Script/SocketSubsystemEOS.NetDriverEOS]' "MaxClientRate=$value" "MaxInternetClientRate=$value" \
+    '; moonpool: end' >>"$ini"
+}
 # Prints the mismatch line when only the other branch's executable is installed.
 game_exe_mismatch() {
   local dir="${1:-$WIN64_DIR}" other=experimental
