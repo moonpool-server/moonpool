@@ -57,6 +57,9 @@ $AllowLocal = [bool]$ManifestUrl -or $Server -like 'file:*'
 
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
+# Started from PowerShell 7, this Windows PowerShell inherits 7's module folders first, whose built-in
+# modules it cannot load: Get-FileHash and the like then go missing. Its own folder goes first.
+$env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath"
 
 $GameProcessNames = @('Subnautica2-Win64-Test', 'Subnautica2-Win64-Shipping')
 $DefaultAppId = '1962700'
