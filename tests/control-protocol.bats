@@ -443,6 +443,96 @@ EOF
   [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]
 }
 
+@test "restore removes its unpacked copy of the backup, after a refusal too" {
+  save_env
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"
+  export TMPDIR="$BATS_TEST_TMPDIR/tmp"; mkdir -p "$TMPDIR"
+  make_backup "$BATS_TEST_TMPDIR/bad.tar.gz" userdata/123/remote/x.vdf
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/bad.tar.gz"
+  [ "$status" -eq 77 ]; [ -z "$(ls -A "$TMPDIR")" ]
+  make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/b.tar.gz" Slot1
+  [ "$status" -eq 0 ]; [ -z "$(ls -A "$TMPDIR")" ]
+}
+
+@test "restore refuses an archive with more files than a backup holds, and changes nothing" {
+  save_env
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"
+  python3 - "$BATS_TEST_TMPDIR/many.tar.gz" <<'PY'
+import io, sys, tarfile
+with tarfile.open(sys.argv[1], "w:gz") as t:
+    def add(name, data):
+        i = tarfile.TarInfo(name); i.size = len(data); t.addfile(i, io.BytesIO(data))
+    add("saves/Slot1.sav", b"GSWU-new\n")
+    for n in range(10000):
+        add(f"userdata/{n}", b"")
+PY
+  run "$CTL" server restore "$BATS_TEST_TMPDIR/many.tar.gz"
+  [ "$status" -eq 77 ]; [[ $output == *"more than 10000 files"* ]]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]; [ ! -e "$STAGED" ]
+}
+
+@test "restore stops unpacking once the files add up to more than the byte limit" {
+  make_backup "$BATS_TEST_TMPDIR/b.tar.gz" saves/Slot1.sav saves/Slot2.sav
+  run mp "m.RESTORE_MAX_BYTES = 12; m.extract_backup('$BATS_TEST_TMPDIR/b.tar.gz', m.Path('$BATS_TEST_TMPDIR/x'))"
+  [ "$status" -eq 77 ]; [[ $output == *"more than a backup of this server"* ]]
+}
+
+@test "restore that fails to copy the backup leaves the current saves as they were and starts the game" {
+  save_env
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"; echo GSWU-old-extra >"$SN2_SAVE_DIR/Slot9.sav"
+  make_backup "$BATS_TEST_TMPDIR/b.tar.gz" sn2-staging/20261103T130000Z/SaveGames/Slot1.sav
+  run mp "import shutil
+real = shutil.copytree
+def full(s, d, **k):
+    real(s, d, **k)
+    raise OSError(28, 'No space left on device')
+shutil.copytree = full
+m.main(['server', 'restore', '$BATS_TEST_TMPDIR/b.tar.gz'])"
+  [ "$status" -eq 70 ]; [[ $output == *"were not touched"* ]]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]; [ -f "$SN2_SAVE_DIR/Slot9.sav" ]
+  [ -z "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name 'saves.*')" ]
+  [ ! -e "$SN2_RUN_DIR/stopped" ]
+}
+
+@test "restore that fails to swap the folders puts the current saves back" {
+  save_env
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"; echo GSWU-old-extra >"$SN2_SAVE_DIR/Slot9.sav"
+  make_backup "$BATS_TEST_TMPDIR/b.tar.gz" sn2-staging/20261103T130000Z/SaveGames/Slot1.sav
+  run mp "real = m.Path.rename
+def broken(self, target):
+    if '.restoring-' in self.name:
+        raise OSError(5, 'Input/output error')
+    return real(self, target)
+m.Path.rename = broken
+m.main(['server', 'restore', '$BATS_TEST_TMPDIR/b.tar.gz'])"
+  [ "$status" -eq 70 ]; [[ $output == *"were put back"* ]]
+  [ "$(cat "$SN2_SAVE_DIR/Slot1.sav")" = GSWU-old ]; [ -f "$SN2_SAVE_DIR/Slot9.sav" ]
+  [ -z "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name 'saves.*')" ]
+  [ ! -e "$SN2_RUN_DIR/stopped" ]
+}
+
+@test "import refuses a zip whose save unpacks to far more than it packs, and changes nothing" {
+  save_env
+  echo GSWU-old >"$SN2_SAVE_DIR/Slot1.sav"; echo Slot1 >"$SN2_CONTROL_DIR/SAVE_SELECT"
+  python3 -c 'import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("savegame_2.sav", b"GSWU" + bytes(20 * 1024 * 1024))' "$BATS_TEST_TMPDIR/bomb.zip"
+  game_says savegame_2 LoadGameSucceeded
+  printf '{"hosted":true,"ts":9999999999}' >"$SN2_CONTROL_DIR/readiness.json"
+  run "$CTL" server import "$BATS_TEST_TMPDIR/bomb.zip"
+  [ "$status" -eq 64 ]; [[ $output == *"times its packed size"* ]]
+  [ ! -e "$SN2_SAVE_DIR/savegame_2.sav" ]; [ ! -e "$STAGED" ]
+  [ "$(cat "$SN2_CONTROL_DIR/SAVE_SELECT")" = Slot1 ]
+}
+
+@test "export refuses a save name that could escape the folder, before staging" {
+  save_env
+  echo GSWU-evil >"$BATS_TEST_TMPDIR/evil.sav"
+  run "$CTL" server export ../evil
+  [ "$status" -eq 64 ]; [ ! -e "$STAGED" ]
+}
+
 # ---- friends, invite and cmd -----------------------------------------------
 # A Steam folder with one signed-in account and two friends, shaped like the
 # client's own loginusers.vdf and localconfig.vdf.
