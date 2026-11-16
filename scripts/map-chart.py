@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import warnings
 from pathlib import Path
 
 from PIL import Image, ImageColor, ImageDraw, ImageFilter
@@ -72,15 +73,27 @@ def signal_keys(status, tracked=True):
     return keys
 
 
-def record(chart, status, host, now):
+def record(chart, status, host, now, players=True):
+    """Adds this status to the chart. players=False (MAP_PLAYERS off) keeps no player positions, no
+    visited squares and no signals that follow something, and drops those already kept."""
+    if not players:
+        chart.pop("divers", None)
+        chart.pop("cells", None)
     if not number(status.get("ts")) or now - status["ts"] > STALE_S:
         return
     seen = chart.setdefault("lifepods", {})
     for x, y in points(status.get("lifepods")):
         seen.setdefault("%d,%d" % (x, y), now)
     seen = chart.setdefault("signals", {})
-    for key in signal_keys(status):
-        seen.setdefault(key, now)
+    for key in signal_keys(status, tracked=players):
+        first = seen[key][0] if isinstance(seen.get(key), list) else seen.get(key, now)
+        seen[key] = [first, now]  # first and last seen
+    for key, value in list(seen.items()):
+        last = value[1] if isinstance(value, list) else value
+        if now - last > KEEP_S:  # gone from the game, or moved, an hour ago
+            del seen[key]
+    if not players:
+        return
     cells = chart.setdefault("cells", {})
     # The squares the host mod saw players in since its last write, read every 2 s (trail.lua).
     visited = status.get("visited")
@@ -184,7 +197,8 @@ def published(chart, status, world, delay_s, now, names=True):
     # With player positions kept off the map, a signal that follows something could stand in for them.
     current = set(signal_keys(status, tracked=os.environ.get("MAP_PLAYERS", "true") == "true"))
     signals = sorted([int(k.split(",", 2)[0]), int(k.split(",", 2)[1]), k.split(",", 2)[2]]
-                     for k, first in chart.get("signals", {}).items() if k in current and now - first >= delay_s)
+                     for k, seen in chart.get("signals", {}).items()
+                     if k in current and now - (seen[0] if isinstance(seen, list) else seen) >= delay_s)
     return {"world": world, "delay_minutes": delay_s // 60, "updated": now, "refresh_seconds": refresh_seconds(), "cell_m": CELL_M, "explored": explored,
             "divers": divers, "lifepods": settled("lifepods"), "signals": signals}
 
@@ -226,7 +240,26 @@ def fetch(url, cache):
             path.write_bytes(b"")  # a tile the set doesn't have: empty sea
     if path.stat().st_size == 0:
         return None
-    return Image.open(io.BytesIO(path.read_bytes())).convert("RGBA")
+    return picture(path.read_bytes(), url)
+
+
+PICTURE_FORMATS = ("PNG", "JPEG", "WEBP")
+MAX_PICTURE_PIXELS = 8192 * 8192  # a tile is 512 x 512; a whole-world picture is drawn 2048 across
+Image.MAX_IMAGE_PIXELS = MAX_PICTURE_PIXELS
+
+
+def picture(body, label):
+    """A PNG, JPEG or WebP of at most MAX_PICTURE_PIXELS, decoded; anything else is left out."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            img = Image.open(io.BytesIO(body), formats=PICTURE_FORMATS)
+            if img.width * img.height > MAX_PICTURE_PIXELS:
+                raise ValueError("%d x %d pixels is over %d" % (img.width, img.height, MAX_PICTURE_PIXELS))
+            return img.convert("RGBA")
+    except (OSError, ValueError, Image.DecompressionBombWarning, Image.DecompressionBombError) as err:
+        print(f"map: {label}: {err}, left out", file=sys.stderr)
+        return None
 
 
 def union(items):
@@ -298,7 +331,7 @@ def backdrop(bgs, public, cache, region=None):
         for it in bgs:  # pictures only here; a tile set is the first entry or not at all
             if it["tiles"]:
                 continue
-            src = fetch(it["url"], cache) if "://" in it["url"] else Image.open(public / it["url"]).convert("RGBA")
+            src = fetch(it["url"], cache) if "://" in it["url"] else picture((public / it["url"]).read_bytes(), it["url"])
             if src is None:
                 continue
             l, t, r, b = it["bounds"]
@@ -407,11 +440,12 @@ def main():
     store = data / ("map-chart-%s.json" % re.sub(r"[^A-Za-z0-9_.-]", "_", world_key))
     chart = read_json(store, {})
     chart = chart if isinstance(chart, dict) else {}
-    record(chart, status, os.environ.get("HOST_NAME", "SN2 Host"), now)
+    players = os.environ.get("MAP_PLAYERS", "true") == "true"
+    record(chart, status, os.environ.get("HOST_NAME", "SN2 Host"), now, players)
     public.mkdir(parents=True, exist_ok=True)
     names = os.environ.get("MAP_PLAYER_NAMES", "false") == "true" and os.environ.get("SHOW_PLAYER_NAMES", "true") == "true"
     page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now, names)
-    if os.environ.get("MAP_PLAYERS", "true") != "true":  # no dots and no trace of where anyone went
+    if not players:  # no dots and no fog: the chart holds no player positions or visited squares
         page_data["divers"], page_data["explored"] = [], None
     if os.environ.get("MAP_SIGNALS", "true") != "true":
         page_data["signals"] = []
