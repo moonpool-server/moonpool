@@ -221,7 +221,11 @@ local function rows_of(list)
     local id = ''
     pcall(function() id = row[G.row_item]:ToString() end)
     local fact = facts[id] or { label = '', published = true, category = '' }
-    kept[#kept + 1] = { row = row, published = fact.published, shows = true,  -- a row starts out showing
+    -- An item whose name the game marks as unfinished ([DEPRECATED], [PLACEHOLDER], [TEST]) counts as
+    -- unpublished too, though the game calls it published.
+    local finished = true
+    for _, pattern in ipairs(CFG.search.unfinished or {}) do finished = finished and not fact.label:find(pattern) end
+    kept[#kept + 1] = { row = row, published = fact.published and finished, shows = true,  -- a row starts out showing
       text = route.search_text(id, fact.label .. ' ' .. fact.category, CFG.search.strip) }
   end
   known = { [list.key] = kept }  -- only the open list is kept

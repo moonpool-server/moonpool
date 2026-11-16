@@ -67,7 +67,9 @@ return {
   -- strip: the parts of an item's data name that every item shares, as Lua patterns.
   -- live: false turns the search off altogether.
   -- settle_ms: how long a list's row count must hold still before its rows are read.
+  -- unfinished: Lua patterns over an item's display name that mark it unfinished, hidden like unpublished.
   search = { live = true, every_ms = 250, settle_ms = 500, show_unpublished = false,
+    unfinished = { '^%[DEPRECATED%]', '^%[PLACEHOLDER%]', '^%[TEST%]' },
     strip = { '^DA_', '_ItemType.*$' },
     keys = { A = 'a', B = 'b', C = 'c', D = 'd', E = 'e', F = 'f', G = 'g', H = 'h', I = 'i', J = 'j', K = 'k',
       L = 'l', M = 'm', N = 'n', O = 'o', P = 'p', Q = 'q', R = 'r', S = 's', T = 't', U = 'u', V = 'v',
