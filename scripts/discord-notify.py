@@ -9,6 +9,8 @@ import base64
 import functools
 import getpass
 import hashlib
+import urllib.parse
+import ipaddress
 import json
 import math
 import os
@@ -485,27 +487,117 @@ def publish_card(container, world):
         pass
 
 
+PEER_MAX_BYTES = 65536
+
+
+def peer_origin(url):
+    """The peer's scheme and host when its address may be read: https anywhere, plain http only on a
+    private or loopback address. None otherwise."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return None
+    if u.scheme == "http":
+        try:
+            ip = ipaddress.ip_address(u.hostname)
+        except ValueError:
+            return None
+        if not (ip.is_private or ip.is_loopback):
+            return None
+    return (u.scheme, u.netloc.lower())
+
+
+def peer_link_ok(link, origin):
+    u = urllib.parse.urlsplit(link)
+    return (u.scheme, u.netloc.lower()) == origin or (u.scheme == "https" and u.netloc.lower() == "steamcommunity.com")
+
+
+def peer_text(text, origin):
+    """A peer's text with every link it may not carry taken out: a markdown link keeps its words, a bare
+    address goes."""
+    text = re.sub(r"\[([^\]]{0,200})\]\((\S+?)\)", lambda m: m.group(0) if peer_link_ok(m.group(2), origin) else m.group(1), text)
+    return re.sub(r"(?<!\()https?://\S+", lambda m: m.group(0) if peer_link_ok(m.group(0), origin) else "", text)
+
+
+def peer_component(c, origin, depth=0):
+    """One part of a peer's card rebuilt from the parts this card itself uses; anything else is dropped.
+    Buttons and pictures must point at the peer's own address."""
+    if not isinstance(c, dict) or depth > 4:
+        return None
+    t = c.get("type")
+    if t == 10 and isinstance(c.get("content"), str):
+        return {"type": 10, "content": clamp(peer_text(c["content"], origin), 1000)}
+    if t == 14:
+        return {"type": 14, "divider": c.get("divider") is True, "spacing": 2 if c.get("spacing") == 2 else 1}
+    if t == 2:
+        url, label = c.get("url"), c.get("label")
+        if c.get("style") == 5 and isinstance(url, str) and isinstance(label, str) and peer_link_ok(url, origin) \
+                and urllib.parse.urlsplit(url).netloc.lower() == origin[1]:
+            return {"type": 2, "style": 5, "url": url, "label": clamp(label, 40)}
+        return None
+    if t == 12:
+        items = []
+        for it in (c.get("items") or [])[:4] if isinstance(c.get("items"), list) else []:
+            url = ((it or {}).get("media") or {}).get("url") if isinstance(it, dict) else None
+            if isinstance(url, str) and urllib.parse.urlsplit(url).netloc.lower() == origin[1] and peer_link_ok(url, origin):
+                items.append({"media": {"url": url}})
+        return {"type": 12, "items": items} if items else None
+    parts = [x for x in (peer_component(y, origin, depth + 1) for y in (c.get("components") or [])[:20]
+                         if isinstance(c.get("components"), list)) if x]
+    if t == 1:
+        buttons = [x for x in parts if x["type"] == 2][:5]
+        return {"type": 1, "components": buttons} if buttons else None
+    if t == 9:
+        texts = [x for x in parts if x["type"] == 10][:3]
+        accessory = peer_component(c.get("accessory"), origin, depth + 1)
+        if not texts:
+            return None
+        return {"type": 9, "components": texts, "accessory": accessory} if accessory and accessory["type"] == 2 else texts[0]
+    if t == 17:
+        colour = c.get("accent_color")
+        return {"type": 17, "accent_color": colour if isinstance(colour, int) and 0 <= colour <= 0xFFFFFF else 9807270,
+                "components": parts}
+    return None
+
+
+def read_peer(url, origin):
+    """The peer's card.json, at most PEER_MAX_BYTES; None when it can't be read or is larger."""
+    try:
+        with requests.get(url, timeout=5, stream=True, allow_redirects=False) as r:
+            if r.status_code != 200:
+                return None
+            data = b""
+            for chunk in r.iter_content(8192):
+                data += chunk
+                if len(data) > PEER_MAX_BYTES:
+                    return None
+        return read_json_text(data.decode("utf-8", "replace"))
+    except requests.RequestException:
+        return None
+
+
 def peer_containers():
-    """The other worlds' panels (DISCORD_BOARD_PEERS); a silent one shows as Offline, never a stale Open."""
+    """The other worlds' panels (DISCORD_BOARD_PEERS), rebuilt from what this card itself shows; a silent
+    one shows as Offline, never a stale Open."""
     out = []
     for url in (E.get("DISCORD_BOARD_PEERS") or "").split():
         key = hashlib.sha256(url.encode()).hexdigest()[:12]
-        try:
-            body = read_json_text(requests.get(url, timeout=5).text)
-        except requests.RequestException:
-            body = None
-        fresh = isinstance(body, dict) and isinstance(body.get("container"), dict) and body["container"].get("type") == 17 \
-            and isinstance(body.get("ts"), int)
-        if fresh and now() - body["ts"] <= int(E.get("DISCORD_PEER_MAX_AGE") or 600):
+        origin = peer_origin(url)
+        body = read_peer(url, origin) if origin else None
+        ts = body.get("ts") if isinstance(body, dict) else None
+        container = peer_component(body.get("container"), origin) if isinstance(body, dict) and origin else None
+        fresh = container is not None and container["type"] == 17 and isinstance(ts, int) and not isinstance(ts, bool) \
+            and ts <= now() + 60
+        if fresh and now() - ts <= int(E.get("DISCORD_PEER_MAX_AGE") or 600):
             if not DRY:
-                write(STATE / f"peer-{key}.json", dumps(body))
-            out.append(body["container"])
+                write(STATE / f"peer-{key}.json", dumps({"ts": ts, "world": body.get("world"), "container": container}))
+            out.append(container)
             continue
         if not fresh:
             body = read_json(STATE / f"peer-{key}.json", {})
-        world = (body or {}).get("world") or "another world"
-        ts = (body or {}).get("ts")
-        seen = f" · last seen <t:{ts}:R>" if ts else ""
+        world = (body or {}).get("world") if isinstance(body, dict) else None
+        world = clamp(world, 60) if isinstance(world, str) and world else "another world"
+        ts = (body or {}).get("ts") if isinstance(body, dict) else None
+        seen = f" · last seen <t:{ts}:R>" if isinstance(ts, int) and not isinstance(ts, bool) and 0 < ts <= now() + 60 else ""
         out.append({"type": 17, "accent_color": 9807270, "components": [{"type": 10, "content": f"## 🌊 {esc(world)}\n⚪ **Offline**{seen}"}]})
     return out
 
