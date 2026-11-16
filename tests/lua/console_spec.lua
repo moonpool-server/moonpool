@@ -185,6 +185,36 @@ check(r.runs[1] and r.runs[1].line == 'Give DA_Copper_ItemType 5',
 r = console.exact(st, { sender = { name = 'dir', key = 'k' }, text = 'CrashServer' })
 check(#r.runs == 0 and #r.lines == 1, 'an exact line on the deny list never runs')
 
+-- One command per line on every path: the engine's console runs each part of a line split at | or a
+-- line break, so a second command after a harmless first word would pass the deny list.
+local chained = { 'GetCoords | CrashServer', 'GetCoords|ClearSaves', 'GetCoords\nCrashServer',
+  'GetCoords\rCrashServer', 'GetCoords; CrashServer', 'GetCoords `CrashServer' }
+-- A console line is split into words, so a line break there only separates words; whatever runs
+-- from it must still be one command.
+local function one_each(runs)
+  for _, run_ in ipairs(runs) do if run_.line:find('[%c;|`]') then return false end end
+  return true
+end
+for _, line in ipairs(chained) do
+  local shown = line:gsub('%c', '\\n')
+  r = console.exact(st, { sender = me, text = line })
+  check(#r.runs == 0 and r.lines[1] == catalog.messages.chained, 'exact refuses a chained line: ' .. shown)
+  r = run(line)
+  check(one_each(r.runs), 'handle never runs a chained line: ' .. shown)
+  r = console.forwarded(st, { sender = me, text = line }, game)
+  check(#r.runs == 0, 'a forwarded game line that is chained never runs: ' .. shown)
+  r = console.forwarded(st, { sender = me, text = catalog.signal_word .. ' ' .. line }, game)
+  check(one_each(r.runs), 'a forwarded console line never runs chained: ' .. shown)
+  pass = console.relay(st, execute, '(String="' .. line .. '")', true)
+  check(pass == false, 'relay refuses a chained command: ' .. shown)
+end
+pass = console.relay(st, execute, '(String="GetCoords") | (String="CrashServer")', true)
+check(pass == false, 'relay checks the whole message, not only the part the pattern reads')
+r = run('Give "titanium ingot" 2')
+check(r.runs[1] and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 2', 'a name with spaces still runs')
+r = console.exact(st, { sender = me, text = 'Item DA_TestItem 2' })
+check(#r.runs == 1, 'an exact line with spaces still runs')
+
 -- The host's own console.json: objects merge, lists replace, an empty deny list included.
 local shipped = json.decode(json.encode(catalog))
 local own = '{"deny": [], "commands": {"full": {"aliases": ["full"], "lines": ["HealMe"]}}}'

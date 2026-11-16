@@ -14,7 +14,14 @@ if LoopInGameThreadWithDelay then
 end
 
 -- The host's own player counts against the limit, so the session is hosted at PLAYER_SLOTS + 1.
-local PLAYER_SLOTS = tonumber(os.getenv("SN2_PLAYER_SLOTS") or "") or 4
+-- 1..63, as the slots command takes; any other value is logged and 4 is used.
+local PLAYER_SLOTS = tonumber(os.getenv("SN2_PLAYER_SLOTS") or "")
+if not require("idle").session_limit(PLAYER_SLOTS) then
+    if os.getenv("SN2_PLAYER_SLOTS") then
+        print("[SN2SlotFreeHost] SN2_PLAYER_SLOTS=" .. tostring(os.getenv("SN2_PLAYER_SLOTS")) .. " is not 1 to 63; using 4")
+    end
+    PLAYER_SLOTS = 4
+end
 local HOST_NAME = os.getenv("SN2_HOST_NAME") or "SN2 Host"
 -- The game writes ServerName into the travel options ("?listen?SaveSlotDisplayName=<name>?..."),
 -- so '?', '=' and '&' would split them.

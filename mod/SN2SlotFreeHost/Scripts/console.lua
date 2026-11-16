@@ -3,6 +3,7 @@
 -- what comes back. Every word and reply comes from the catalog (console.json); this file only
 -- parses, matches and plans. Admin rights are checked by the caller, before this runs.
 local fzy = require('fzy_lua')
+local protocol = require('protocol')
 local M = {}
 
 local function lower(s) return (tostring(s or '')):lower() end
@@ -138,12 +139,20 @@ local function denied(st, line)
   end
 end
 
+-- Why a line may not run, or nil: it carries more than one command (protocol.one_command), or the
+-- deny list names its first word.
+local function refused(st, line)
+  if not protocol.one_command(line) then return M.msg(st, 'chained') end
+  local word = denied(st, line)
+  if word then return M.msg(st, 'denied', { word = word }) end
+end
+
 -- A line the game's own screens wrote (a button, a pick from a list): already exact, so it runs for
--- its sender as it is. Only the deny list applies.
+-- its sender as it is. Only the one-command rule and the deny list apply.
 function M.exact(st, req)
   local out = { lines = {}, runs = {} }
-  local word = denied(st, req.text)
-  if word then out.lines[1] = M.msg(st, 'denied', { word = word }); return out end
+  local why = refused(st, tostring(req.text or ''))
+  if why then out.lines[1] = why; return out end
   out.runs[1] = { player = req.sender.name, line = req.text }
   return out
 end
@@ -169,15 +178,17 @@ end
 -- A message one player's game asks the host to pass to other players' games. The game's
 -- ExecuteForAll sends a command this way, on a cheat channel, and every game that gets it runs it as
 -- its own player: an admin's game would then send it on with an admin's rights. So a message on a
--- cheat channel passes only from an admin, and only when the deny list does not name its command.
+-- cheat channel passes only from an admin, only as one command, and only when the deny list does not
+-- name it. The whole message is checked for a second command, not only the part the pattern finds.
 -- Returns true to pass, or false and why.
 function M.relay(st, channel, text, is_admin)
   local prefix = st.cat.cheat_channel
   if not prefix or tostring(channel):sub(1, #prefix) ~= prefix then return true end
   if not is_admin then return false, 'not an admin' end
+  if not protocol.one_command(tostring(text)) then return false, M.msg(st, 'chained') end
   local command = tostring(text):match(st.cat.cheat_message_pattern or '') or tostring(text)
-  local word = denied(st, command)
-  if word then return false, M.msg(st, 'denied', { word = word }) end
+  local why = refused(st, command)
+  if why then return false, why end
   return true
 end
 
@@ -380,8 +391,8 @@ function M.handle(st, req, game)
   end
 
   for _, l in ipairs(lines) do
-    local word = denied(st, l)
-    if word then say(M.msg(st, 'denied', { word = word })); return out end
+    local why = refused(st, l)
+    if why then say(why); return out end
   end
   for _, p in ipairs(who) do
     for _, l in ipairs(lines) do out.runs[#out.runs + 1] = { player = p, line = l } end

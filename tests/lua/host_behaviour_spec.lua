@@ -181,6 +181,13 @@ check(calls.goals == after, 'goals unlocked only once')
 -- The recipe's slots handler changes the three limits.
 local h = _G.SN2_HANDLERS
 check(type(h) == 'table' and type(h.slots) == 'function', 'recipe exposes its handlers')
+
+-- The player handler (the control queue and !cmd) runs one command per line only.
+for _, line in ipairs({ 'GetCoords | CrashServer', 'GetCoords\nCrashServer', 'GetCoords; ClearSaves' }) do
+  local okp, _, why = h.player({ player = 'SN2 Host', command = line })
+  check(okp == false and why == 'bad_console_line',
+    'the player handler refuses a chained line: ' .. (line:gsub('%c', '\\n')))
+end
 if h and h.slots then
   -- In the lobby: the subsystem limit and the lobby session's MaxPlayers.
   local okc, okv, res = pcall(h.slots, { slots = 6 })
