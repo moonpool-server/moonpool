@@ -74,6 +74,27 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
           anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9
           moonpool:panel --only-fixed --fail-on critical
+      - name: Build the backup image (not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: backup
+          load: true
+          push: false
+          tags: moonpool:backup
+      - name: Report the backup image's critical and high vulnerabilities (Grype)
+        shell: bash
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9
+          moonpool:backup -o table | awk 'NR == 1 || / (High|Critical) /'
+          | sed '1s/^/Backup image: /' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Fail on a critical vulnerability with a fix in the backup image, past the reviewed exceptions (Grype)
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          -v "$PWD/.grype-backup.yaml:/grype.yaml:ro"
+          anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9
+          moonpool:backup -c /grype.yaml --only-fixed --fail-on critical
       - name: Validate the compose files
         run: |
           cp .env.example .env

@@ -1,0 +1,8 @@
+# Known findings in the backup image that Moonpool can't fix, each with why and when to look again.
+# CI still fails on any other Critical finding that has a fix.
+ignore:
+  # Inside offen/docker-volume-backup's own Go binary. v2.50.1 is its newest release (checked 2026-11-16);
+  # review when it publishes a newer one, then drop this entry.
+  - vulnerability: GO-2026-6612
+    package:
+      name: golang.org/x/net

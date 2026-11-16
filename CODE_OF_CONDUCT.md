@@ -37,7 +37,14 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at the maintainer through a [GitHub issue](https://github.com/moonpool-server/moonpool/issues), or through the [private reporting form](https://github.com/moonpool-server/moonpool/security/advisories/new) marked as a conduct report when it should not be public. All complaints will be reviewed and investigated promptly and fairly.
+Report abusive, harassing, or otherwise unacceptable behavior privately, never in a public issue:
+
+| Complaint about | Report to |
+|---|---|
+| anyone else | the maintainer, through the [private reporting form](https://github.com/moonpool-server/moonpool/security/advisories/new); start the title with "Conduct:". Only the maintainer sees it |
+| the maintainer | GitHub, through its [abuse report form](https://github.com/contact/report-abuse), which the maintainer doesn't see |
+
+One person maintains this project: complaints are read and looked into fairly, but expect days, not hours.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
