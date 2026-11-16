@@ -140,10 +140,13 @@ local function trim(w)
       if not (valid(cls) and valid(row)) then return nil end
       local b = StaticConstructObject(cls, w[G.tree])
       if not valid(b) then return nil end
-      local added, slot = ucall(row, G.add_child, b)
-      if not added then return nil end
-      -- The box fills the row, as the game's label did.
-      if valid(slot) then ucall(slot, G.slot_size, { SizeRule = G.slot_fill, Value = 1.0 }) end
+      if not ucall(row, G.add_child, b) then return nil end
+      -- The box fills the row, as the game's label did: set on the slot the row made for it.
+      local slot
+      pcall(function() slot = b[G.slot] end)
+      if not (valid(slot) and ucall(slot, G.slot_size, { SizeRule = G.slot_fill, Value = 1.0 })) then
+        say('failed', { what = G.slot_size, tries = 1, error = 'the text box keeps its own width' })
+      end
       return b
     end)
     if ok and valid(made) then

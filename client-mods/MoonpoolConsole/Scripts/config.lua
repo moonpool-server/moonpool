@@ -120,6 +120,7 @@ return {
     textbox_get = '/Script/UMG.EditableTextBox:GetText',
     textbox_set = '/Script/UMG.EditableTextBox:SetText',
     get_parent = '/Script/UMG.Widget:GetParent',
+    slot = 'Slot',                      -- the slot a widget's parent made for it
     slot_size = '/Script/UMG.HorizontalBoxSlot:SetSize',
     slot_fill = 1,                      -- ESlateSizeRule: Fill
     keyboard_focus = '/Script/UMG.Widget:SetKeyboardFocus',
