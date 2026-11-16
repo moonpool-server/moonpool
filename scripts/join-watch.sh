@@ -8,7 +8,7 @@ set -u
 # The game's own log: the public build's console output carries only warnings.
 GAME_LOG="${JOIN_WATCH_LOG:-$UE_LOG}"
 OUT="$LOG_DIR/join_watch.log"
-PAT='PostLogin|Login request|Join succeeded|Join request|NotifyAcceptingConnection|NotifyAcceptedConnection|AddClientConnection|UNetConnection|NetConnection.*(Open|Close|Cleanup)|registered players|NumOpenPrivateConnections|NumPrivateConnections|RegisterPlayer|UnregisterPlayer|OnSessionParticipant|OnCreateSessionComplete|LobbyId=Lobby\[0x|SessionId: Lobby\[0x|LobbyMemberStatus|member (joined|left)|PeerConnectionEstablished|Connection established|NetworkType=|ConnectionType=|IncomingConnection|connection request|Logout|PlayerState|HandleStartingNewPlayer|Kicked|rejected|Server full|MaxPlayers|autosave_completed'
+PAT='PostLogin|Login request|Join succeeded|Join request|NotifyAcceptingConnection|NotifyAcceptedConnection|AddClientConnection|UNetConnection|NetConnection.*(Open|Close|Cleanup)|registered players|NumOpenPrivateConnections|NumPrivateConnections|RegisterPlayer|UnregisterPlayer|OnSessionParticipant|OnCreateSessionComplete|LobbyId=Lobby\[0x|SessionId: Lobby\[0x|LobbyMemberStatus|member (joined|left)|PeerConnectionEstablished|Connection established|NetworkType=|ConnectionType=|IncomingConnection|connection request|Logout|PlayerState|HandleStartingNewPlayer|Kicked|rejected|Server full|MaxPlayers|autosave_completed|ReassertLobbyOwnership'
 
 mkdir -p "$LOG_DIR"
 stamp() { date -u +%FT%TZ; }
@@ -185,12 +185,32 @@ rm -f "$RUN_DIR/friend-requests.json" # a count from before this start is not sh
 heartbeat &
 trap 'kill $! 2>/dev/null' EXIT
 
+# An Epic timeout while the host takes ownership of its lobby leaves a session that looks hosted but
+# that no one can find: the game's lobby lookup answers 404. With nobody on, the game re-hosts, at
+# most once per REHOST_GAP_S; with players on it is only logged, since a re-host would drop them.
+REHOST_GAP_S=${REHOST_GAP_S:-900}
+rehost_at=0
+lobby_lost() {
+  local now
+  now=$(date +%s)
+  if [ -n "$(names)" ]; then
+    echo "[$(stamp)] lobby ownership failed with players on: not re-hosting; new joins may fail until the next restart" >>"$OUT"
+  elif [ $((now - rehost_at)) -lt "$REHOST_GAP_S" ]; then
+    echo "[$(stamp)] lobby ownership failed again within ${REHOST_GAP_S}s of a re-host: not re-hosting" >>"$OUT"
+  else
+    rehost_at=$now
+    echo "[$(stamp)] lobby ownership failed and nobody is on: re-hosting" >>"$OUT"
+    moonpool server host --now </dev/null >/dev/null 2>&1 &
+  fi
+}
+
 tail -n 0 -F "$GAME_LOG" 2>/dev/null | grep -a --line-buffered -E "$PAT" |
   while IFS= read -r line; do
     echo "[$(stamp)] ${line%$'\r'}" >>"$OUT"
     line_shows_player_join "$line" && : >"$RUN_DIR/player-joined"
     # An autosave just finished: stage a copy for offen to archive.
     case $line in *autosave_completed*) "$(dirname "$0")/save-stage.sh" --now || true ;; esac
+    case $line in *ReassertLobbyOwnership*failed*) lobby_lost ;; esac
     if [[ $line =~ $LOBBY_RE ]]; then
       record_lobby "${BASH_REMATCH[2]}"
     fi
