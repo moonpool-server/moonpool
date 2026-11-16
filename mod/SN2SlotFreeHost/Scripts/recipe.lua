@@ -979,10 +979,15 @@ local function cheat_restore()
     cheat_held[key] = nil
   end
 end
+-- True when the game's own call has no cheat manager to run the line with; false when it may have one.
+-- A read that fails is "may have one": the gate never takes an unknown for safe.
 local function cheat_take(pc)
   local manager
-  pcall(function() manager = pc.CheatManager end)
-  if not (manager and manager:IsValid()) then return true end -- none to run the line with
+  if not pcall(function() manager = pc.CheatManager end) then return false end
+  if manager == nil then return true end
+  local ok, present = pcall(function() return manager:IsValid() end)
+  if not ok then return false end
+  if not present then return true end
   if not host_core.clear_cheats(pc) then return false end
   cheat_held[object_path(pc)] = { pc = pc, manager = manager }
   return true
@@ -1023,6 +1028,7 @@ LoopAsync(5000, function()
       log(string.format('cheat gate: %s from admin %s: %s', text, sender.name, queued and 'queued' or why))
     end, cheat_restore)
     cheat_hooked = true
+    _G.SN2_CHEAT_GATE = true -- main.lua makes no Host call until both gates are in place
     log('cheat gate registered on ' .. CHEAT_HOOK)
   end)
   return cheat_hooked
@@ -1051,11 +1057,18 @@ LoopAsync(5000, function()
       local now
       pcall(function() Channel:get().TagName = FName(CATALOG.blocked_channel) end)
       pcall(function() now = Channel:get().TagName:ToString() end)
+      local stopped = now == CATALOG.blocked_channel
       log(string.format('cheat gate: %s %s on %s from %s (eos %s): %s',
-        now == CATALOG.blocked_channel and 'dropped' or 'COULD NOT STOP', tostring(text), channel, sender.name,
+        stopped and 'dropped' or 'COULD NOT STOP', tostring(text), channel, sender.name,
         tostring(sender.eos), tostring(why)))
+      -- As with ServerCheat: a line that went through anyway removes a sender who is not an admin.
+      if not stopped and CATALOG.on_gate_failure == 'kick' and not admin_signal.authorized(ADMIN.admins, sender) then
+        pcall(handlers.kick, { player = sender.name })
+        log('cheat gate: removed ' .. sender.name .. ' after a relay that could not be stopped')
+      end
     end)
     relay_hooked = true
+    _G.SN2_RELAY_GATE = true
     log('cheat gate registered on ' .. RELAY_HOOK)
   end)
   return relay_hooked

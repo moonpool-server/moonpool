@@ -202,6 +202,10 @@ local ARM_WAIT_SECS = tonumber(os.getenv("SN2_ARM_WAIT_SECS") or "") or 300
 -- "Could not retrieve UniqueNetID for Player"; so it waits this long after the lobby.
 local ARM_SETTLE_SECS = tonumber(os.getenv("SN2_ARM_SETTLE_SECS") or "") or 30
 local arm_waited, arm_wait_reported, settled = 0, false, 0
+-- The cheat gate (recipe.lua) must be in place before anyone can join: without it the game runs any
+-- player's console cheats. CHEAT_GATE=off (a diagnostic switch) hosts without it.
+local REQUIRE_GATE = os.getenv("SN2_CHEAT_GATE") ~= "off"
+local gate_waited = 0
 local function valid(o) return o ~= nil and o:IsValid() end
 LoopAsync(2000, function()
     if attempted then return true end
@@ -233,6 +237,14 @@ LoopAsync(2000, function()
         return false
     end
 
+    if REQUIRE_GATE and not (_G.SN2_CHEAT_GATE and _G.SN2_RELAY_GATE) then
+        if gate_waited % 60 == 0 then
+            print(string.format("[SN2SlotFreeHost] HOLD: the cheat gate is not in place after %ds (ServerCheat %s, relay %s); no Host call until it is",
+                gate_waited, tostring(_G.SN2_CHEAT_GATE == true), tostring(_G.SN2_RELAY_GATE == true)))
+        end
+        gate_waited = gate_waited + 2
+        return false
+    end
     attempted = true
     print(string.format("[SN2SlotFreeHost] ARMED: making one Host call (lobby waited %ds)", arm_waited))
     print(string.format("[SN2SlotFreeHost] found: Subsystem=%s PlayerController=%s LobbyGameMode=%s",
@@ -324,6 +336,8 @@ LoopAsync(2000, function()
 end)
 
 local rok, rerr = pcall(require, "recipe")
-if not rok then print("[SN2SlotFreeHost] recipe additions not loaded: " .. tostring(rerr)) end
+if not rok then
+    print("[SN2SlotFreeHost] recipe additions not loaded, and the cheat gate with them, so this server will not host: " .. tostring(rerr))
+end
 
 print("[SN2SlotFreeHost] Mod loaded successfully.")
