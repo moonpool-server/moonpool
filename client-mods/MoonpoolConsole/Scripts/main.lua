@@ -34,3 +34,40 @@ for name, char in pairs(CFG.search.keys) do bind(name, function() panel.key(char
 bind(CFG.search.erase, function() panel.key(nil) end)
 for name, step in pairs(CFG.nav) do bind(name, function() panel.nav(step) end) end
 bind(CFG.run_key, panel.run)
+
+-- Messages the server sends this player, read for the panel (panel.answer): the game's text messages
+-- ("Added 10 Glass") and its notifications (the answers to console lines). Each hook is set once the
+-- game has loaded its function, on the game thread. Read only.
+local function hook(path, read)
+  local done = false
+  LoopAsync(5000, function()
+    if done then return true end
+    ExecuteInGameThread(function()
+      if done then return end
+      local fn = StaticFindObject(path)
+      if not (fn and fn:IsValid()) then return end
+      RegisterHook(path, function(_, ...)
+        local text = read(...)
+        if text then pcall(panel.answer, text) end
+      end)
+      done = true
+    end)
+    return done
+  end)
+end
+-- A text message is one of the arguments, reading (String="...") in full.
+hook(CFG.answer.hook, function(...)
+  for _, arg in ipairs({ ... }) do
+    local text
+    pcall(function() text = arg:get():ToString():match(CFG.answer.pattern) end)
+    if text then return text end
+  end
+end)
+-- A notification carries a header (the line that was run) and its text (the answer).
+hook(CFG.answer.notify_hook, function(data)
+  local header, text = '', ''
+  pcall(function() header = data:get().HeaderText:ToString() end)
+  pcall(function() text = data:get().Text:ToString() end)
+  if text == '' then return nil end
+  return header ~= '' and (header .. ': ' .. text) or text
+end)

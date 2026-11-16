@@ -84,6 +84,13 @@ return {
   -- launcher's folder, which an uninstall removes. The game's list titled title (its part title_part)
   -- is its command history, shown in that order.
   history = { file = '\\Moonpool\\console-recent.txt', keep = 50, title_part = 'Title', title = 'Command History' },
+  -- A text message for this player (hook: the game's function that hands it over; pattern: a plain
+  -- text message in full, the text captured) or a notification (notify_hook) shows in the hint line
+  -- for seconds.
+  answer = {
+    hook = '/Script/UWEGameplayMessageRuntime.UWEGameplayMessageRouterComponent:ForwardMessageToClientInternal',
+    notify_hook = '/Script/UWENotifications.UWENotificationComponent:ClientNotify',
+    pattern = '^%(String="(.*)"%)$', seconds = 12, text = '{text}' },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
@@ -113,6 +120,7 @@ return {
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
     set_text = '/Script/UMG.TextBlock:SetText',
+    auto_wrap = '/Script/UMG.TextBlock:SetAutoWrapText',
     list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
     row_item = 'Context',               -- what a row stands for: an item's name in the game's data
     tree = 'WidgetTree',                -- where a panel keeps its widgets

@@ -126,7 +126,7 @@ local function trim(w)
   each_part(w, function(widget, part, kind)
     if route.hidden(kind, part, CFG.panel) then parts[#parts + 1] = widget end
     if part == CFG.layout.part then block = widget end
-    if part == CFG.hint.part then hint = widget end
+    if part == CFG.hint.part then hint = widget; ucall(widget, G.auto_wrap, true) end
     if part == CFG.backdrop.part then backdrop = widget end
   end)
   for _, o in ipairs(parts) do ucall(o, G.set_visibility, G.hidden) end
@@ -498,5 +498,21 @@ local function back()
   if #open_rows() > 0 then close_lists(CFG.close.most) else toggle() end
 end
 
+-- A text message the server sends this player (an answer to a line, the game's own "Added 10 Glass")
+-- is also written into the panel's hint line while the panel shows, so the answer is where the line
+-- was typed. The game still shows it as its notification too. Read only, never changed.
+local answered = 0
+local function answer(text)
+  if not shown or type(text) ~= 'string' or text == '' then return end
+  answered = answered + 1
+  local mine = answered
+  say_hint(route.fill(CFG.answer.text, { text = text }))
+  ExecuteWithDelay(CFG.answer.seconds * 1000, function()
+    ExecuteInGameThread(function()
+      if mine == answered and shown then say_hint(seen and seen ~= '' and CFG.hint.listing or CFG.hint.text) end
+    end)
+  end)
+end
+
 return { toggle = toggle, back = back, key = key, nav = nav, run = run, typed = typed, filter = filter,
-  config = CFG, say = say }
+  answer = answer, config = CFG, say = say }
