@@ -261,7 +261,8 @@ local function apply(lists, rows)
   if rows == '' or still < CFG.search.settle_ms then return end
   local now = query .. '|' .. rows
   if now == last then return end
-  local went, showing, all, done, rows_shown = pcall(filter, query, lists)
+  local search = route.count(query)
+  local went, showing, all, done, rows_shown = pcall(filter, search, lists)
   if not went then return end
   if done then last = now end
   mark(visible[chosen], false)
@@ -348,7 +349,21 @@ local function run()
   local name
   if valid(row) then pcall(function() name = row[G.row_item]:ToString() end) end
   local model = name and live(G.list_model)[1]
-  if model then ucall(model, G.pick, name) end
+  if not model then return end
+  -- With a number at the end of the filter, the list's own command is sent with that count;
+  -- otherwise the row is picked as a click picks it.
+  local _, count = route.count(query)
+  local command
+  if count then pcall(function() command = model[G.list_command]:ToString() end) end
+  local counted = count and route.counted(command, name, count)
+  local pc = counted and live(G.controller)[1]
+  if pc then
+    if not pcall(function() pc:ServerCheat(counted) end) then
+      say('failed', { what = G.server_cheat, tries = 1, error = counted })
+    end
+    return
+  end
+  ucall(model, G.pick, name)
 end
 
 -- Closing the panel closes what it opened. The game keeps its pick lists in a stack: closing the top

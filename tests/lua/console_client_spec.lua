@@ -78,5 +78,20 @@ check(cfg.nav.UP_ARROW == -1 and cfg.nav.DOWN_ARROW == 1 and cfg.run_key == 'RET
 check(not route.hidden('VerticalBox', at.part, cfg.panel), 'the block the layout places is not hidden')
 check(#cfg.close.lists >= 1 and cfg.close.most >= 1 and cfg.close.wait_ms >= 0, 'closing names what it closes')
 
+-- A number at the end of a list's filter is how many: the search is the rest.
+local search, count = route.count('glass 10')
+check(search == 'glass' and count == 10, 'glass 10 searches glass and counts 10')
+search, count = route.count('titanium ingot')
+check(search == 'titanium ingot' and count == nil, 'no number, no count')
+search, count = route.count('glass 0')
+check(search == 'glass 0' and count == nil, 'a count of 0 is no count')
+check(route.counted('Item {0} 1', 'DA_Glass_ItemType', 10) == 'Item DA_Glass_ItemType 10',
+  'the list command, with the row and the count')
+check(route.counted('Item {0} 1', 'DA_Glass_ItemType', nil) == 'Item DA_Glass_ItemType 1',
+  'no count keeps the list number')
+check(route.counted('SpawnThing {0}', 'X', 5) == nil, 'a command with no number of its own takes no count')
+check(route.counted('Summon', 'X', 5) == nil, 'a command with no {0} is not built')
+check(route.counted('Item {0} 1', 'A%1B', 2) == 'Item A%1B 2', 'a name with % is put in as written')
+
 if failures > 0 then os.exit(1) end
 print('console client: ok')
