@@ -80,7 +80,7 @@ flowchart LR
   | GitHub | the game container | the pinned UE4SS archive | installing the loader |
   | Valve's CDN | the game container | `SteamSetup.exe` | first start |
   | Microsoft (`aka.ms`) | the game container | the Visual C++ runtime | when `NATIVE_MSVC` asks for it |
-  | GitHub, CurseForge | the game container | the mods you list, and their stars, downloads, dates and authors | publishing mods; stats at most every six hours |
+  | GitHub, CurseForge | the game container | the mods you list, and their stars, downloads, dates and authors | publishing mods; stats at most every six hours, and when the mod list changes |
   | the servers in `DISCORD_BOARD_PEERS` | the game container | their status for the card | a peer is set |
   | the map picture addresses you set | the game container, https only | the pictures behind the map and its still | `WEB_MAP=true` with a picture set |
   | cdnjs.cloudflare.com, cdn.jsdelivr.net | the map viewer's browser | the page's scripts and icon font | the map page is opened |
