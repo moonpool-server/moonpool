@@ -361,7 +361,7 @@ For mentions on important alerts, set `DISCORD_ALERT_ROLE_ID` to an opt-in role'
 
 ## Map
 
-`WEB_MAP=true` adds `/map` and puts the live map on the join page, so the card's Join button opens both. The button stays clickable while the server is down or starting; the page then says so. Anyone with the link can fetch `map.json`, which holds everything the page draws, fogged or not.
+`WEB_MAP=true` adds `/map`, puts the live map on the join page and adds a Map button beside Join on the card. Join stays clickable while the server is down or starting; the page then says so. Anyone with the link can fetch `map.json`, which holds everything the page draws, fogged or not.
 
 | Shows | Leaves out |
 |---|---|

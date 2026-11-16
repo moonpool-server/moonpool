@@ -1728,7 +1728,7 @@ stub_discord() {
   [ "$(jq -r '.flags' <<<"$body")" = 36864 ]
   [ "$(jq -c '.allowed_mentions' <<<"$body")" = '{"parse":[]}' ]
   card=$(jq -c '.components[0]' <<<"$body")
-  head=$(jq -r '.components[0].components[0].content' <<<"$card")
+  head=$(jq -r '.components[0].content' <<<"$card")
   [[ $head == '## 🌊 Deep Blue'$'\n''🟢 **Open** since <t:1700000000:R> · **1** aboard'* ]]
   [[ $card != *"hosted by"* ]]
   [[ $card == *"• Alice"* ]]
