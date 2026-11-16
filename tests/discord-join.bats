@@ -310,6 +310,29 @@ echo 1500
   [[ $(jq -r '.components[1].components[0].content' <<<"$body") == *'All Blue'*'**Offline**'* ]]
 }
 
+@test "a peer's card is rebuilt, never forwarded: no foreign links, buttons or future times" {
+  fake_discord; peer="http://127.0.0.1:$(cat "$FAKE/port")/peer"
+  printf '%s' '{"ts":1700000000,"world":"Evil","container":{"type":17,"accent_color":3066993,"components":[
+    {"type":9,"components":[{"type":10,"content":"## Evil [free gift](https://phish.example/x) https://phish.example/y"}],
+     "accessory":{"type":2,"style":5,"label":"Claim","url":"https://phish.example/claim"}},
+    {"type":1,"components":[{"type":2,"style":5,"label":"Map","url":"'"$peer"'/map"},{"type":2,"style":5,"label":"Bad","url":"https://phish.example/b"}]},
+    {"type":99,"components":[{"type":10,"content":"hidden"}]}]}}' >"$FAKE/peer/card.json"
+  printf '{"ts":1700000000,"world_name":"Midnight Zone","players":[]}' >"$CONTROL_DIR/status.json"
+  body=$(SN2_NOW=1700000100 DISCORD_BOARD_PEERS="$peer/card.json" python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  peer_card=$(jq -c '.components[1]' <<<"$body")
+  [[ $peer_card == *'free gift'* && $peer_card != *'phish.example'* ]]
+  [[ $peer_card != *'hidden'* ]]
+  [ "$(jq -r '[.. | objects | select(.type == 2) | .label] | join(",")' <<<"$peer_card")" = Map ]
+  # A time from the future is not fresh: the panel shows as Offline.
+  sed -i 's/"ts":1700000000/"ts":1800000000/' "$FAKE/peer/card.json"
+  rm -f "$DATA_DIR"/discord/peer-*.json
+  body=$(SN2_NOW=1700000100 DISCORD_BOARD_PEERS="$peer/card.json" python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ $(jq -r '.components[1] | tostring' <<<"$body") == *'**Offline**'* ]]
+  # Plain http to a public address is never read.
+  body=$(SN2_NOW=1700000100 DISCORD_BOARD_PEERS="http://203.0.113.9/card.json" python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [[ $(jq -r '.components[1] | tostring' <<<"$body") == *'**Offline**'* ]]
+}
+
 @test "Discord alerts are silent unless pushes are asked for, and mention the role as a role" {
   fake_discord; map_status
   run env SN2_NOW=1700000000 python3 "$ROOT/scripts/discord-notify.py" --dry-run event restart "maintenance"
