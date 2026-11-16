@@ -209,6 +209,31 @@ local function targets(st, game, who, sender)
   return nil, M.msg(st, 'ambiguous', { query = who, matches = names(found, 8) })
 end
 
+-- A word right after a shortcut that names who it is for, as in "give john titanium 10": a target word
+-- (all, me, host) or the start of exactly one player's name. Nil when the word isn't clearly a player,
+-- so it stays part of the item's name.
+local function player_word(st, game, word, sender)
+  if st.targets[lower(word)] then return targets(st, game, word, sender) end
+  if #word < 2 then return nil end
+  local hit
+  for _, p in ipairs(game.list('players') or {}) do
+    if lower(p.name):sub(1, #word) == lower(word) then
+      if hit then return nil end
+      hit = p.name
+    end
+  end
+  return hit and { hit } or nil
+end
+
+-- How a shortcut is typed, from its arguments: give [player] <item> [count].
+local function usage(st, command)
+  local parts = { command, st.cat.player_arg }
+  for _, a in ipairs(st.cat.commands[command].args or {}) do
+    parts[#parts + 1] = a.default == nil and '<' .. a.name .. '>' or '[' .. a.name .. ']'
+  end
+  return table.concat(parts, ' ')
+end
+
 local function join(tokens, from)
   local out = {}
   for i = from, #tokens do out[#out + 1] = tokens[i].text end
@@ -239,9 +264,10 @@ function M.handle(st, req, game)
     st.last[key] = tokens
   end
 
-  local who = { req.sender.name }
+  local who, aimed = { req.sender.name }, false
   local mark = st.cat.target_mark or '@'
   if tokens[1] and tokens[1].text:sub(1, #mark) == mark then
+    aimed = true
     local t, why = targets(st, game, tokens[1].text:sub(#mark + 1), req.sender)
     if not t then say(why); return out end
     who = t
@@ -323,8 +349,25 @@ function M.handle(st, req, game)
   local lines = {}
   if command then
     local c = st.cat.commands[command]
+    local takes_name = false
+    for _, a in ipairs(c.args or {}) do takes_name = takes_name or a.kind ~= nil end
+    -- The player comes first, as on most game servers: give john titanium 10, heal all. A shortcut
+    -- that takes a name only reads its first word as a player when more words follow it.
+    local from, second = 2, tokens[2]
+    if not aimed and second and not second.quoted and not second.text:match('^%-?%d') then
+      local more = false
+      for i = 3, #tokens do more = more or tokens[i].quoted or not tokens[i].text:match('^%-?%d+%.?%d*$') end
+      if not takes_name then
+        local t, why = targets(st, game, second.text, req.sender)
+        if not t then say(why); return out end
+        who, from = t, 3
+      elseif more then
+        local t = player_word(st, game, second.text, req.sender)
+        if t then who, from = t, 3 end
+      end
+    end
     local values, words, numbers = {}, {}, {}
-    for i = 2, #tokens do  -- the name's words and the number can come in any order, quotes or not
+    for i = from, #tokens do  -- the name's words and the number can come in any order, quotes or not
       local t = tokens[i]
       if not t.quoted and t.text:match('^%-?%d+%.?%d*$') then numbers[#numbers + 1] = t.text
       else words[#words + 1] = t.text end
@@ -338,7 +381,7 @@ function M.handle(st, req, game)
         typed = table.remove(numbers, 1)
       end
       if not typed and a.default == nil then
-        say(M.msg(st, 'missing_arg', { command = command, arg = a.name }))
+        say(M.msg(st, 'missing_arg', { command = command, arg = a.name, usage = usage(st, command) }))
         return out
       end
       if typed and a.kind then

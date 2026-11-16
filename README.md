@@ -115,8 +115,9 @@ List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothi
 | `!help` | lists the orders |
 | `!kick NAME` | removes a player |
 | `!time 12:00`, `!weather DA_Storm` | sets the clock or weather |
-| `!g titanium 10` | gives 10 titanium (names are looked up, a vague one asks) |
-| `!heal`, `!@all heal` | heals you, or everyone |
+| `!give titanium 10` | gives you 10 titanium (names are looked up, a vague one asks) |
+| `!give john titanium 10` | gives them to John; `everyone` gives to all |
+| `!heal`, `!heal john`, `!heal all` | heals you, a player, or everyone |
 | `!who` | who's on, with their ping |
 
 - Any word that isn't one of the fixed orders goes to the [admin console](docs/admin.md#the-admin-console-mp), so anything the game's console can do works too. That part needs [console commands](docs/admin.md#console-commands) turned on.

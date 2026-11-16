@@ -122,7 +122,12 @@ function M.run(state, sender, text, g)
     return line_reply(true, data.lines)
   end
   if cmd == 'help' then
-    return reply(true, 'cmd kick ping slots time weather' .. (state.console_word and '; else console' or ''))
+    if not state.console_word then return reply(true, 'cmd kick ping slots time weather') end
+    -- The fixed orders, then the console's own help: the rest of the words an admin can use.
+    local ok, data = g.call('mp', { sender = sender, line = 'help' })
+    local lines = { 'kick time weather slots ping cmd' }
+    for _, l in ipairs(ok and data.lines or {}) do lines[#lines + 1] = l end
+    return line_reply(true, lines)
   end
   if cmd == 'cmd' then
     -- The game's own console, run on the host as this admin: the same door and the same

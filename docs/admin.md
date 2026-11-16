@@ -45,23 +45,27 @@ Nothing to install: rename any PDA signal to a command.
 
 ## The admin console (`!mp`)
 
-`!mp` takes any console line, plus shortcuts and name lookups. The `mp` can be left out unless the line starts with one of the fixed orders above (`!help`, `!time`...):
+`!mp` takes any console line, plus shortcuts and name lookups. The `mp` can be left out unless the line starts with one of the fixed orders above (`!help`, `!time`...). A shortcut takes the player first, as on most game servers:
 
-```
-!mp g copper wire 10      Give the item with that exact name, 10 of it
-!mp g 10 titanium ingot   the name's words and the number in any order, no quotes needed
-!mp g cop                 an unclear name asks: cop? 1 Copper  2 Copper Ingot  3 Copper Wire
-!mp 2                     ...and a bare number answers it
-!mp h                     heal, then oxygen, food and water to 100
-!mp @john h               heal the player whose name matches john; @all and @host work too
-!mp f titan               find items, players and tags by name, with their ids
-!mp l items cop           list one kind, filtered
-!mp l commands            the game's console commands, once the host is in the world
-!mp c                     which cheat tags named in console.json are on
-!mp w                     who is on, with their Epic ID and ping
-!mp SomeConsoleCommand 3  any other line goes to the game as typed
-!mp .                     the last line again
-```
+| Signal | Does |
+|---|---|
+| `!give copper wire 10` | gives you the item with that name, 10 of it; `g` is short for `give` |
+| `!give john copper 5` | gives it to the player whose name starts with john |
+| `!give everyone copper` | gives it to every player (`all` and `*` work too) |
+| `!give 10 titanium ingot` | the name's words and the number in any order, no quotes needed |
+| `!give cop` | an unclear name asks: `cop? 1 Copper  2 Copper Ingot  3 Copper Wire` |
+| `!2` | ...and a bare number answers it |
+| `!heal`, `!heal john`, `!heal all` | health, oxygen, food and water to 100 for you, a player, or everyone; `h` is short |
+| `!@john LINE` | any line, run as that player (`@all`, `@host`, `@me`) |
+| `!find titan` | items, players and tags by name, with their ids (`f`) |
+| `!ls items cop` | one kind, filtered (`l`); `!ls commands` lists the game's console commands |
+| `!cheats` | which cheat tags named in `console.json` are on (`c`) |
+| `!who` | who is on, with their Epic ID and ping (`w`) |
+| `!SomeConsoleCommand 3` | any other line goes to the game as typed |
+| `!.` | the last line again |
+
+- A word after `give` counts as a player only when it starts exactly one player's name and the item's name follows it. Otherwise it's part of the item: `!give titanium ingot` gives the ingot even with a player called Titan on. `@` always means a player.
+- A shortcut with a missing part answers with how it's typed: `use: give [player] <item> [count]`.
 
 Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFreeHost/console.json`). To change them, put a file with only your changed keys in the data volume and recreate the host:
 
