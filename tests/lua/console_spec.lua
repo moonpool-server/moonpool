@@ -253,5 +253,15 @@ check(merged.commands.full and merged.commands.give ~= nil, 'a host command is a
 merged = console.merge(json.decode(json.encode(catalog)), json.decode('{"deny": ["Foo"]}'))
 check(#merged.deny == 1 and merged.deny[1] == 'Foo', 'a host deny list replaces the shipped one')
 
+local function typed(text) return console.forwarded(console.new(catalog), { sender = me, text = text }, game) end
+local wipes = { 'DestroyAll Actor', 'DestroyAllActorsOfClass X', 'DestroyAllPawnsExceptTarget', 'DestroyPawns' }
+for _, line in ipairs(wipes) do
+  check(#run(line).runs == 0 and #typed(line).runs == 0, 'a cheat that wipes the world is refused: ' .. line)
+end
+check(#typed('DestroyTarget').runs == 1, 'removing the one thing an admin looks at is allowed')
+local ran = run('give johnny copper 5')
+check(ran.ran == true and #ran.runs == 1, 'a line that only ran says so, so the host can skip the card')
+check(not run('who').ran and not run('give').ran, 'an answer or a usage reply is not a plain run')
+
 if failures > 0 then os.exit(1) end
 print('console: ok')
