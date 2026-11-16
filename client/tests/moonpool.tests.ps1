@@ -762,6 +762,18 @@ try {
     Write-Manifest $wh @($fooMod)
     $r = Invoke-Join $wh
     Check ($r.Code -ne 0 -and $r.Out -match "could not download Foo2\.zip for Foo: 127\.0\.0\.1 sent more than the $($foo2.Length) bytes the server's list gives" -and $null -eq $r.Launched) "an archive longer than the list's size is stopped at that size (got: $($r.Out.Trim()))"
+    # Save-Url on its own, taken from the launcher, for what a run can't show.
+    $parsed = [Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
+    foreach ($f in $parsed.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in @('Save-Url', 'Use-Tls12') }, $true)) {
+      . ([ScriptBlock]::Create($f.Extent.Text))
+    }
+    $dest = Join-Path $wh.Root 'saved.bin'
+    Set-Content -LiteralPath $dest -Value 'old'
+    $why = try { Save-Url "$web/missing" $dest 1MB; '' } catch { $_.Exception.Message }
+    Check ($why -and -not (Test-Path -LiteralPath $dest)) "a download that fails before its body leaves no file behind (got: $why)"
+    Set-Content -LiteralPath $dest -Value 'old'
+    $why = try { Save-Url "$web/r3/moonpool.json" $dest 1MB -Minutes 0; '' } catch { $_.Exception.Message }
+    Check ($why -match 'took more than 0 minutes' -and -not (Test-Path -LiteralPath $dest)) "the time limit is checked before a request is sent (got: $why)"
   } finally {
     $tcp.Stop()
     [void]$webServer.EndInvoke($webHandle)
