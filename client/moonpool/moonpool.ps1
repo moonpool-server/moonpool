@@ -28,6 +28,8 @@ param(
   # Optional mods to leave out (remembered per server), and ones to take back.
   [string[]]$Skip = @(),
   [string[]]$Keep = @(),
+  # Show the server's mods with their boxes even when nothing changed (Change mods, and its shortcut).
+  [switch]$Choose,
   # Let the server's copy replace a mod or loader already installed another way. Yours is
   # replaced, not kept: nothing puts it back later.
   [switch]$Adopt,
@@ -101,6 +103,7 @@ function Say([string]$Message) {
 # launcher is one signed file. A test or console run has none.
 $script:Ui = $null
 $script:UiCancelled = $false
+$script:UiChoose = $false
 $script:UiInstalling = $false
 $script:UiClosed = $false
 $script:UiAnswer = $null
@@ -218,7 +221,12 @@ function Open-Window {
     $primary = New-UiButton 'OK' $true 378
     $primary.Visible = $false
     $secondary = New-UiButton 'Cancel' $false 378
-    $form.Controls.AddRange(@($head, $heading, $detail, $bar, $pane, $primary, $secondary))
+    $change = New-UiButton 'Change mods' $false 206
+    $form.Controls.AddRange(@($head, $heading, $detail, $bar, $pane, $primary, $secondary, $change))
+    # Change mods stops this run like Cancel and starts one that shows the mods with their boxes.
+    $change.add_Click({
+      if (-not $script:UiInstalling) { $script:UiChoose = $true; $script:Ui.Heading.Text = 'Opening the mod list'; $script:Ui.Change.Enabled = $false }
+    })
     $primary.add_Click({ $script:UiAnswer = $true })
     $secondary.add_Click({
       if ($script:UiMode -eq 'ask') { $script:UiAnswer = $false }
@@ -234,7 +242,7 @@ function Open-Window {
     $form.Show()
     $form.Activate()
     [Windows.Forms.Application]::DoEvents()
-    $script:Ui = @{ Form = $form; Sub = $sub; Heading = $heading; Detail = $detail; Bar = $bar; Fill = $fill; Timer = $timer; Pane = $pane; Box = $box; Primary = $primary; Secondary = $secondary }
+    $script:Ui = @{ Form = $form; Sub = $sub; Heading = $heading; Detail = $detail; Bar = $bar; Fill = $fill; Timer = $timer; Pane = $pane; Box = $box; Primary = $primary; Secondary = $secondary; Change = $change }
     $timer.Start()
   } catch { $script:Ui = $null }
 }
@@ -250,6 +258,7 @@ function Set-UiMode([string]$Mode, [string]$Text = '') {
   $ui.Primary.Visible = -not $working
   $ui.Secondary.Visible = $Mode -ne 'notice'
   $ui.Secondary.Enabled = $true
+  $ui.Change.Visible = $working -and -not $Choose
   $height = 320
   if (-not $working) {
     $ui.Box.Text = $Text -replace "`r?`n", "`r`n"
@@ -266,6 +275,7 @@ function Set-UiMode([string]$Mode, [string]$Text = '') {
   $ui.Form.ClientSize = New-Object Drawing.Size 560, $height
   $y = $height - 58
   $ui.Primary.Location = New-Object Drawing.Point 378, $y
+  $ui.Change.Location = New-Object Drawing.Point 206, $y
   if ($working) { $ui.Secondary.Text = 'Cancel'; $ui.Secondary.Location = New-Object Drawing.Point 378, $y }
   else { $ui.Secondary.Location = New-Object Drawing.Point 206, $y }
 }
@@ -277,6 +287,13 @@ function Set-UiServer([string]$Name) {
 # Percent is 0-100; below 0 the bar just moves, for a step with no known length.
 function Set-Status([string]$Text, [int]$Percent = -1) {
   if (-not $script:Ui) { return }
+  if ($script:UiChoose) {
+    $script:UiChoose = $false
+    $run = Get-HiddenRun
+    Close-Window
+    Start-Process $run.Exe -ArgumentList "$($run.Prefix)-NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -Server `"$Server`" -Choose"
+    Fail 'reopening with the mod list; nothing changed' 3
+  }
   if ($script:UiCancelled) {
     $script:UiCancelled = $false
     Close-Window
@@ -284,6 +301,7 @@ function Set-Status([string]$Text, [int]$Percent = -1) {
   }
   if ($Text) { $script:Ui.Heading.Text = $Text }
   $script:Ui.Secondary.Enabled = -not $script:UiInstalling
+  $script:Ui.Change.Enabled = -not $script:UiInstalling -and -not $script:UiChoose
   if ($Percent -ge 0) {
     $script:Ui.Timer.Stop()
     $script:Ui.Fill.Left = 0
@@ -752,9 +770,11 @@ function Install-ServerShortcuts($Config, [string]$ServerId, [string]$Game = '')
   foreach ($folder in $folders) {
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     $links = @{ "Subnautica 2 ($server)" = "-Server $ServerId" }
-    if ($folder -eq $folders[0]) {
+    # The Desktop gets the server's shortcut only; the Start menu also gets the tools.
+    if ($folder -eq $folders[-1]) {
       $links['Subnautica 2 (without Moonpool mods)'] = '-DisableMoonpoolMods'
       $links['Subnautica 2 (collect logs for the host)'] = '-CollectLogs'
+      $links["Subnautica 2 ($server, choose mods)"] = "-Server $ServerId -Choose"
     }
     foreach ($name in $links.Keys) {
       $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $folder "$name.lnk"))
@@ -905,7 +925,9 @@ function Switch-MoonpoolMods([bool]$On) {
 function Enter-Lock {
   $name = 'Global\moonpool-launcher-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $lock = New-Object Threading.Mutex($false, $name)
-  try { $held = $lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $held = $true }
+  # A run started by Change mods waits a little for the run it replaces to finish closing.
+  $wait = 0; if ($Choose) { $wait = 15000 }
+  try { $held = $lock.WaitOne($wait) } catch [Threading.AbandonedMutexException] { $held = $true }
   if (-not $held) {
     # A second click on the link while the first launcher's window is up: that window comes forward and no second one opens.
     $first = Get-Process -Name powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID -and $_.MainWindowTitle -eq 'Moonpool' } | Select-Object -First 1
@@ -1517,7 +1539,7 @@ function Invoke-Join {
     $optionalNames = @($all | Where-Object { -not $_.Required } | ForEach-Object { $_.Name })
     $seen = @(Get-Prop (Read-Json $choicesPath $null) 'seen' @())
     $unseen = @($optionalNames | Where-Object { $seen -notcontains $_ })
-    if (($unanswered.Count -gt 0 -or $unseen.Count -gt 0) -and $optionalNames.Count -gt 0) {
+    if (($Choose -or $unanswered.Count -gt 0 -or $unseen.Count -gt 0) -and $optionalNames.Count -gt 0) {
       $skipped = Show-ModPicker $all $skipped $cfg $serverId (Get-Prop $manifest 'ue4ss' $null)
       Write-Json $choicesPath ([ordered]@{ skipped = @($skipped); seen = @($optionalNames) })
       $wanted = Get-WantedMods $manifest $skipped
@@ -1732,6 +1754,7 @@ function Invoke-Join {
   Write-Host "moonpool: starting the game through $url"
   $script:UiInstalling = $false
   Set-Status 'Starting Subnautica 2 through Steam' 100
+  if ($script:Ui) { $script:Ui.Change.Visible = $false }
   if ($Launch) { & $Launch $url } else { Start-Process $url }
   # Steam gives back no process, so the game is watched for by name.
   $deadline = [DateTime]::UtcNow.AddSeconds($StartWait)

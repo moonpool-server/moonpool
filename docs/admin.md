@@ -129,7 +129,8 @@ The game runs a cheat line from any client without checking who sent it. It has 
 - The server makes no Host call until both gate hooks are in place, and doesn't host at all if the part of the mod that holds them fails to load. The log says `HOLD: the cheat gate is not in place`. `CHEAT_GATE=off` hosts without it ([diagnostic switches](operating.md#diagnostic-switches)).
 - `deny` reads the first word of a one-command line, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
 
-- A line starting with `signal_word` (`mp`) is a console line: `mp g copper 10` equals `!mp g copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
+- A line starting with `signal_word` (`mp`) is a console line: `mp g copper 10` equals `!g copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
+- A typed shortcut needs no `mp`: `give 10 glass`, `heal all` and `!give john copper 5` get the same name lookup. A line that already names exact ids, as the panel's own picks do (`Give DA_Glass_ItemType 10`), runs as it is.
 - A line for a player whose character isn't in the world yet is skipped.
 
 Not yet tested with a second player:

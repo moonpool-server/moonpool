@@ -195,10 +195,30 @@ end
 -- A line that reached the host through the game's own cheat call. One that starts with the console's
 -- word (signal_word) is a console line: everything after the word is handled like any other. Any
 -- other line is the game's own and runs as it is.
+-- Whether a line names one of a shortcut's values by its exact id, as a line the game's own screens
+-- wrote does (Give DA_Glass_ItemType 10).
+local function names_ids(st, game, command, rest)
+  for _, a in ipairs(st.cat.commands[command].args or {}) do
+    if a.kind then
+      local ids = {}
+      for _, e in ipairs(game.list(a.kind) or {}) do ids[e.id] = true end
+      for word in rest:gmatch('%S+') do if ids[word] then return true end end
+    end
+  end
+  return false
+end
+
 function M.forwarded(st, req, game)
   local word, rest = tostring(req.text or ''):match('^%s*(%S+)%s*(.*)$')
   if word and st.cat.signal_word and lower(word) == lower(st.cat.signal_word) then
-    return M.handle(st, { sender = req.sender, text = rest }, game)
+    return M.handle(st, { sender = req.sender, text = (rest:gsub('^!', '')) }, game)
+  end
+  -- A typed shortcut (give 10 glass, !heal all) gets the console's name lookup; a line that already
+  -- names exact ids runs as it is.
+  local bare = word and lower(word):gsub('^!', '')
+  local command = bare and st.commands[bare]
+  if command and not names_ids(st, game, command, rest) then
+    return M.handle(st, { sender = req.sender, text = bare .. ' ' .. rest }, game)
   end
   return M.exact(st, req)
 end
