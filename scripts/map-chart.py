@@ -37,6 +37,9 @@ KEEP_S = 3600  # how long a player's last spot stays, faded, after they leave
 CELL_M = 50  # one square cleared from the fog
 UU_PER_M = 100  # the game's units are centimetres
 STALE_S = 180
+ORIGIN_UU = 200  # a reading this close to the world's origin is a player without a body
+ROUTE_GAP_S = 150  # two readings further apart than this are not joined
+ROUTE_MAX_M_PER_S = 30  # faster than any vehicle: a teleport, not a route
 
 
 def write_json(path, value):
@@ -86,9 +89,32 @@ def record(chart, status, host, now):
             continue
         if not (number(row.get("x")) and number(row.get("y"))):
             continue
+        if abs(row["x"]) < ORIGIN_UU and abs(row["y"]) < ORIGIN_UU:  # no body yet (loading, respawning): not a place
+            continue
         depth = round(row["depth_m"]) if number(row.get("depth_m")) else 0
-        divers.setdefault(row["name"], []).append([now, round(row["x"] / UU_PER_M), round(row["y"] / UU_PER_M), depth])
-        cells.setdefault("%d,%d" % (row["x"] // (CELL_M * UU_PER_M), row["y"] // (CELL_M * UU_PER_M)), {"t": now})
+        x, y = row["x"] / UU_PER_M, row["y"] / UU_PER_M
+        samples = divers.setdefault(row["name"], [])
+        for cx, cy in route(samples[-1] if samples else None, now, x, y):
+            cells.setdefault("%d,%d" % (cx, cy), {"t": now})
+        samples.append([now, round(x), round(y), depth])
+
+
+def route(last, now, x, y):
+    """The squares between a player's last recorded spot and this one, both ends included. Positions are
+    read about once a minute, so a swimmer or a vehicle crosses many squares in between. Only a short,
+    plausible step is filled in: after a long gap or a jump further than any vehicle goes in that time,
+    only the new square counts."""
+    end = (math.floor(x / CELL_M), math.floor(y / CELL_M))
+    if not last or not 0 < now - last[0] <= ROUTE_GAP_S:
+        return [end]
+    dx, dy = x - last[1], y - last[2]
+    dist = math.hypot(dx, dy)
+    if dist > ROUTE_MAX_M_PER_S * (now - last[0]):
+        return [end]
+    steps = max(1, math.ceil(dist / (CELL_M / 4)))
+    out = {(math.floor((last[1] + dx * i / steps) / CELL_M), math.floor((last[2] + dy * i / steps) / CELL_M)) for i in range(steps + 1)}
+    out.add(end)
+    return sorted(out)
 
 
 def background(status, env, data, public):
