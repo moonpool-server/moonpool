@@ -4,11 +4,11 @@ Keeps your Subnautica 2 world online so friends can play when you can't.
 
 Moonpool runs the real game under Wine in Docker, on a spare PC or a server, signed in to a Steam account of its own. No GPU needed.
 
-Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. No game files in this repo, and nothing here is for sale.
+Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. No game files in this repo, and nothing here is for sale. Running it likely breaks the game's and Steam's terms: see [Risk](#risk) before you start.
 
-![The join page of a demo server: the branch and build, Play with mods, the server's mods with their summaries, and the live map beside them](docs/images/join-page.png)
+![A demo server's join page: Play with mods, the mod list and the live map](docs/images/join-page.png)
 
-![The map page of the same demo over a made-up cartoon chart (islands, a rubber duck, a sea serpent), with the fog switched off: two players where they were 15 minutes ago, the lifepod and two PDA signals, and the panel listing them](docs/images/map.png)
+![The demo's map over a made-up cartoon chart, fog off: two players, the lifepod and two signals](docs/images/map.png)
 
 ## For your friends
 
@@ -16,8 +16,8 @@ They add the hosting account as a Steam friend and press Join Game, or open the 
 
 ## What you need
 
-- Docker Engine 26 and Compose 2.25 or newer, on Linux or Docker Desktop. On Windows, `bin/moonpool` runs from PowerShell with Python 3.8+ installed as `python`; `bin/moonpool-instance` and the shell commands below need Docker Desktop's WSL shell.
-- For 4 players: about 4 cores, 8 GB of memory and 40 GB of SSD. Four is the game's limit and the default (`PLAYER_SLOTS` raises it; less tested).
+- Docker Engine 26 and Compose 2.25 or newer, on Linux or Docker Desktop. On Windows, run the shell commands below in Docker Desktop's WSL shell.
+- For 4 players: about 4 cores, 8 GB of memory and 40 GB of SSD. Four is the game's own limit; `PLAYER_SLOTS` allows more, but that's rarely tested.
 - A Steam account that owns the game and is used only for hosting. Signing it in anywhere else logs the host out.
 - Friends need their own copy on Steam. Xbox and Game Pass joining is experimental ([guide](docs/operating.md#xbox-and-game-pass-players)).
 
@@ -32,12 +32,22 @@ docker compose up -d --build
 ```
 
 1. Open `http://127.0.0.1:8080/vnc.html` and sign in to Steam once. `bin/moonpool diag viewer` shows the password. From another machine: `ssh -L 8080:127.0.0.1:8080 you@server`.
-2. Wait for the game to download and the world to load (`docker compose logs -f sn2`). Accept any licence prompt yourself in the viewer; Moonpool only clicks Steam's install and location prompts.
-3. `bin/moonpool status` says when it's hosting. `docker compose ps` showing healthy only means Steam and the game are running.
-4. Invite each friend: `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request; accept it in the viewer, or set `AUTO_ACCEPT_FRIENDS=1` to have invited players accepted within a minute.
+2. Wait for the game to download and the world to load (`docker compose logs -f sn2`). Accept any licence prompt yourself in the viewer.
+3. `bin/moonpool status` says when it's hosting. Never run `docker compose down -v`: it deletes the world and the Steam sign-in.
+4. Invite each friend: `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request; accept it in the viewer, or set `AUTO_ACCEPT_FRIENDS=1`.
 5. Friends press Join Game, or open `http://<server>:8081/join`.
 
 Anyone already friends with the hosting account can join too. `ALLOWLIST_ONLY=false` lets in anyone who finds it.
+
+## Gameplay defaults
+
+The default `PRESET=friends` turns on, among others:
+
+- **Shared unlocks.** Each joining player gets the base pieces, tools and scanned blueprints the host has unlocked, so nobody repeats the early game.
+- **Story start.** The first lifepod goals complete once a real player arrives, so lifepods launch on a fresh world.
+- **Empty server.** After 10 minutes with nobody in, the in-game clock stops until the next join.
+
+`PRESET=stock` turns these and the preset's other changes off. Each can also be set on its own in [.env.example](.env.example).
 
 ## Bring your world
 
@@ -46,7 +56,7 @@ bin/moonpool server import SaveGames.zip   # a world from the PC that hosted it
 bin/moonpool server export                 # a zip of the hosted world
 ```
 
-Import puts the old world back if the game can't load the new one. The [guide](docs/operating.md#bring-your-world) says where saves are and which builds load them.
+If the game can't load an imported world, the old one is put back. The [guide](docs/operating.md#bring-your-world) says where saves are and which builds load them.
 
 ## Mods
 
@@ -55,53 +65,30 @@ cp plugins.example.yaml plugins.yaml   # list each mod with its download link
 bin/moonpool mods publish plugins.yaml
 ```
 
-The join page then offers Play with mods. Players install the launcher once, from [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd). Before installing anything new it shows each mod and the site it comes from, and asks. Each download is checked against the hash in the server's signed mod list, and placed files are checked again on later runs.
+The join page then offers Play with mods. Players install the launcher once, from [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd). It shows each new mod and the site it comes from and asks before installing, checks every download against the server's signed mod list, and turns the mods off when the game closes. If the launcher is killed mid-game, they stay on until its next run or the "Subnautica 2 (without Moonpool mods)" shortcut.
 
-![The launcher asking which of the demo server's mods to install, each with the site it downloads from, and the UE4SS loader they need](docs/images/launcher-install.png)
+![The launcher asking which of the demo's mods to install, with the site each comes from](docs/images/launcher-install.png)
 
-- Mods are on only while the game the launcher started is running. A normal Steam launch loads none.
-- If the launcher is killed mid-game, they stay on until its next run or the "Subnautica 2 (without Moonpool mods)" shortcut.
-- The player's own mods are left alone. Exceptions: a `UE4SS_Signatures` folder the server didn't send is moved aside while Moonpool's mods are on, and a loader installed another way is replaced only after asking, with a copy in `%LOCALAPPDATA%\Moonpool-replaced`.
-- For the session it adds two settings to the game's `Engine.ini`, removed when the game closes; a value the player set is kept. `r.ShaderPipelineCache.BackgroundBatchSize=100` cut the wait before joining from about 3 minutes to 7 seconds on a test PC. `ConfiguredInternetSpeed` and `ConfiguredLanSpeed=300000` cut loading from 30 s to 15 s.
-- Xbox and Game Pass players join without mods.
-
-Mods run with the player's Windows rights and nobody here reviews them. Accept mods only from a host you trust. A new signing key at the same address counts as a new server.
-
-Uninstall (close the game first; the [guide](docs/operating.md#mods) lists what it removes):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps1" -Uninstall
-```
-
-### Checking the launcher
-
-Setup and every update check the launcher's signature against a release key that isn't on GitHub. Neither the launcher nor the setup file has Windows code signing, so Windows may warn. Both carry a GitHub build attestation:
-
-```sh
-gh attestation verify moonpool-setup.cmd -R moonpool-server/moonpool
-gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-workflow moonpool-server/moonpool/.github/workflows/ci.yml
-```
-
-Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-setup.cmd` against it. Setup runs PowerShell with `-ExecutionPolicy Bypass`, a PowerShell script setting that doesn't touch Defender. Never turn Defender or SmartScreen off for it.
+Mods run with the player's Windows rights, and Moonpool doesn't review them. Accept mods only from a host you trust. How the launcher is trusted, and how to check it yourself: [SECURITY.md](SECURITY.md). What it changes on a player's PC and how to uninstall: the [guide](docs/operating.md#mods).
 
 ## What's exposed
 
-- **Port 8081** (`SN2_MODS_PORT`): the join page and the signed mod list, on every interface by default. It shows the host account's Steam ID and the lobby ID. `MODS_BIND=127.0.0.1` closes it when you use the tunnel. `PUBLISH_CARD=true` adds `/card.json` with the Discord card's contents, player names included.
-- **The first mod download.** The launcher saves the server's signing key on first contact and holds later lists to it. Plain http is allowed only on a private network; elsewhere use the tunnel or HTTPS.
-- **The map** (`WEB_MAP=true`): anyone with the link sees where each player was 15 minutes ago and the PDA signals everyone in game can see. Players show as "Player 1" etc. unless `MAP_PLAYER_NAMES=true`.
-- **The viewer on 8080** controls the signed-in Steam client. It listens on this machine only unless `VIEWER_BIND` is set, and always has a password. Reach it with Tailscale or `ssh -L`, never a forwarded port.
-- **The volumes** hold the hosting account's Steam session and the key that signs your mod list. Moonpool reads that session to look up the lobby ID, and to accept friend requests when `AUTO_ACCEPT_FRIENDS=1`. Keep the volumes and your backups private.
+- **Port 8081**, public by default: the join page, the signed mod list and mod files, and the map when it's on. It shows the host account's Steam ID and the lobby ID; `PUBLISH_CARD=true` adds the Discord card with player names. `MODS_BIND=127.0.0.1` closes it when you use the tunnel.
+- **The map** (`WEB_MAP=true`), to anyone with the link: where each player was 15 minutes ago, unnamed unless `MAP_PLAYER_NAMES=true`.
+- **The viewer on 8080** controls the signed-in Steam client. It listens on this machine only and has a password. Reach it with Tailscale or `ssh -L`, never a forwarded port.
+- **The volumes** hold the hosting account's Steam session and your mod-list signing key. Keep them and your backups private.
+
+The rest is in [SECURITY.md](SECURITY.md).
 
 ## Features
 
 - Hosts by itself and comes back after a restart
-- Several worlds on one machine (`bin/moonpool-instance add`)
-- Admin from the shell (`bin/moonpool`) and in game (name a PDA signal `!help`)
-- One-command restore from backups
-- A Discord card with who's on and a Join button
-- An optional map of where everyone was a few minutes ago, over a map picture you choose ([guide](docs/operating.md#map))
-- An idle mode (friends preset): the clock stops and the frame rate drops while nobody is on
-- Your own wording for the join page, map page and card
+- In-game admin for the players you list, and `bin/moonpool` from the shell
+- Backups with a one-command restore
+- Several worlds on one machine
+- A Discord card with who's on, and Join and Map buttons
+- A map of where everyone was a few minutes ago, over a map picture you choose ([guide](docs/operating.md#map))
+- An empty server goes quiet: no saves, and with the friends preset a lower frame rate and a stopped clock
 
 ## Tested builds
 
@@ -115,29 +102,14 @@ Tested by hand with real players over the internet. CI runs Moonpool's own tests
 
 A game update can stop hosting; the host reports it and the [guide](docs/operating.md#updates) says what to do. Tried another build? Open an issue.
 
+## Risk
+
+The game's EULA and Steam's Subscriber Agreement bar modifying the game and running it with unauthorized bots or scripts. Moonpool loads a mod and automates hosting, so using it appears to break both. Unknown Worlds, KRAFTON and Valve haven't consented. The hosting account could lose the game or face action on Steam: host on an account you can afford to lose. Details: [docs/legal.md](docs/legal.md).
+
 ## More
 
-- [Running Moonpool](docs/operating.md): sizing, mods, backups, troubleshooting.
-- Settings: [.env.example](.env.example). Commands: `bin/moonpool help`.
-
-## Questions and security
+- [Running Moonpool](docs/operating.md): sizing, mods, admin, backups, troubleshooting. Settings: [.env.example](.env.example). Commands: `bin/moonpool help`.
+- [CONTRIBUTING.md](CONTRIBUTING.md). `pre-commit run --all-files` runs the CI checks. Don't commit game files, Steam sessions, logs or anything generated from the game.
+- MIT licensed: this code only, not Subnautica 2 or Steam.
 
 Contact: [issues](https://github.com/moonpool-server/moonpool/issues) for questions, [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) for security problems. Rights holders wanting a takedown can open an issue asking for a private contact.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). `pre-commit run --all-files` runs the CI checks. Don't commit game files, Steam sessions, logs or anything generated from the game.
-
-## Legal and risk
-
-Moonpool's code is MIT licensed. That covers this code only, not Subnautica 2 or Steam. Not legal advice.
-
-- The [Subnautica 2 EULA](https://store.steampowered.com/eula/1962700_eula_0) limits the game to personal, non-commercial use and bars modifying it or using it with unauthorized software, bots or scripts; breaking it can end your licence. Moonpool loads a mod and automates hosting, so running it appears to conflict with those terms.
-- The [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/) section 2.G restricts modifying Steam content and hosting through emulation, tunneling or added components without Valve's written consent; 4.B restricts tampering with how Steam content runs; 4.C restricts scripts and bots that interact with it.
-- Unknown Worlds, KRAFTON and Valve haven't consented to this project, and Unknown Worlds doesn't officially support mods yet. The hosting account could lose the game or face action on Steam. Host on an account you can afford to lose; that limits the loss, it doesn't make the use permitted.
-
-Moonpool ships no game files, no data taken from them and none of the game's art; its code names game objects so it can call them. Its own commands don't spawn items or move players. The default `friends` preset runs the game's `Unlock` command as each joining player so everyone shares the host's unlocks (`PRESET=stock` turns it off). In-game admins can run other console commands only if you enable it. Layout files a host puts in `ue4ss-client/` are measured from the game and served to anyone who can reach its join page ([guide](docs/operating.md)).
-
-If something breaks, test the game without mods before reporting to Unknown Worlds; report Moonpool problems here. If Unknown Worlds or KRAFTON ask us to change or stop something, we will. If an official dedicated server covers this, we'll point people to it.
-
-Please don't sell hosting or share or rent accounts.

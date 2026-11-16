@@ -4,6 +4,17 @@ Report security problems privately at https://github.com/moonpool-server/moonpoo
 
 Fixes go into the next release; older releases get none. One person reads these: expect days, not hours, and no promised date.
 
+## Checking the launcher yourself
+
+Setup and every update check the launcher's signature against the release key, which isn't on GitHub. Neither file has Windows code signing, so Windows may warn. Both carry a GitHub build attestation:
+
+```sh
+gh attestation verify moonpool-setup.cmd -R moonpool-server/moonpool
+gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-workflow moonpool-server/moonpool/.github/workflows/ci.yml
+```
+
+Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-setup.cmd` against it. Setup runs PowerShell with `-ExecutionPolicy Bypass`, a PowerShell script setting that doesn't touch Defender. Never turn Defender or SmartScreen off for it.
+
 ## What to expect from it
 
 - **How a player's launcher is trusted.**
@@ -31,6 +42,8 @@ Fixes go into the next release; older releases get none. One person reads these:
 - **Backups.** The backup container runs as its upstream image's default user, root. It sees the save staging folder read-only and the backups folder, reads `backup.env` and only the `BACKUP_*` values compose passes it (never `.env` as a whole), and gets no Steam session.
 - **The map** (`WEB_MAP=true`) is public data: `map.json` holds everything the page draws. The fog is a view, not a lock. `MAP_PLAYERS=false` leaves out players and where anyone has been; `MAP_SIGNALS=false` leaves out the PDA signals everyone in game can see.
 - **What listens.** The viewer (8080) listens on this machine only unless `VIEWER_BIND` says otherwise, and always has a password. Port 8081 is public on purpose: it serves one folder of static files (the join page, the signed mod list, the mod files and, when on, the map and the card) and runs no code for a request.
+- **What 8081 shows.** The join page shows the host account's Steam ID and the lobby ID. `PUBLISH_CARD=true` adds `/card.json` with the Discord card's contents, player names included.
+- **The first mod download.** The launcher saves the server's signing key on first contact and holds later lists to it, so the first connection is trusted on first use. Plain http is allowed only on a private network; elsewhere use the tunnel or HTTPS.
 - **The Steam web session.** `scripts/friend-accept.py` reads two cookies, `sessionid` and `steamLoginSecure`, from the Steam client's cookie store in the volume and sends them only to `steamcommunity.com`, fixed in the code. The web API token that session hands out goes only to `api.steampowered.com`. Without `AUTO_ACCEPT_FRIENDS=1` it only reads (the lobby id and the count of waiting friend requests); with it, it also accepts invited players and removes banned ones. It never prints a cookie.
 - **Who it talks to.** Moonpool's own code sends nothing to its maintainers. It can't speak for Steam, the game, UE4SS or the mods you add.
 

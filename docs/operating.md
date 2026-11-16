@@ -96,6 +96,12 @@ bin/moonpool mods list
 - `.pak` mods need `kind: pak`. Optional mods are ticked unless `default: false`.
 - The join page shows `summary`, or the project's own description from GitHub or CurseForge, plus stars or downloads, last update and author. These are read at most every six hours (`MOD_STATS_MAX_AGE` seconds); the last numbers stay if a read fails. CurseForge needs the key. GitHub allows 60 unauthenticated reads an hour; `GITHUB_TOKEN` in `.env` is used if set.
 
+What the launcher changes on a player's PC while mods are on:
+
+- The player's own mods are left alone, except a `UE4SS_Signatures` folder the server didn't send, which is moved aside and put back when Moonpool's mods go off.
+- A mod loader installed another way is replaced only after asking, with a copy in `%LOCALAPPDATA%\Moonpool-replaced`.
+- Two settings go into the game's `Engine.ini` for the session and come out when the game closes; a value the player set is kept. `r.ShaderPipelineCache.BackgroundBatchSize=100` cut the wait before joining from about 3 minutes to 7 seconds on one test PC. `ConfiguredInternetSpeed` and `ConfiguredLanSpeed=300000` cut loading from 30 s to 15 s on the same PC.
+
 In the launcher, mandatory mods are ticked and locked. Choices are remembered per server and asked again, with changes marked, when a mod is added or changes. Mods are on only until Subnautica 2 closes; if the launcher is killed mid-game, its next run or the Subnautica 2 (without Moonpool mods) shortcut turns them off. Steam only: Xbox and Game Pass players join without mods.
 
 Player logs: the Subnautica 2 (collect logs for the host) Start menu shortcut, or `moonpool.ps1 -CollectLogs`, puts one zip on the Desktop. The launcher's error window points to it.
