@@ -147,9 +147,9 @@ Not yet tested with a second player:
 | Key | With a list open | With no list open |
 |---|---|---|
 | F2 | closes everything | opens the game's cheat panel and pick lists as one palette: tabs (Item, Spawn, Equip, Macro, History), the command line, the list |
-| typing | filters the list: a row shows if it has every typed word, in its name or category (`tools`, `resource`) | writes the command line |
+| typing | filters the list: a row shows if it has every typed word, in its name or category (`tools`, `resource`). A number at the end is how many: `glass 10` | writes the command line |
 | Up, Down | pick a row | |
-| Enter | runs the row; the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
+| Enter | runs the row, with the count if one was typed (the list's own command, such as `Item <id> 10`); the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
 | Esc | steps back one level | |
 
 - Unpublished items are hidden unless `search.show_unpublished` is set.
