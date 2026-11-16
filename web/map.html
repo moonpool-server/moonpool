@@ -260,7 +260,9 @@ function draw(d) {
   if (!map.fitted && seen.length) {  // open on the players, or with none on everything marked
     // Keep what it opens on clear of the panel: a rail on the left while open, a bar along the top while closed.
     var head = document.querySelector('header'), open = document.getElementById('card').open;
-    map.fitBounds(crowd.length ? crowd : seen, {paddingTopLeft: [(open ? head.offsetWidth : 0) + 60, (open ? 0 : head.offsetHeight) + 60],
+    // Beside the join page: the places someone has explored, where the picture shows, not one player.
+    var small = document.body.className === 'embed', cleared = (d.explored || []).map(function (c) { return [c[1] + h, c[0] + h]; });
+    map.fitBounds(small && cleared.length ? cleared : crowd.length && !small ? crowd : seen, {paddingTopLeft: [(open ? head.offsetWidth : 0) + 60, (open ? 0 : head.offsetHeight) + 60],
       paddingBottomRight: [60, 60], maxZoom: bare ? 3 : 5});
     map.fitted = true;
   }

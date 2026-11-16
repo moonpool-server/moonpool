@@ -261,3 +261,23 @@ def test_the_page_is_told_how_often_to_check_and_never_under_ten_seconds() -> No
         assert json.loads(run(tmp, 1001, [], MAP_REFRESH_SECONDS="30").read_text())["refresh_seconds"] == 30
         assert json.loads(run(tmp, 1002, [], MAP_REFRESH_SECONDS="1").read_text())["refresh_seconds"] == 10
         assert json.loads(run(tmp, 1003, [], MAP_REFRESH_SECONDS="soon").read_text())["refresh_seconds"] == 60
+
+
+def test_the_fog_clears_along_a_route_between_readings_but_not_across_a_teleport() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        bob = {"name": "Bob", "x": 100000, "y": 0, "depth_m": 10}
+        run(tmp, 1000, [bob])
+        run(tmp, 1060, [dict(bob, x=140000)])  # 400 m east a minute later: a swim or a ride
+        run(tmp, 1120, [dict(bob, x=140000, y=500000)])  # 5 km in a minute: a teleport
+        explored = json.loads(run(tmp, 1120 + 900, []).read_text())["explored"]
+        assert [[x, 0] for x in range(1000, 1401, 50)] == [c for c in explored if c[1] == 0]
+        assert [c for c in explored if c[1] != 0] == [[1400, 5000]]  # the far end only, no line to it
+
+
+def test_a_reading_at_the_worlds_origin_clears_nothing() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        run(tmp, 1000, [{"name": "Cy", "x": 0, "y": 0, "depth_m": 0}])  # no body yet
+        run(tmp, 1060, [{"name": "Cy", "x": 40000, "y": 0, "depth_m": 0}])
+        assert json.loads(run(tmp, 1060 + 900, []).read_text())["explored"] == [[400, 0]]

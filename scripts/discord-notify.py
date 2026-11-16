@@ -55,7 +55,7 @@ TEXT = {
     "not_hosting": "The game has run for {min} min without opening its world. Nobody can join until it does.",
     "loader_crashed": "The mod loader wrote a crash report during this run before its mods started. That usually means it doesn't fit this game build; the host's guide covers this under Updates.",
     "scanned": "Scanned lately: {scans}",
-    "mods": "• **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it installs them at the server's versions and joins",
+    "mods": "• **Mods** ({n}): press **Join**, then **Play with mods** on the [page]({url}/join). It installs them at the server's versions and joins",
     "how_to_join": "### How to join",
     "steam_title": "**Steam**",
     "steam_beta": "• Right-click **Subnautica 2** › **Properties** › **Betas** › pick **{branch}**",
@@ -424,7 +424,7 @@ def world_container():
     head_component = {"type": 10, "content": clamp(head, 260)}
     if join:
         head_component = {"type": 9, "components": [head_component],
-                          "accessory": {"type": 2, "style": 5, "url": join, "disabled": kind != "up",
+                          "accessory": {"type": 2, "style": 5, "url": join,
                                         "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Not open" if kind == "waiting" else "Starting…"}}
     components = [head_component, {"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
     if kind == "waiting" and GAME_AGE["s"]:
@@ -437,11 +437,9 @@ def world_container():
         components.append({"type": 10, "content": clamp(T["scanned"].format(scans=esc(scans)), 160)})
     if statline:
         components.append({"type": 10, "content": clamp("-# " + statline, 160)})
-    components += [{"type": 14, "divider": False, "spacing": 2}, {"type": 10, "content": clamp("\n".join(codes), 420)}]
+    components += [{"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp("\n".join(codes), 420)}]
     if map_url and still:
         components.append({"type": 12, "items": [{"media": {"url": f"{map_url}.png?v={still}"}, "description": "Lifepods and signals"}]})
-    if map_url:
-        components.append({"type": 1, "components": [{"type": 2, "style": 5, "label": "Map", "url": map_url}]})
     colour = 3066993 if kind == "up" else 15105570 if kind in ("starting", "updating") else 9807270 if kind == "waiting" else 15158332
     return {"type": 17, "accent_color": colour, "components": components}
 
