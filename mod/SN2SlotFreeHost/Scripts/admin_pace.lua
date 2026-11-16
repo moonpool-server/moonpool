@@ -38,4 +38,14 @@ function M.mark(q, now) q.last_run = now end
 
 function M.size(q) return #q.items end
 
+-- Whether TEXT from sender KEY at NOW repeats that sender's last line within WINDOW_S seconds. A line
+-- typed in the admin panel can reach the server twice from one Enter (the panel sends it and the
+-- game's own Enter sends a command it knows), and a give would then give twice. Records the line.
+function M.repeated(q, key, text, now, window_s)
+  q.seen = q.seen or {}
+  local last = q.seen[key]
+  q.seen[key] = { text = text, at = now }
+  return last ~= nil and last.text == text and now - last.at <= (window_s or 2)
+end
+
 return M
