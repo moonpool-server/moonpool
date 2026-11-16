@@ -116,9 +116,14 @@ return {
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
     set_text = '/Script/UMG.TextBlock:SetText',
-    textbox_class = '/Script/UMG.EditableTextBox',
-    textbox_get = '/Script/UMG.EditableTextBox:GetText',
-    textbox_set = '/Script/UMG.EditableTextBox:SetText',
+    textbox_class = '/Script/UMG.EditableText', -- the input without a frame, styled like the game's line
+    textbox_get = '/Script/UMG.EditableText:GetText',
+    textbox_set = '/Script/UMG.EditableText:SetText',
+    textbox_font = '/Script/UMG.EditableText:SetFont',
+    textbox_style = 'WidgetStyle',
+    style_color = 'ColorAndOpacity',
+    label_font = 'Font',
+    label_color = 'ColorAndOpacity',
     get_parent = '/Script/UMG.Widget:GetParent',
     slot = 'Slot',                      -- the slot a widget's parent made for it
     slot_size = '/Script/UMG.HorizontalBoxSlot:SetSize',

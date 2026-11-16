@@ -147,6 +147,17 @@ local function trim(w)
       if not (valid(slot) and ucall(slot, G.slot_size, { SizeRule = G.slot_fill, Value = 1.0 })) then
         say('failed', { what = G.slot_size, tries = 1, error = 'the text box keeps its own width' })
       end
+      -- It looks like the game's line: the label's own font and colour, read from the label.
+      local font, color
+      pcall(function() font = line_label[G.label_font] end)
+      pcall(function() color = line_label[G.label_color] end)
+      if not (font and ucall(b, G.textbox_font, font)) then
+        say('failed', { what = G.textbox_font, tries = 1, error = 'the text box keeps its default font' })
+      end
+      local styled = color and pcall(function() b[G.textbox_style][G.style_color] = color end)
+      if not styled then
+        say('failed', { what = G.textbox_style, tries = 1, error = 'the text box keeps its default colour' })
+      end
       return b
     end)
     if ok and valid(made) then
