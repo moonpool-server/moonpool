@@ -652,7 +652,7 @@ try {
   [IO.File]::WriteAllBytes($wx.Manifest + '.sig', $xrsa.SignData([IO.File]::ReadAllBytes($wx.Manifest), [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')))
   $r = Invoke-Join $wx -Extra "-Server '$(([Uri]$wx.Server).AbsoluteUri)'" -Shortcuts
   $links = @(Get-ChildItem -LiteralPath $env:MOONPOOL_SHORTCUTS -Filter '*.lnk' -Recurse)
-  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 5 -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, four shortcuts of its own (one collects logs) and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
+  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 6 -and @(Get-ChildItem -LiteralPath (Join-Path $env:MOONPOOL_SHORTCUTS 'Programs') -Filter '*choose mods).lnk').Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, five shortcuts of its own (one collects logs, one chooses mods, in the Start menu) and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
   Set-Content -LiteralPath (Join-Path $wx.Mods 'Foo\Scripts\lib.lua') -Value 'my edit' -NoNewline
   $r = Invoke-Join $wx -GameRunning -Extra '-Uninstall'
   Check ($r.Code -eq 2 -and $r.Out -match 'Subnautica 2 is running' -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and (Test-Path -LiteralPath (Join-Path $kit 'owned.json'))) "refused while the game runs, nothing changed (got $($r.Code)): $($r.Out.Trim())"
