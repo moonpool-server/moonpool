@@ -81,6 +81,7 @@ Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFree
 - `commands` maps a word to console lines. Arguments are looked up by kind; see `give` in the shipped file.
 - `on_ambiguous: first` takes the best match without asking.
 - `deny` blocks commands that crash or wipe the world. `"deny": []` in your own file turns that off.
+- Every line runs as one command. The game's console splits a line at `|` and at line breaks, so a line to run with `|`, `;`, a backtick or a control character is refused on every path (`!mp`, `!cmd`, the cheat panel, `ExecuteForAll`). `!cmd` lines are also capped at 128 characters, as `moonpool diag console` lines are.
 - `line_gap_ms` (1000) spaces the lines of one order; each can stall the server a second or so.
 
 | Word | Does | Watch out |
@@ -122,7 +123,7 @@ The game runs a cheat line from any client without checking who sent it. It has 
 - `ExecuteForAll` asks the host to relay a line to every player's game. The host relays it only from an admin and only if `deny` doesn't name the command.
 - If the host can't stop a line, or can't tell whether it did, it counts as not stopped: the line may run and can't be called back. The log says `cheat gate: COULD NOT STOP` and a non-admin sender is removed (`on_gate_failure`; `log` only logs). The same goes for a relay it couldn't block.
 - The server makes no Host call until both gate hooks are in place, and doesn't host at all if the part of the mod that holds them fails to load. The log says `HOLD: the cheat gate is not in place`. `CHEAT_GATE=off` hosts without it ([diagnostic switches](operating.md#diagnostic-switches)).
-- `deny` reads the first word, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
+- `deny` reads the first word of a one-command line, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
 
 - A line starting with `signal_word` (`mp`) is a console line: `mp g copper 10` equals `!mp g copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
 - A line for a player whose character isn't in the world yet is skipped.
