@@ -51,6 +51,31 @@ function M.counted(command, name, count)
   return line
 end
 
+-- The lines run from the panel, newest first: line goes to the front, once, and the list keeps at
+-- most max of them.
+function M.remember(recent, line, max)
+  line = tostring(line or ''):match('^%s*(.-)%s*$')
+  if line == '' then return recent end
+  local out = { line }
+  for _, l in ipairs(recent or {}) do
+    if l ~= line and #out < (max or 50) then out[#out + 1] = l end
+  end
+  return out
+end
+
+-- The order to show a history list's rows in: rows run from the panel first, newest first, then the
+-- rest as the game listed them. texts: each row's line, in the game's order. Returns row numbers.
+function M.newest_first(texts, recent)
+  local where, used, order = {}, {}, {}
+  for i, t in ipairs(texts) do if where[t] == nil then where[t] = i end end
+  for _, l in ipairs(recent or {}) do
+    local i = where[l]
+    if i and not used[i] then order[#order + 1] = i; used[i] = true end
+  end
+  for i = 1, #texts do if not used[i] then order[#order + 1] = i end end
+  return order
+end
+
 -- What a list row is searched by: the item's own name and its name in the game's data, without the
 -- parts every such name shares (patterns from the settings).
 function M.search_text(id, label, strip)

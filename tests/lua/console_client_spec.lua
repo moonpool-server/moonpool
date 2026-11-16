@@ -93,5 +93,18 @@ check(route.counted('SpawnThing {0}', 'X', 5) == nil, 'a command with no number 
 check(route.counted('Summon', 'X', 5) == nil, 'a command with no {0} is not built')
 check(route.counted('Item {0} 1', 'A%1B', 2) == 'Item A%1B 2', 'a name with % is put in as written')
 
+-- History: the panel's own lines, newest first, ahead of the game's A to Z order.
+local recent = route.remember({}, 'help')
+recent = route.remember(recent, 'Item DA_Glass_ItemType 10')
+recent = route.remember(recent, ' help ')
+check(recent[1] == 'help' and recent[2] == 'Item DA_Glass_ItemType 10' and #recent == 2,
+  'a line run again moves to the front, once')
+check(#route.remember({ 'a', 'b', 'c' }, 'd', 3) == 3, 'at most max lines are kept')
+check(route.remember({ 'a' }, '  ')[1] == 'a', 'an empty line is not kept')
+local order = route.newest_first({ 'Equip X 1', 'Give 10 glass', 'help', 'Item DA_Glass_ItemType 10' }, recent)
+check(table.concat(order, ',') == '3,4,1,2', 'newest first, then the rest in the game order')
+check(table.concat(route.newest_first({ 'a', 'b' }, { 'zzz' }), ',') == '1,2',
+  'lines the list does not have change nothing')
+
 if failures > 0 then os.exit(1) end
 print('console client: ok')

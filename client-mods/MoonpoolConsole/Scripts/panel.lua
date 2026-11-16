@@ -46,6 +46,19 @@ local function live(class)
 end
 
 local panel, shown, trimmed, commands, items, hint, backdrop
+-- The lines run from the panel, newest first, kept across sessions in the launcher's own folder,
+-- which an uninstall removes. The game's History list is shown in this order (newest_first below).
+local recent_file = (os.getenv('LOCALAPPDATA') or '') .. CFG.history.file
+local recent = {}
+pcall(function() for l in io.lines(recent_file) do recent[#recent + 1] = l end end)
+local function remember(ran)
+  recent = route.remember(recent, ran, CFG.history.keep)
+  pcall(function()
+    local f = assert(io.open(recent_file, 'w'))
+    f:write(table.concat(recent, '\n'), '\n')
+    f:close()
+  end)
+end
 local line = ''  -- what the command line holds, read after each key (key below)
 local open_rows  -- defined with the search, used by the typed line before it
 
@@ -160,6 +173,7 @@ local function typed(said)
   if not pcall(function() pc:ServerCheat(send) end) then
     say('failed', { what = G.server_cheat, tries = 1, error = send })
   end
+  remember(said)
   return where, send
 end
 
@@ -257,8 +271,37 @@ local function choose(n)
   chosen = math.max(1, math.min(#visible, n))
   mark(visible[chosen], true)
 end
+-- The game's History list is sorted A to Z. Its rows are put in the order of the lines run from the
+-- panel, newest first, the rest after them as the game had them: taken out of the list and added
+-- back. Once per list and row count.
+local reordered = {}
+local function newest_first(list)
+  if reordered[list.key] == list.count then return end
+  reordered[list.key] = list.count
+  local title
+  each_part(list.list, function(widget, part)
+    if part == CFG.history.title_part then pcall(function() title = widget:GetText():ToString() end) end
+  end, CFG.list.depth)
+  if title ~= CFG.history.title then return end
+  local rows, texts = {}, {}
+  for i = 0, list.count - 1 do
+    local got, row = ucall(list.rows, G.child_at, i)
+    if not (got and valid(row)) then reordered[list.key] = nil; return end
+    local text = ''
+    pcall(function() text = row[G.row_item]:ToString() end)
+    rows[#rows + 1], texts[#texts + 1] = row, text
+  end
+  local order = route.newest_first(texts, recent)
+  local moved = false
+  for i, n in ipairs(order) do moved = moved or n ~= i end
+  if not moved then return end
+  for i = list.count - 1, 0, -1 do ucall(list.rows, G.remove_child_at, i) end
+  for _, n in ipairs(order) do ucall(list.rows, G.add_child, rows[n]); mark(rows[n], false) end
+  known = {}  -- read again, in the new order
+end
 local function apply(lists, rows)
   if rows == '' or still < CFG.search.settle_ms then return end
+  for _, list in ipairs(lists) do pcall(newest_first, list) end
   local now = query .. '|' .. rows
   if now == last then return end
   local search = route.count(query)
@@ -354,8 +397,9 @@ local function run()
   -- otherwise the row is picked as a click picks it.
   local _, count = route.count(query)
   local command
-  if count then pcall(function() command = model[G.list_command]:ToString() end) end
+  pcall(function() command = model[G.list_command]:ToString() end)
   local counted = count and route.counted(command, name, count)
+  remember(counted or route.counted(command, name, nil))
   local pc = counted and live(G.controller)[1]
   if pc then
     if not pcall(function() pc:ServerCheat(counted) end) then
