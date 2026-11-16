@@ -38,14 +38,14 @@ Nothing to install: rename any PDA signal to a command.
 !slots 8              change the player cap
 !ping                 where everyone is, for admins; your own spot for anyone
 !cmd LINE             one of the game's console commands, run on the host as you
-!mp LINE              the admin console
+!mp LINE              the admin console; any other word goes there too, so !g copper 10 works
 ```
 
 `!cmd` and `!mp` need [console commands](#console-commands) turned on.
 
 ## The admin console (`!mp`)
 
-`!mp` takes any console line, plus shortcuts and name lookups:
+`!mp` takes any console line, plus shortcuts and name lookups. The `mp` can be left out unless the line starts with one of the fixed orders above (`!help`, `!time`...):
 
 ```
 !mp g copper wire 10      Give the item with that exact name, 10 of it

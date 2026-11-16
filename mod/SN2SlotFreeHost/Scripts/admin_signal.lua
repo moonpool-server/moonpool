@@ -65,7 +65,7 @@ function M.parse(text, prefix)
   cmd = cmd:lower()
   local args = {}
   for word in rest:gmatch('%S+') do args[#args + 1] = word end
-  return { command = cmd, args = args, raw = rest }
+  return { command = cmd, args = args, raw = rest, line = body }
 end
 
 function M.new(opts)
@@ -121,7 +121,9 @@ function M.run(state, sender, text, g)
     if not ok then return reply(false, err or 'refused') end
     return line_reply(true, data.lines)
   end
-  if cmd == 'help' then return reply(true, 'cmd kick ping slots time weather') end
+  if cmd == 'help' then
+    return reply(true, 'cmd kick ping slots time weather' .. (state.console_word and '; else console' or ''))
+  end
   if cmd == 'cmd' then
     -- The game's own console, run on the host as this admin: the same door and the same
     -- switch as moonpool diag console (player in enabled_commands).
@@ -161,6 +163,12 @@ function M.run(state, sender, text, g)
     state.restart[key] = nil
     if not started or now - started > M.CONFIRM_SECONDS then return reply(false, 'restart confirmation expired') end
     return invoke(g, 'restart', {}, function() return 'restart requested' end)
+  end
+  if state.console_word then
+    -- Any other word is an admin console line, as if it began with the console word.
+    local ok, data, err = g.call('mp', { sender = sender, line = p.line })
+    if not ok then return reply(false, err or 'refused') end
+    return line_reply(true, data.lines)
   end
   return reply(false, 'unknown command; use !help')
 end

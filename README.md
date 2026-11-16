@@ -115,11 +115,12 @@ List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothi
 | `!help` | lists the orders |
 | `!kick NAME` | removes a player |
 | `!time 12:00`, `!weather DA_Storm` | sets the clock or weather |
-| `!mp g titanium 10` | gives 10 titanium (names are looked up, a vague one asks) |
-| `!mp heal`, `!mp @all heal` | heals you, or everyone |
-| `!mp who` | who's on, with their ping |
+| `!g titanium 10` | gives 10 titanium (names are looked up, a vague one asks) |
+| `!heal`, `!@all heal` | heals you, or everyone |
+| `!who` | who's on, with their ping |
 
-- The answer appears in the signal's name and as a notification. `!mp` lines need [console commands](docs/admin.md#console-commands) turned on.
+- Any word that isn't one of the fixed orders goes to the [admin console](docs/admin.md#the-admin-console-mp), so anything the game's console can do works too. That part needs [console commands](docs/admin.md#console-commands) turned on.
+- The answer appears in the signal's name and as a notification.
 - Orders from anyone not in `ADMINS` are dropped.
 - Admins who want a keyboard can add the optional admin panel: F2 opens the game's own cheat panel with search.
 

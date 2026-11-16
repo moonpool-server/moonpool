@@ -110,6 +110,20 @@ r = admin.run(s, ALICE, '!restart cancel', game())
 eq(calls[#calls][1], 'restart_cancel', 'restart cancel is immediate')
 eq(r.text, 'restart cancelled', 'restart cancel reply')
 
+local c = admin.new({ admins = ALICE.eos, console_word = 'MP' })
+admin.run(c, ALICE, '!g Copper Wire 10', game())
+eq(calls[#calls][1], 'mp', 'an unknown word goes to the admin console')
+eq(calls[#calls][2].line, 'g Copper Wire 10', 'the whole line goes, case kept')
+now = now + 3
+admin.run(c, ALICE, '!mp g copper', game())
+eq(calls[#calls][2].line, 'g copper', 'the console word still works')
+now = now + 3
+admin.run(c, ALICE, '!time 12:00', game())
+eq(calls[#calls][1], 'time', 'a fixed order is not sent to the console')
+now = now + 3
+r = admin.run(s, ALICE, '!g copper', game())
+eq(r.text, 'unknown command; use !help', 'without a console word an unknown word is refused')
+
 local A, B = string.rep('a', 32), string.rep('B', 32)
 local set = admin.admin_set(A, table.concat({ '# note', B .. '\tJohnny', string.rep('c', 31), 'not-an-id',
   string.rep('d', 32) .. 'x' }, '\n'))
