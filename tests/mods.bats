@@ -82,7 +82,11 @@ make_zip() { # out.zip version path...
   mkdir -p "$DATA_DIR/ue4ss" "$DATA_DIR/ue4ss-client" "$BATS_TEST_TMPDIR/rel/ue4ss"
   printf 'proxy' >"$BATS_TEST_TMPDIR/rel/dwmapi.dll"; printf 'loader' >"$BATS_TEST_TMPDIR/rel/ue4ss/UE4SS.dll"
   printf 'release layout' >"$BATS_TEST_TMPDIR/rel/ue4ss/VTableLayout.ini"
+  mkdir -p "$BATS_TEST_TMPDIR/rel/ue4ss/Mods/shared/UEHelpers" "$DATA_DIR/ue4ss-client/Mods/shared/UEHelpers"
+  printf 'release helper' >"$BATS_TEST_TMPDIR/rel/ue4ss/Mods/shared/UEHelpers/UEHelpers.lua"
+  printf 'release other' >"$BATS_TEST_TMPDIR/rel/ue4ss/Mods/shared/other.lua"
   (cd "$BATS_TEST_TMPDIR/rel" && zip -q -r "$DATA_DIR/ue4ss/UE4SS_test.zip" dwmapi.dll ue4ss)
+  printf 'fixed helper' >"$DATA_DIR/ue4ss-client/Mods/shared/UEHelpers/UEHelpers.lua"
   printf 'member offsets\n' >"$DATA_DIR/ue4ss-client/MemberVariableLayout.ini"
   printf 'vtable offsets\n' >"$DATA_DIR/ue4ss-client/VTableLayout.ini"
   printf 'MajorVersion = 5\n' >"$DATA_DIR/ue4ss-client/UE4SS-settings.ini"
@@ -98,6 +102,9 @@ make_zip() { # out.zip version path...
   [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/VTableLayout.ini")" = 'vtable offsets' ]
   [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/UE4SS-settings.ini")" = 'MajorVersion = 5' ]
   [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/UE4SS.dll")" = loader ]; [ "$(cat "$BATS_TEST_TMPDIR/out/dwmapi.dll")" = proxy ]
+  # A file under Mods/ replaces the release's own at the same path; the rest stay the release's.
+  [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/Mods/shared/UEHelpers/UEHelpers.lua")" = 'fixed helper' ]
+  [ "$(cat "$BATS_TEST_TMPDIR/out/ue4ss/Mods/shared/other.lua")" = 'release other' ]
   # The same files publish the same loader; the pinned release itself is never changed.
   run env UE4SS_ASSET=UE4SS_test.zip UE4SS_RELEASE_SHA256="$sha" "$ROOT/scripts/mod-service.sh" publish
   [ "$(jq -r '.ue4ss.asset' "$m")" = "$asset" ]; [ "$(sha256sum "$DATA_DIR/ue4ss/UE4SS_test.zip" | cut -d' ' -f1)" = "$sha" ]

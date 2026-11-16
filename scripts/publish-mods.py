@@ -526,20 +526,24 @@ CLIENT_LAYOUT_FILES = ("MemberVariableLayout.ini", "VTableLayout.ini", "UE4SS-se
 def with_client_layout(folder, cached, files, asset, digest, url):
     """The loader with the files players need, when the host keeps them in ue4ss-client/: the two
     layout files, which the release does not carry, and UE4SS-settings.ini, whose defaults guess the
-    engine version and build type; on some game builds both crash the game at start.
-    The pinned release's own files go in unchanged beside them; the result has its own name and
+    engine version and build type; on some game builds both crash the game at start. Files under
+    ue4ss-client/Mods/ replace or add the release's own at the same path (a fixed shared helper).
+    The pinned release's other files go in unchanged beside them; the result has its own name and
     sha256, which the launcher checks like any loader. Without the folder, the release as it is."""
-    extra = [folder / n for n in CLIENT_LAYOUT_FILES if (folder / n).is_file()]
+    extra = {n: folder / n for n in CLIENT_LAYOUT_FILES if (folder / n).is_file()}
+    mods = folder / "Mods"
+    if mods.is_dir():
+        extra.update({f.relative_to(folder).as_posix(): f for f in sorted(mods.rglob("*")) if f.is_file()})
     if not extra:
         return asset, digest, url
-    tag = hashlib.sha256(digest.encode() + b"".join(f.name.encode() + f.read_bytes() for f in extra)).hexdigest()[:12]
+    tag = hashlib.sha256(digest.encode() + b"".join(n.encode() + f.read_bytes() for n, f in sorted(extra.items()))).hexdigest()[:12]
     name = f"{Path(asset).stem}-layout-{tag}.zip"
     served = files / name
     if not served.is_file():
         with zipfile.ZipFile(cached) as release:
             members = [(i.filename, release.read(i)) for i in release.infolist() if not i.is_dir()]
         base = "ue4ss/" if any(n.startswith("ue4ss/") for n, _ in members) else ""
-        added = {base + f.name: f.read_bytes() for f in extra}
+        added = {base + n: f.read_bytes() for n, f in extra.items()}
         members = sorted([(n, d) for n, d in members if n not in added] + list(added.items()))
         put(served, zip_bytes(members))
     return name, sha256(served), f"files/{name}"

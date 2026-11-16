@@ -72,8 +72,10 @@ On some builds the mod loader needs layout files its release lacks, or the game 
 | Files | For | Put in the data volume at |
 |---|---|---|
 | `MemberVariableLayout.ini`, `VTableLayout.ini`, `UE4SS-settings.ini` that work on a player's PC for the current build | players | `ue4ss-client/` |
+| a fixed copy of one of the loader's own files, at its path under `Mods/` (as `Mods/shared/UEHelpers/UEHelpers.lua`) | players | `ue4ss-client/Mods/` |
 | the server's own set | the server | `ue4ss-local/` ([Updates](operating.md#updates)) |
 
 - The settings file matters: on experimental build 26496980 the release's default crashes the game. The working file sets `MajorVersion = 5`, `MinorVersion = 6`, `DebugBuild = false`.
 - The pinned loader is served with those files added, under its own name and hash. Anyone who can reach the join page can fetch it.
 - A player is asked before their own layout files are replaced.
+- On experimental build 0.1.2.0-138154, looking up a function on the player controller throws `Array failed invariants check`, so the release's `UEHelpers.GetPlayerController` finds no player and mods built on it (Simple Minimap) never attach. The fix is a copy of that file whose check runs in `pcall` and, when the lookup throws, takes the game's only player controller; put it in `ue4ss-client/Mods/shared/UEHelpers/`.
