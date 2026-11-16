@@ -316,6 +316,7 @@ Not in `.env.example`; the defaults work. Set one in `.env` only to rule somethi
 | `NATIVE_MSVC` | `1` | Microsoft's C++ runtime for the game process only |
 | `HOST_PRUNE` | `true` | Takes the host account out of the player list |
 | `HIDE_HOST_BODY` | `true` | Hides the host account's body in the world |
+| `CHEAT_GATE` | `on` | `off` lets the server host without the cheat gate, so any player's console cheats run. Only to rule the gate out |
 | `CLIPBOARD_BRIDGE` | `true` | Copy and paste through the viewer's clipboard panel |
 | `S6_SERVICES_GRACETIME` | `210000` | Milliseconds the services get to stop: warning plus save wait plus 30 s |
 | `S6_KILL_GRACETIME` | `5000` | Milliseconds before leftover processes are killed |

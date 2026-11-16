@@ -40,18 +40,23 @@ function M.ps_name(ps)
   return name
 end
 
--- Whether the controller has a cheat manager, the object the game runs console cheats through.
+-- Whether the controller has a cheat manager, the object the game runs console cheats through:
+-- true or false, or nil when the game would not say (an error is not taken as "none").
 function M.has_cheats(pc)
-  local has = false
-  pcall(function() has = pc.CheatManager:IsValid() end)
+  local ok, has = pcall(function()
+    local manager = pc.CheatManager
+    if manager == nil then return false end
+    return manager:IsValid() == true
+  end)
+  if not ok then return nil end
   return has
 end
--- Takes the controller's cheat manager away; true when it has none afterwards.
+-- Takes the controller's cheat manager away; true only when it is known to have none afterwards.
 function M.clear_cheats(pc)
   if not pcall(function() pc.CheatManager = nil end) then
     pcall(function() pc.CheatManager = CreateInvalidObject() end)
   end
-  return not M.has_cheats(pc)
+  return M.has_cheats(pc) == false
 end
 -- A console line run server-side as that player; the game's reply goes to its own log. A player
 -- whose character is not in the world yet (still loading in) is skipped: the game's own commands
