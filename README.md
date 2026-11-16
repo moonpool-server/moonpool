@@ -4,11 +4,29 @@ Keeps your Subnautica 2 world online so friends can play when you can't.
 
 Moonpool runs the real game under Wine in Docker, on a spare PC or a server, signed in to a Steam account of its own. No GPU needed.
 
-Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. No game files in this repo, and nothing here is for sale. Running it likely breaks the game's and Steam's terms: see [Risk](#risk) before you start.
+- Unofficial: not affiliated with Unknown Worlds, KRAFTON or Valve.
+- No game files in this repo, and nothing here is for sale.
+- Running it likely breaks the game's and Steam's terms: read [Risk](#risk) before you start.
 
 ![A demo server's join page: Play with mods, the mod list and the live map](docs/images/join-page.png)
 
 ![The demo's map over a made-up cartoon chart, fog off: two players, the lifepod and two signals](docs/images/map.png)
+
+## How it works
+
+```mermaid
+flowchart LR
+  friends(["Friends"]) -- "Join Game, through Steam" --> game
+  friends -- "join page, mods" --> web
+  discord(["Discord card"]) -- "Join, Map" --> web
+  you(["You"]) -- "sign in once, over ssh" --> viewer
+  subgraph host["Your server, in Docker"]
+    direction TB
+    game["Subnautica 2 and Steam under Wine<br/>+ host mod: saves, admin, status"]
+    web["Web on 8081<br/>join page, map, signed mod list"]
+    viewer["Viewer on 8080<br/>this machine only"]
+  end
+```
 
 ## For your friends
 
@@ -56,7 +74,8 @@ bin/moonpool server import SaveGames.zip   # a world from the PC that hosted it
 bin/moonpool server export                 # a zip of the hosted world
 ```
 
-If the game can't load an imported world, the old one is put back. The [guide](docs/operating.md#bring-your-world) says where saves are and which builds load them.
+- If the game can't load an imported world, the old one is put back.
+- Where saves are and which builds load them: [guide](docs/operating.md#bring-your-world).
 
 ## Mods
 
@@ -65,11 +84,20 @@ cp plugins.example.yaml plugins.yaml   # list each mod with its download link
 bin/moonpool mods publish plugins.yaml
 ```
 
-The join page then offers Play with mods. Players install the launcher once, from [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd). It shows each new mod and the site it comes from and asks before installing, checks every download against the server's signed mod list, and turns the mods off when the game closes. If the launcher is killed mid-game, they stay on until its next run or the "Subnautica 2 (without Moonpool mods)" shortcut.
+The join page then offers **Play with mods**. Players install the launcher once, from [moonpool-setup.cmd](https://github.com/moonpool-server/moonpool/releases/latest/download/moonpool-setup.cmd). It:
+
+- shows each new mod and the site it comes from, and asks before installing
+- checks every download against the server's signed mod list
+- turns the mods off when the game closes (if the launcher is killed mid-game: at its next run, or with the "Subnautica 2 (without Moonpool mods)" shortcut)
 
 ![The launcher asking which of the demo's mods to install, with the site each comes from](docs/images/launcher-install.png)
 
-Mods run with the player's Windows rights, and Moonpool doesn't review them. Accept mods only from a host you trust. How the launcher is trusted, and how to check it yourself: [SECURITY.md](SECURITY.md). What it changes on a player's PC and how to uninstall: [docs/mods.md](docs/mods.md).
+> Mods run with the player's Windows rights, and Moonpool doesn't review them. Accept mods only from a host you trust.
+
+| More on | Where |
+|---|---|
+| How the launcher is trusted, and checking it yourself | [SECURITY.md](SECURITY.md) |
+| What it changes on a player's PC, uninstalling | [docs/mods.md](docs/mods.md) |
 
 ## What's exposed
 
@@ -104,12 +132,24 @@ A game update can stop hosting; the host reports it and the [guide](docs/operati
 
 ## Risk
 
-The game's EULA and Steam's Subscriber Agreement bar modifying the game and running it with unauthorized bots or scripts. Moonpool loads a mod and automates hosting, so using it appears to break both. Unknown Worlds, KRAFTON and Valve haven't consented. The hosting account could lose the game or face action on Steam: host on an account you can afford to lose. Details: [docs/legal.md](docs/legal.md).
+- The game's EULA and Steam's Subscriber Agreement bar modifying the game and running it with unauthorized bots or scripts.
+- Moonpool loads a mod and automates hosting, so using it appears to break both. Unknown Worlds, KRAFTON and Valve haven't consented.
+- The hosting account could lose the game or face action on Steam. **Host on an account you can afford to lose.**
+
+Details: [docs/legal.md](docs/legal.md).
 
 ## More
 
-- [Running Moonpool](docs/operating.md): sizing, network, backups, updates, troubleshooting. Also [mods](docs/mods.md), [in-game admin](docs/admin.md) and [the map](docs/map.md). Settings: [.env.example](.env.example). Commands: `bin/moonpool help`.
-- [CONTRIBUTING.md](CONTRIBUTING.md). `pre-commit run --all-files` runs the CI checks. Don't commit game files, Steam sessions, logs or anything generated from the game.
-- MIT licensed: this code only, not Subnautica 2 or Steam.
+| Doc | Covers |
+|---|---|
+| [docs/operating.md](docs/operating.md) | sizing, network, backups, worlds, updates, troubleshooting |
+| [docs/mods.md](docs/mods.md) | publishing mods, the launcher, server mods |
+| [docs/admin.md](docs/admin.md) | in-game admin and the admin panel |
+| [docs/map.md](docs/map.md) | the map and map pictures |
+| [SECURITY.md](SECURITY.md) | what's trusted, what listens, what leaves the server |
+| [.env.example](.env.example) | every setting |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | changes and checks (`pre-commit run --all-files`); never commit game files, Steam sessions or logs |
+
+Commands: `bin/moonpool help`. MIT licensed: this code only, not Subnautica 2 or Steam.
 
 Contact: [issues](https://github.com/moonpool-server/moonpool/issues) for questions, [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) for security problems. Rights holders wanting a takedown can open an issue asking for a private contact.

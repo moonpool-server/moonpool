@@ -1,6 +1,14 @@
 # Running Moonpool
 
-Hosting, the network, backups, worlds, updates and troubleshooting. Also: [mods](mods.md), [in-game admin](admin.md), [the map](map.md), [security](../SECURITY.md). Settings: `.env.example`. Commands: `bin/moonpool help`.
+Hosting, the network, backups, worlds, updates and troubleshooting.
+
+| Also | |
+|---|---|
+| [mods.md](mods.md) | publishing mods, the launcher, server mods |
+| [admin.md](admin.md) | in-game admin |
+| [map.md](map.md) | the map |
+| [SECURITY.md](../SECURITY.md) | trust, listeners, secrets |
+| `.env.example`, `bin/moonpool help` | every setting, every command |
 
 ## Size
 
@@ -17,7 +25,12 @@ An empty server costs less with the friends preset:
 - After `IDLE_FREEZE_MINUTES` (10) the in-game clock stops until the next join.
 - `IDLE_STOP_HOURS` stops the game after that many hours empty, freeing CPU and memory; nobody can join until it starts again.
 
-Joining players get world data at up to `NET_MAX_CLIENT_RATE` bytes a second each: 300000 with the friends preset, the game's own 100000 with `PRESET=stock`. On a test host that halved a join's load time.
+Joining players get world data at up to `NET_MAX_CLIENT_RATE` bytes a second each:
+
+| Preset | Rate | Join load time on a test host |
+|---|---|---|
+| `friends` | 300000 | about half |
+| `stock` | 100000 (the game's own) | normal |
 
 ## Signing in
 
@@ -32,7 +45,12 @@ The viewer controls the signed-in Steam. Keep it off the internet.
 - Inside Docker it listens on every interface; the password keeps other containers out.
 - From elsewhere use an SSH tunnel or Tailscale, even with `VIEWER_BIND=0.0.0.0` on your LAN.
 
-The sign-in stays in the data volume, and anything in the container can use it. Moonpool reads the Steam client's web session there to find the lobby for the join link and to accept friend requests. Use a dedicated account and keep the volume private.
+The sign-in:
+
+- stays in the data volume, and anything in the container can use it
+- is read by Moonpool for the Steam web session, to find the lobby for the join link and to accept friend requests
+
+Use a dedicated account and keep the volume private.
 
 Lost the machine? Deauthorize devices in Steam and change the password. `docker compose down -v` deletes the world and its saves for good.
 
@@ -77,7 +95,11 @@ Never forward the viewer's port 8080. Don't put 8081 on the internet as plain ht
 
 Experimental. They can't be invited through Steam: they add the hosting account by its in-game friend code and join from the game's friends list.
 
-`bin/moonpool diag friend-code` opens the game's Friends screen (the code exists only while it's open), reads the code and closes it. Run it while nobody is on, or with `--force`. Each run makes a new code; the last one survives restarts and shows on the Discord card.
+`bin/moonpool diag friend-code`:
+
+- opens the game's Friends screen (the code exists only while it's open), reads the code and closes it
+- runs while nobody is on, or with `--force`
+- makes a new code each run; the last one survives restarts and shows on the Discord card
 
 ## More than one world
 
@@ -91,7 +113,12 @@ bin/moonpool --instance family status
 
 ## Backups
 
-The game autosaves every 2 minutes, and each save stalls the server a second or more. By default the host turns that off once the world is up and saves every `SAVE_EVERY_MINUTES` (10) and after players leave. An empty server skips saves and archives. A crash can lose up to `SAVE_EVERY_MINUTES` of play. `SAVE_EVERY_MINUTES=0` keeps the game's autosave.
+| | Game's autosave (`SAVE_EVERY_MINUTES=0`) | Default |
+|---|---|---|
+| When | every 2 minutes | every `SAVE_EVERY_MINUTES` (10), and after players leave |
+| Cost | each save stalls the server a second or more | the same, less often |
+| Empty server | as the game decides | skips saves and archives |
+| A crash loses | up to 2 minutes | up to `SAVE_EVERY_MINUTES` |
 
 - Archives go into `./backups` every 30 minutes and are kept 7 days. For remote storage or encryption, copy `backup.env.example` to `backup.env`.
 - They hold the saves and the game's Steam userdata folder, not the sign-in or the mod-signing key.
@@ -103,7 +130,11 @@ ls backups                    # newest last
 bin/moonpool server restore backups/<file>.tar.gz Slot1
 ```
 
-Restore keeps a safety copy of the current saves and hosts again about a minute later. It checks the archive holds a save, not that the save is undamaged. It hasn't been tried with players on.
+Restore:
+
+- keeps a safety copy of the current saves and hosts again about a minute later
+- checks the archive holds a save, not that the save is undamaged
+- hasn't been tried with players on
 
 Two worlds must not share a `BACKUP_DIR`; `bin/moonpool-instance` gives each its own.
 
@@ -119,13 +150,29 @@ bin/moonpool server import SaveGames.zip          # the newest world in it
 bin/moonpool server import savegame_2.sav Reef    # one world, renamed
 ```
 
-Worlds are the `savegame_<n>.sav` files; import ignores the folder's other `.sav` files. It snapshots the current saves, hosts the new world and checks the game loaded it; if not, the previous world is hosted again. The game loads only saves from its own branch and build, so update the game on the old PC first.
+```mermaid
+flowchart LR
+  zip["SaveGames.zip"] --> pick["takes the savegame_n.sav worlds,<br/>ignores settings files"]
+  pick --> snap["snapshots the current saves"] --> host["hosts the new world"] --> ok{"game loaded it?"}
+  ok -- yes --> done(["hosted"])
+  ok -- no --> back(["previous world hosted again"])
+```
 
-`bin/moonpool server export` zips the hosted world (`Slot1.sav` by default). Loading that on a player's PC hasn't been tried.
+- The game loads only saves from its own branch and build, so update the game on the old PC first.
+- `bin/moonpool server export` zips the hosted world (`Slot1.sav` by default). Loading that on a player's PC hasn't been tried.
 
 ## Move the server to another PC
 
-The server is the image, two volumes and `.env`. The volumes are `<project>_sn2-data` (game, Steam sign-in, saves) and `<project>_sn2-signing` (mod-list key); `<project>` is `COMPOSE_PROJECT_NAME`, `moonpool` unless set. Move all three and the new PC hosts the same world at the same address.
+Move these three and the new PC hosts the same world at the same address:
+
+| Piece | Holds |
+|---|---|
+| the image | the game runtime |
+| volume `<project>_sn2-data` | game, Steam sign-in, saves |
+| volume `<project>_sn2-signing` | the mod-list key |
+| `.env` | your settings and secrets |
+
+`<project>` is `COMPOSE_PROJECT_NAME`, `moonpool` unless set.
 
 ```sh
 # old PC: nobody on, then save and stop
@@ -154,9 +201,16 @@ docker compose up -d
 - `RESTART_CRON` restarts the game only and never updates it. When the card shows a build players can't join on, run `bin/moonpool server restart`: it warns players, counts down and recreates the container (`--now` skips the countdown).
 - `AUTO_UPDATE=false` only stops Moonpool asking Steam to validate the game. Steam can still update it.
 
-A new build hosts only if the mod loader works on it. The public branch needs nothing from you. Experimental builds aren't supported out of the box: they may need a `MemberVariableLayout.ini` and `VTableLayout.ini` that fit the build, which you supply in `ue4ss-local` in the data volume. That folder is copied over the loader's files on every launch and survives game updates. Without fitting files the game crashes before hosting, and the card says Not hosting. Players may need their own set too ([mods](mods.md#players-loader-on-experimental-builds)).
+A new build hosts only if the mod loader works on it:
 
-The older pinned loader takes a set per build in a folder under `ue4ss-layouts`: `MemberVariableLayout.ini`, `VTableLayout.ini`, `UE4SS-settings.ini`, `UE4SS_Signatures`, and the game exe's SHA-256 in `exe.sha256`.
+| Branch | What you do |
+|---|---|
+| public | nothing |
+| experimental | not supported out of the box. It may need a `MemberVariableLayout.ini` and `VTableLayout.ini` that fit the build, which you supply in `ue4ss-local` in the data volume. Without them the game crashes before hosting and the card says Not hosting |
+
+- `ue4ss-local` is copied over the loader's files on every launch and survives game updates.
+- Players may need their own set too ([mods](mods.md#players-loader-on-experimental-builds)).
+- The older pinned loader takes a set per build in a folder under `ue4ss-layouts`: `MemberVariableLayout.ini`, `VTableLayout.ini`, `UE4SS-settings.ini`, `UE4SS_Signatures`, and the game exe's SHA-256 in `exe.sha256`.
 
 ## Hooks and scheduled jobs
 
@@ -176,7 +230,11 @@ Two files in the data volume, both able to call anything in `bin/moonpool`:
 [ "$1" = join ] && moonpool notify "$2 is aboard"
 ```
 
-Logs in `logs/` that only grow are kept to 10 MB plus four older pieces. `game.log` restarts at each launch (the last kept as `game.log.prev`). `join_watch.log` is never cut; the player count is read from it.
+| Log | Kept |
+|---|---|
+| most of `logs/` | 10 MB plus four older pieces |
+| `game.log` | this launch; the last one as `game.log.prev` |
+| `join_watch.log` | never cut: the player count is read from it |
 
 ## Discord card
 
@@ -215,7 +273,13 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 | `clock jumped -1 secs` repeating in `bin/moonpool logs web` | the PC's clock is off. On the PC: `Start-Service w32time; w32tm /resync /force` |
 | Choppy while admins run many console commands | each can stall the server; run big batches when nobody's on |
 
-`bin/moonpool diag bundle` makes one zip for whoever helps you: game, UE4SS and service logs, status files, the last hour of `tick-report`, the Wine and sync in use, and a summary. The values of `DISCORD_WEBHOOK_URL`, `CURSEFORGE_API_KEY`, `GITHUB_TOKEN`, `VNC_PASSWORD`, `STEAM_BRANCH_PASSWORD`, `TUNNEL_TOKEN` and any Discord webhook address are removed. The Steam session, `.env`, viewer password, mod-signing key and saves are never read. Player names and Steam IDs stay; share it only with someone you trust.
+`bin/moonpool diag bundle` makes one zip for whoever helps you:
+
+| In it | Taken out | Never read |
+|---|---|---|
+| game, UE4SS and service logs; status files; the last hour of `tick-report`; the Wine and sync in use; a summary | the values of `DISCORD_WEBHOOK_URL`, `CURSEFORGE_API_KEY`, `GITHUB_TOKEN`, `VNC_PASSWORD`, `STEAM_BRANCH_PASSWORD`, `TUNNEL_TOKEN` and any Discord webhook address | the Steam session, `.env`, the viewer password, the mod-signing key, saves |
+
+Player names and Steam IDs stay: share it only with someone you trust.
 
 Choppy play:
 
@@ -223,9 +287,17 @@ Choppy play:
 docker compose exec sn2 python3 /opt/sn2/bin/tick-report.py --from 2026-11-12T20:00 --window 10
 ```
 
-Per window (UTC): slow frames with median, p95, p99 and counts over 0.5 s and 1 s, moves dropped as too old, game autosaves, host saves, console commands, and player count. Compare windows with the same player count.
+Per window (UTC) it shows:
 
-Known gaps: the current build refuses `Warp`, so players can't be moved. The join hold during the launch cinematic is unproven.
+- slow frames: median, p95, p99, and how many were over 0.5 s and 1 s
+- moves dropped as too old
+- game autosaves, host saves and console commands
+- player count (compare windows with the same count)
+
+Known gaps:
+
+- the current build refuses `Warp`, so players can't be moved
+- the join hold during the launch cinematic is unproven
 
 ## Diagnostic switches
 

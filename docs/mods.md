@@ -1,6 +1,11 @@
 # Mods
 
-Two kinds: mods players install through the launcher ([Player mods](#player-mods)), and mods the server itself runs ([Server mods](#server-mods)). How players' launchers trust a server and its mods is in [SECURITY.md](../SECURITY.md).
+| Kind | Runs on | Set up in |
+|---|---|---|
+| [Player mods](#player-mods) | players' PCs, through the launcher | `plugins.yaml` |
+| [Server mods](#server-mods) | the server | `paks-local/`, `ue4ss-local/` in the data volume |
+
+How players' launchers trust a server and its mods: [SECURITY.md](../SECURITY.md).
 
 ## Player mods
 
@@ -18,7 +23,17 @@ bin/moonpool mods list
 
 ## On the player's PC
 
-Players install the launcher once, from the join page. Then:
+Players install the launcher once, from the join page. Pressing **Play with mods** then does this:
+
+```mermaid
+flowchart LR
+  press["Play with mods<br/>on the join page"] --> list["launcher reads the<br/>server's signed mod list"]
+  list --> ask["shows new or changed mods<br/>and where each comes from, asks"]
+  ask --> fetch["downloads, checks each<br/>against the signed hash"]
+  fetch --> on["mods on, game starts,<br/>joins the server"]
+  on --> off["game closes:<br/>mods off"]
+```
+
 
 - Mandatory mods are ticked and locked. Choices are remembered per server and asked again, with changes marked, when a mod is added or changes.
 - Mods are on only while the game the launcher started is running. If the launcher is killed mid-game, they stay on until its next run or the "Subnautica 2 (without Moonpool mods)" shortcut.
@@ -27,7 +42,11 @@ Players install the launcher once, from the join page. Then:
 - Two settings go into the game's `Engine.ini` for the session and come out when the game closes; a value the player set is kept. `r.ShaderPipelineCache.BackgroundBatchSize=100` shortens the shader wait before joining (about 3 minutes to 7 seconds on one PC), and `ConfiguredInternetSpeed`/`ConfiguredLanSpeed=300000` speed up loading.
 - Steam only: Xbox and Game Pass players join without mods.
 
-Player logs: the "Subnautica 2 (collect logs for the host)" Start menu shortcut, or `moonpool.ps1 -CollectLogs`, puts one zip on the Desktop. It holds the launcher's log, the game's and UE4SS's logs, the record of placed files and crash folder names. Windows user and PC names are removed, crash dumps left out and nothing uploaded. It still names the server, its players and Steam IDs, so send it only to the host.
+Player logs: the "Subnautica 2 (collect logs for the host)" Start menu shortcut, or `moonpool.ps1 -CollectLogs`, puts one zip on the Desktop.
+
+| In it | Left out | Still in it |
+|---|---|---|
+| the launcher's log, the game's and UE4SS's logs, the record of placed files, crash folder names | Windows user and PC names, crash dumps; nothing is uploaded | the server, its players and Steam IDs: send it only to the host |
 
 Uninstall: close Subnautica 2, then in PowerShell:
 
@@ -48,7 +67,12 @@ Server mods run with the server's rights and Steam session. Only use ones you tr
 
 ## Players' loader on experimental builds
 
-On some builds the mod loader needs layout files its release lacks, or the game crashes about ten seconds after start. Put a `MemberVariableLayout.ini`, `VTableLayout.ini` and `UE4SS-settings.ini` that work on a player's PC for the current build in `ue4ss-client/` in the data volume. The server's own go in `ue4ss-local/` ([Updates](operating.md#updates)).
+On some builds the mod loader needs layout files its release lacks, or the game crashes about ten seconds after start.
+
+| Files | For | Put in the data volume at |
+|---|---|---|
+| `MemberVariableLayout.ini`, `VTableLayout.ini`, `UE4SS-settings.ini` that work on a player's PC for the current build | players | `ue4ss-client/` |
+| the server's own set | the server | `ue4ss-local/` ([Updates](operating.md#updates)) |
 
 - The settings file matters: on experimental build 26496980 the release's default crashes the game. The working file sets `MajorVersion = 5`, `MinorVersion = 6`, `DebugBuild = false`.
 - The pinned loader is served with those files added, under its own name and hash. Anyone who can reach the join page can fetch it.
