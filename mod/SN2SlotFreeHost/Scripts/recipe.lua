@@ -10,6 +10,7 @@ local save_policy = require('save_policy')
 local access = require('access')
 local voice_range = require('voice_range')
 local trail = require('trail')
+local toolbar = require('toolbar')
 local notify = require('notify')
 local hosted_poll_gate = require('hosted_poll')
 
@@ -1661,15 +1662,54 @@ pcall(function()
     status.invalidate()
   end)
 end)
--- One reading of where everyone is every 2 s serves both the voice range check and the map's trail
--- (trail.lua), which the status write takes in a batch. Neither on, no reading.
+-- Hotbar slots (toolbar.lua). The count is set through the game's SetNumSlots, found along the
+-- toolbar's class chain and called through the function object: a call by name fails on this build.
+local TOOLBAR_SLOTS = tonumber(os.getenv('SN2_TOOLBAR_SLOTS') or '')
+local toolbar_said = {}
+local function call_on(obj, name, ...)
+  local cls = obj:GetClass()
+  while valid(cls) do
+    local fn = StaticFindObject(cls:GetFullName():match('%S+$') .. ':' .. name)
+    if valid(fn) then return obj:CallFunction(fn, ...) end
+    cls = cls:GetSuperStruct()
+  end
+  error('no ' .. name)
+end
+local TOOLBAR_GAME = {
+  read = function(pawn)
+    local ok, nums = pcall(function()
+      local tb = pawn.ToolbarComponent
+      return { base = tb.UWEBaseNumToolbarSlots, now = tb.NumSlots, cap = pawn.SN2PlayerMaxToolbarSize }
+    end)
+    return ok and nums or nil
+  end,
+  set_cap = function(pawn, n) pawn.SN2PlayerMaxToolbarSize = n end,
+  set_count = function(pawn, n) call_on(pawn.ToolbarComponent, 'SetNumSlots', n) end,
+}
+local function toolbar_slots(live)
+  for _, p in ipairs(live) do
+    local pawn
+    if p.name ~= HOST_NAME then pcall(function() pawn = p.player.PawnPrivate end) end
+    if valid(pawn) then
+      local ok, set = pcall(toolbar.apply, TOOLBAR_SLOTS, pawn, TOOLBAR_GAME)
+      local said = ok and (set and ('set to ' .. set) or nil) or ('failed: ' .. tostring(set))
+      if said and toolbar_said[p.name] ~= said then
+        toolbar_said[p.name] = said
+        log('hotbar slots for ' .. tostring(p.name) .. ': ' .. said)
+      end
+    end
+  end
+end
+-- One reading of where everyone is every 2 s serves the voice range check, the map's trail
+-- (trail.lua), which the status write takes in a batch, and the hotbar slots. None on, no reading.
 local TRAIL = (os.getenv('SN2_WEB_MAP') or 'false') == 'true' and trail.new() or nil
-if VOICE_WARN or TRAIL then
+if VOICE_WARN or TRAIL or TOOLBAR_SLOTS then
   LoopAsync(2000, function()
     ExecuteInGameThread(function()
       local ok, err = pcall(function()
         local live = status.live_players(to_str, current_map())
         if TRAIL then trail.add(TRAIL, live, HOST_NAME) end
+        if TOOLBAR_SLOTS then toolbar_slots(live) end
         if VOICE_WARN then
           local store = ping_store()
           if store then voice_range.update(VOICE, live, store) end

@@ -55,6 +55,7 @@ services:
     # preset: AUTO_ACCEPT_FRIENDS HIDE_HOST_BODY IDLE_FREEZE_MINUTES IDLE_STOP_HOURS
     #   LIFEPOD_JOIN_HOLD PLAYER_SLOTS PRESET RESTART_CRON STORY_GOALS UNLOCK_REPLAY
     #   HOST_PRUNE VOICE_WARN VOICE_RANGE_M NET_MAX_CLIENT_RATE IDLE_MAX_FPS IDLE_SLOW_MINUTES
+    #   TOOLBAR_SLOTS
     # A second world reads instances/<slug>/.env through SN2_ENV_FILE (moonpool-instance add).
     env_file:
       - path: ${SN2_ENV_FILE:-.env}
