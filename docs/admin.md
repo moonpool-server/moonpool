@@ -38,7 +38,7 @@ Nothing to install: rename any PDA signal to a command.
 !slots 8              change the player cap
 !ping                 where everyone is, for admins; your own spot for anyone
 !cmd LINE             one of the game's console commands, run on the host as you
-!mp LINE              the admin console; any other word goes there too, so !g copper 10 works
+!mp LINE              the admin console; any other word goes there too, so !give copper 10 works
 ```
 
 `!cmd` and `!mp` need [console commands](#console-commands) turned on.
@@ -49,20 +49,19 @@ Nothing to install: rename any PDA signal to a command.
 
 | Signal | Does |
 |---|---|
-| `!give copper wire 10` | gives you the item with that name, 10 of it; `g` is short for `give` |
+| `!give copper wire 10` | gives you the item with that name, 10 of it |
 | `!give john copper 5` | gives it to the player whose name starts with john |
 | `!give everyone copper` | gives it to every player (`all` and `*` work too) |
 | `!give 10 titanium ingot` | the name's words and the number in any order, no quotes needed |
 | `!give cop` | an unclear name asks: `cop? 1 Copper  2 Copper Ingot  3 Copper Wire` |
 | `!2` | ...and a bare number answers it |
-| `!heal`, `!heal john`, `!heal all` | health, oxygen, food and water to 100 for you, a player, or everyone; `h` is short |
+| `!heal`, `!heal john`, `!heal all` | health, oxygen, food and water to 100 for you, a player, or everyone |
 | `!@john LINE` | any line, run as that player (`@all`, `@host`, `@me`) |
-| `!find titan` | items, players and tags by name, with their ids (`f`) |
-| `!ls items cop` | one kind, filtered (`l`); `!ls commands` lists the game's console commands |
-| `!cheats` | which cheat tags named in `console.json` are on (`c`) |
-| `!who` | who is on, with their Epic ID and ping (`w`) |
+| `!find titan` | items, players and tags by name, with their ids |
+| `!list items cop` | one kind, filtered; `!list commands` lists the game's console commands |
+| `!cheats` | which cheat tags named in `console.json` are on |
+| `!who` | who is on, with their Epic ID and ping |
 | `!SomeConsoleCommand 3` | any other line goes to the game as typed |
-| `!.` | the last line again |
 
 - A word after `give` counts as a player only when it starts exactly one player's name and the item's name follows it. Otherwise it's part of the item: `!give titanium ingot` gives the ingot even with a player called Titan on. `@` always means a player.
 - A shortcut with a missing part answers with how it's typed: `use: give [player] <item> [count]`.
@@ -92,7 +91,7 @@ Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFree
 |---|---|---|
 | `off` (or `normal`) | `DayOnly 0`, then `RemoveGlobalTag` for each tag in `tags`. On the current build every cheat, god mode and invisibility included, is a world tag, so this clears it for everyone | can't undo `FastSwim` (only on the admin's PC; run it again) or `QuickNav`'s fog and speed (the game's `NormalNav`) |
 | `god`, `fastbuild` | toggle | ignore a number: `FastBuild 0` turns it on |
-| `tag+`, `tag-` | add or remove a world tag with the `Global` commands | the game's own `AddTag` and `RemoveTag` act on one player and leave the world's cheat on |
+| `tag`, `untag` | add or remove a world tag with the `Global` commands | the game's own `AddTag` and `RemoveTag` act on one player and leave the world's cheat on |
 | `undo` (or `u`) | removes the nearest thing within `undo.within_m` metres of the admin, of the class their last spawn placed, and says how far away it was | goes by class and distance, so it may remove a copy someone else placed. The last `undo.keep` per admin are kept until restart |
 
 ## Macros
@@ -129,7 +128,7 @@ The game runs a cheat line from any client without checking who sent it. It has 
 - The server makes no Host call until both gate hooks are in place, and doesn't host at all if the part of the mod that holds them fails to load. The log says `HOLD: the cheat gate is not in place`. `CHEAT_GATE=off` hosts without it ([diagnostic switches](operating.md#diagnostic-switches)).
 - `deny` reads the first word of a one-command line, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
 
-- A line starting with `signal_word` (`mp`) is a console line: `mp g copper 10` equals `!g copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
+- A line starting with `signal_word` (`mp`) is a console line: `mp give copper 10` equals `!give copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
 - A typed shortcut needs no `mp`: `give 10 glass`, `heal all` and `!give john copper 5` get the same name lookup. A line that already names exact ids, as the panel's own picks do (`Give DA_Glass_ItemType 10`), runs as it is.
 - A line for a player whose character isn't in the world yet is skipped.
 
