@@ -1,21 +1,37 @@
 # Security
 
-Report security problems privately at https://github.com/moonpool-server/moonpool/security/advisories/new, not in a public issue. Say what you found and how to reproduce it.
-
-Fixes go into the next release; older releases get none. One person reads these: expect days, not hours, and no promised date.
+| | |
+|---|---|
+| Report | privately at https://github.com/moonpool-server/moonpool/security/advisories/new, not in a public issue. Say what you found and how to reproduce it |
+| Fixes | in the next release; older releases get none |
+| Response | one person reads these: expect days, not hours, and no promised date |
 
 ## Checking the launcher yourself
 
-Setup and every update check the launcher's signature against the release key, which isn't on GitHub. Neither file has Windows code signing, so Windows may warn. Both carry a GitHub build attestation:
+- Setup and every update check the launcher's signature against the release key, which isn't on GitHub.
+- Neither file has Windows code signing, so Windows may warn. Both carry a GitHub build attestation:
 
 ```sh
 gh attestation verify moonpool-setup.cmd -R moonpool-server/moonpool
 gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-workflow moonpool-server/moonpool/.github/workflows/ci.yml
 ```
 
-Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-setup.cmd` against it. Setup runs PowerShell with `-ExecutionPolicy Bypass`, a PowerShell script setting that doesn't touch Defender. Never turn Defender or SmartScreen off for it.
+- Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-setup.cmd` against it.
+- Setup runs PowerShell with `-ExecutionPolicy Bypass`, a PowerShell script setting that doesn't touch Defender. **Never turn Defender or SmartScreen off for it.**
 
 ## What to expect from it
+
+How a player's launcher comes to trust a server's mods:
+
+```mermaid
+flowchart LR
+  src["source in this repo"] --> ci["CI builds it,<br/>attests the files"]
+  ci --> sign["maintainer signs moonpool.ps1<br/>with a key kept off GitHub"]
+  sign --> setup["setup checks that signature,<br/>and so does every update"]
+  setup --> first["first join: the launcher<br/>keeps the server's key"]
+  first --> list["later lists must carry<br/>the same key"]
+  list --> hash["each mod checked against<br/>the hash in the signed list"]
+```
 
 - **How a player's launcher is trusted.**
   1. The source is in this repository. `.github/workflows/ci.yml` builds it and attaches a GitHub build attestation to `moonpool-setup.cmd`, `moonpool.ps1` and `moonpool-SHA256SUMS.txt`.
@@ -72,7 +88,9 @@ Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-set
 
 ## Known vulnerabilities in the image
 
-The game image is Debian trixie plus WineHQ's Wine, which pulls in a few hundred libraries. Grype, in the `Docker build` CI job, lists many High and Critical entries. At the last revision of this section, every finding was in a Debian package with no Debian fix (won't-fix or not fixed yet). That can change with any Debian advisory; the latest `Docker build` run's step summary has the current list.
+- The game image is Debian trixie plus Wine, which pulls in a few hundred libraries.
+- Grype, in the `Docker build` CI job, lists many High and Critical entries. At the last revision of this section, every finding was in a Debian package with no Debian fix (won't-fix or not fixed yet).
+- That can change with any Debian advisory; the latest `Docker build` run's step summary has the current list.
 
 - CI fails on a Critical finding that has a fix, and prints every High and Critical finding, fixed or not, in the step summary.
 - Before a release the maintainer is expected to read that list and remove what Moonpool doesn't need. CI doesn't check this.

@@ -1,6 +1,12 @@
 # Map
 
-`WEB_MAP=true` adds a live map at `/map`, shows it on the join page and adds a Map button beside Join on the Discord card. Anyone with the link sees it, and can fetch `map.json`, which holds everything the page draws, fogged or not.
+`WEB_MAP=true` turns on:
+
+- a live map at `/map`
+- the same map on the join page
+- a Map button beside Join on the Discord card
+
+> Anyone with the link sees it, and can fetch `map.json`, which holds everything the page draws, fogged or not.
 
 ## What it shows
 
