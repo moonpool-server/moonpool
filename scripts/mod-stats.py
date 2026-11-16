@@ -4,11 +4,16 @@
 For a mod whose page is a GitHub repository: its stars, last push and owner, from GitHub's public
 API. For a CurseForge project: its downloads, last update and authors, from CurseForge's API with
 the server's CURSEFORGE_API_KEY. Nexus and other pages get nothing. Read at most every
-MOD_STATS_MAX_AGE seconds (default six hours) into one JSON file; a failed read keeps the last
-numbers for that mod. They say how widely a project is used, not whether a file is safe.
+MOD_STATS_MAX_AGE seconds (default six hours) into one JSON file, and again as soon as the list's
+mods or their pages change; a failed read keeps the last numbers for that mod. They say how
+widely a project is used, not whether a file is safe.
+
+GITHUB_TOKEN goes only to https://api.github.com. GITHUB_API_URL may point elsewhere, for a
+mirror or a test, and is then read without the token.
 
 Usage: mod-stats.py <plugins.yaml> <stats.json>
 """
+import hashlib
 import json
 import os
 import re
@@ -55,11 +60,22 @@ def cf_url(path):
     return url
 
 
+def gh_url(path):
+    """The GitHub API address, https or a local file for tests, and whether GITHUB_TOKEN may go
+    with it: only to https://api.github.com."""
+    url = f"{GH_API}{path}"
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("https", "file"):
+        raise ValueError(f"refusing to read GitHub over {parts.scheme}://{parts.hostname}")
+    return url, parts.scheme == "https" and parts.hostname == "api.github.com" and parts.port is None
+
+
 def github(repo):
     headers = {"Accept": "application/vnd.github+json"}
-    if os.environ.get("GITHUB_TOKEN"):
+    url, token_ok = gh_url(f"/repos/{repo}")
+    if token_ok and os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
-    data = get_json(f"{GH_API}/repos/{repo}", headers)
+    data = get_json(url, headers)
     return {"site": "github", "stars": int(data["stargazers_count"]), "updated": str(data.get("pushed_at") or "")[:10],
             "by": str((data.get("owner") or {}).get("login") or ""), "summary": str(data.get("description") or "")[:300]}
 
@@ -115,24 +131,22 @@ def main():
         stats = {}
     if not isinstance(stats, dict):
         stats = {}
-    max_age = int(os.environ.get("MOD_STATS_MAX_AGE") or 21600)
-    now = int(os.environ.get("SN2_NOW") or time.time())
-    if now - int(stats.get("ts") or 0) < max_age:
-        return 0
     try:
         plugins = (yaml.safe_load(plugins_path.read_text(encoding="utf-8")) or {}).get("plugins") or []
     except (OSError, yaml.YAMLError, AttributeError):
         return 0
+    wanted = [(str(entry["name"]), project) for entry in plugins
+              if isinstance(entry, dict) and entry.get("name") and (project := project_of(entry))]
+    # The numbers belong to this list of mods and pages: a change to it reads them again at once.
+    listed = hashlib.sha256(json.dumps(wanted).encode()).hexdigest()
+    max_age = int(os.environ.get("MOD_STATS_MAX_AGE") or 21600)
+    now = int(os.environ.get("SN2_NOW") or time.time())
+    if now - int(stats.get("ts") or 0) < max_age and stats.get("listed") == listed:
+        return 0
     key = os.environ.get("CURSEFORGE_API_KEY", "")
     mods = stats.get("mods") if isinstance(stats.get("mods"), dict) else {}
     fresh = {}
-    for entry in plugins:
-        if not isinstance(entry, dict) or not entry.get("name"):
-            continue
-        name = str(entry["name"])
-        project = project_of(entry)
-        if not project:
-            continue
+    for name, project in wanted:
         ident = ":".join(project)
         try:
             found = lookup(project, key)
@@ -143,7 +157,7 @@ def main():
         if found:
             found["project"] = ident
             fresh[name] = found
-    write_atomic(out, json.dumps({"ts": now, "mods": fresh}, indent=2, sort_keys=True) + "\n")
+    write_atomic(out, json.dumps({"ts": now, "listed": listed, "mods": fresh}, indent=2, sort_keys=True) + "\n")
     return 0
 
 

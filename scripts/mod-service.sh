@@ -48,9 +48,16 @@ case ${1:-serve} in
     trap 'kill "$http_pid" 2>/dev/null || true' EXIT
     # The manifest follows plugins.yaml and the live lobby: republished every 30 s,
     # the join page re-rendered after it so its mod section matches.
+    stats_pid=''
     while kill -0 "$http_pid" 2>/dev/null; do
       if publisher --cached publish >"$RUN_DIR/mod-publish.json.tmp" 2>>"$LOG_DIR/web.log"; then :; fi
       mv -f "$RUN_DIR/mod-publish.json.tmp" "$RUN_DIR/mod-publish.json" 2>/dev/null || true
+      # The mods' public numbers (mod-stats.py, 20 s at most per request) are read in the background,
+      # one run at a time; the page renders from the last file and shows new numbers on a later pass.
+      if [ -z "$stats_pid" ] || ! kill -0 "$stats_pid" 2>/dev/null; then
+        python3 "$(dirname "$0")/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json" \
+          2>>"$LOG_DIR/web.log" & stats_pid=$!
+      fi
       python3 "$(dirname "$0")/join-page.py" 2>>"$LOG_DIR/web.log" || true
       sleep 30
     done

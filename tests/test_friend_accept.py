@@ -17,6 +17,7 @@ import struct
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.parse
 
@@ -53,7 +54,9 @@ def wine_protect(plain: bytes, user: str, salt: bytes = b"S" * 16) -> bytes:
             + struct.pack("<III", 0, 0x8004, 160) + blob(salt) + blob(c) + blob(b"h" * 20))
 
 
-def make_store(root: str, user: str, cookies: dict[str, str]) -> None:
+def make_store(root: str, user: str, cookies: dict[str, str], wal_after: dict[str, str] | None = None):
+    """A cookie store; with wal_after those cookies are committed to the write-ahead log only and
+    the open connection is returned, as a running client would hold it."""
     key = os.urandom(32)
     with open(os.path.join(root, "Local State"), "w") as f:
         json.dump({"os_crypt": {"encrypted_key": base64.b64encode(b"DPAPI" + wine_protect(key, user)).decode()}}, f)
@@ -66,7 +69,17 @@ def make_store(root: str, user: str, cookies: dict[str, str]) -> None:
                     ("steamcommunity.com", n, b"v10" + nonce + AESGCM(key).encrypt(nonce, v.encode(), None)))
     con.execute("insert into cookies values ('store.steampowered.com','sessionid', x'00')")
     con.commit()
-    con.close()
+    if wal_after is None:
+        con.close()
+        return None
+    con.execute("pragma journal_mode=wal")
+    con.execute("pragma wal_autocheckpoint=0")
+    for n, v in wal_after.items():
+        nonce = os.urandom(12)
+        con.execute("insert into cookies values (?,?,?)",
+                    ("steamcommunity.com", n, b"v10" + nonce + AESGCM(key).encrypt(nonce, v.encode(), None)))
+    con.commit()
+    return con
 
 
 class Fake(http.server.BaseHTTPRequestHandler):
@@ -85,6 +98,7 @@ class Fake(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     lobby: str | None = "109775243279513236"
+    profile_delay = 0.0
     api_queries: list = []
 
     get_paths: list = []
@@ -103,6 +117,7 @@ class Fake(http.server.BaseHTTPRequestHandler):
         elif self.path.startswith("/textfilter/ajaxgetfriendslist"):
             self._send(json.dumps({"success": 1, "friendslist": {"friends": Fake.friends}}).encode())
         else:
+            time.sleep(Fake.profile_delay)
             sid = self.path.split("/")[2].split("?")[0]
             self._send(f"<profile><steamID><![CDATA[Player {sid[-2:]}]]></steamID></profile>".encode(), "text/xml")
 
@@ -134,6 +149,7 @@ def main() -> int:
         check(True, "wrong user is refused")
 
     srv = http.server.HTTPServer(("127.0.0.1", 0), Fake)
+    srv.handle_error = lambda *a: None  # a request the client gave up on is not an error here
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     fa.BASE = f"http://127.0.0.1:{srv.server_port}"
     with tempfile.TemporaryDirectory() as root:
@@ -201,7 +217,8 @@ def main() -> int:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = fa.main([])
-        check(rc == 1 and "friend accept skipped" in out.getvalue(), "a failure is one 'skipped' line, rc 1")
+        check(rc == 1 and out.getvalue().startswith("friend accept failed: ValueError"),
+              "a store that does not decrypt is one 'failed' line, rc 1")
         check("SESS" not in out.getvalue() and "LOGIN" not in out.getvalue(), "no cookie value is printed")
 
         # 5. --lobby: the host's own lobby id from GetPlayerLinkDetails, through the session's token.
@@ -274,6 +291,53 @@ def main() -> int:
             check(Fake.post_paths == [], "read-only mode refuses a POST")
         for k in ("ALLOWLIST_ONLY", "SHOW_PLAYER_NAMES"):
             os.environ.pop(k)
+
+        # 8. One run accepts at most MAX_ACTIONS requests; the rest wait for the next run.
+        many = [f"7656119800000010{i}" for i in range(8)]
+        Fake.friends = [{"ulfriendid": s, "efriendrelationship": 2} for s in many]
+        Fake.posts, Fake.post_paths = [], []
+        fa.READ_ONLY = False  # left set by the --pending runs above
+        lines = fa.accept_pending(ck)
+        check([p["steamid"] for p in Fake.posts] == many[:5] and lines[-1].endswith("wait for the next run"),
+              "one run accepts five requests and leaves the rest for the next")
+
+        # 9. A slow Steam cannot hold a run past its time budget.
+        os.environ["ALLOWLIST_ONLY"] = "false"
+        Fake.friends = [{"ulfriendid": s, "efriendrelationship": 2} for s in many[:4]]
+        Fake.posts, Fake.profile_delay, budget = [], 0.6, fa.RUN_BUDGET
+        fa.RUN_BUDGET = 1.0
+        out = io.StringIO()
+        began = time.monotonic()
+        with contextlib.redirect_stdout(out):
+            rc = fa.main([])
+        took = time.monotonic() - began
+        fa.RUN_BUDGET, Fake.profile_delay, fa.DEADLINE = budget, 0.0, None
+        os.environ.pop("ALLOWLIST_ONLY")
+        check(rc == 0 and took < 1.8 and "wait for the next run" in out.getvalue() and len(Fake.posts) < 4,
+              f"the run stops at its time budget ({took:.1f} s)")
+
+        # 10. No web session or cookie store yet is an expected 'skipped'; anything else says 'failed'.
+        os.environ["STEAM_HTMLCACHE"] = os.path.join(root, "absent")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = fa.main([])
+        check(rc == 1 and out.getvalue().startswith("friend accept skipped: FileNotFoundError"),
+              "a missing cookie store is an expected skip")
+        os.environ["STEAM_HTMLCACHE"] = root
+
+    # 11. Cookies the running client has only written to its write-ahead log are read too.
+    with tempfile.TemporaryDirectory() as live:
+        held = make_store(live, "steam", {"sessionid": "SESS"}, wal_after={"steamLoginSecure": "FRESH"})
+        try:
+            check(os.path.getsize(os.path.join(live, "Default", "Network", "Cookies-wal")) > 0,
+                  "the fixture keeps a cookie in the write-ahead log")
+            got = fa.community_cookies(live, "steam")
+        except sqlite3.Error as e:
+            got = {"error": type(e).__name__}
+        finally:
+            held.close()
+        check(got == {"sessionid": "SESS", "steamLoginSecure": "FRESH"},
+              "a cookie still in the write-ahead log is read")
     srv.shutdown()
     saved = {k: os.environ.get(k) for k in ("STEAMCOMMUNITY_BASE", "STEAMAPI_BASE")}
     os.environ.update(STEAMCOMMUNITY_BASE="https://evil.example", STEAMAPI_BASE="https://evil.example")

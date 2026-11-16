@@ -372,3 +372,43 @@ YAML
   CURSEFORGE_API_URL=https://evil.example/v1 SN2_NOW=1700400000 run python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"
   [[ $output == *'refusing to send the CurseForge key to https://evil.example'* ]]
 }
+
+@test "mod stats: a mod added to the list gets its numbers before the six hours are up" {
+  api="$BATS_TEST_TMPDIR/api"; mkdir -p "$api/gh/repos/o"
+  printf '{"stargazers_count":1,"pushed_at":"2026-05-28T10:00:00Z","owner":{"login":"o"}}' >"$api/gh/repos/o/r"
+  printf '{"stargazers_count":2,"pushed_at":"2026-05-29T10:00:00Z","owner":{"login":"o"}}' >"$api/gh/repos/o/s"
+  printf 'plugins:\n  - {name: A, source: "https://github.com/o/r"}\n' >"$CONTROL_DIR/plugins.yaml"
+  stats() { GITHUB_API_URL="file://$api/gh" SN2_NOW=$1 python3 "$ROOT/scripts/mod-stats.py" "$CONTROL_DIR/plugins.yaml" "$RUN_DIR/mod-stats.json"; }
+  stats 1700000000
+  printf '  - {name: B, source: "https://github.com/o/s"}\n' >>"$CONTROL_DIR/plugins.yaml"
+  stats 1700000060
+  [ "$(jq -r '.mods.B.stars' "$RUN_DIR/mod-stats.json")" = 2 ]
+  [ "$(jq -r '.mods.A.stars' "$RUN_DIR/mod-stats.json")" = 1 ]
+  # An unchanged list within the window reads nothing.
+  stats 1700000120
+  [ "$(jq -r '.ts' "$RUN_DIR/mod-stats.json")" = 1700000060 ]
+}
+
+@test "mod stats: GITHUB_TOKEN goes to https://api.github.com only, and GitHub is never read over plain http" {
+  # The request is recorded instead of sent: which address, and whether it carried the token.
+  sent() {
+    env "$@" python3 - "$ROOT/scripts/mod-stats.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ms", sys.argv[1]); ms = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ms)
+ms.get_json = lambda url, headers: print(url, "token" if "Authorization" in headers else "none") or {"stargazers_count": 0}
+try:
+    ms.github("o/r")
+except ValueError as e:
+    print("refused:", e)
+PY
+  }
+  run sent GITHUB_TOKEN=t0ken GITHUB_API_URL=https://api.github.com
+  [ "$output" = 'https://api.github.com/repos/o/r token' ]
+  run sent GITHUB_TOKEN=t0ken GITHUB_API_URL=https://evil.example
+  [ "$output" = 'https://evil.example/repos/o/r none' ]
+  run sent GITHUB_TOKEN=t0ken GITHUB_API_URL=https://api.github.com.evil.example
+  [ "$output" = 'https://api.github.com.evil.example/repos/o/r none' ]
+  run sent GITHUB_TOKEN=t0ken GITHUB_API_URL=http://api.github.com
+  [[ $output == 'refused: refusing to read GitHub over http://api.github.com'* ]]
+}

@@ -33,6 +33,7 @@ import sqlite3
 import struct
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 
@@ -48,6 +49,28 @@ class _Stay(urllib.request.HTTPRedirectHandler):
 
 _OPEN = urllib.request.build_opener(_Stay).open
 READ_ONLY = False
+REQUEST_TIMEOUT = 20  # seconds for one Steam request
+RUN_BUDGET = 25.0  # seconds of Steam requests one run may spend; main() starts the clock
+MAX_ACTIONS = 5  # incoming requests accepted, or friends removed, per run; the rest wait for the next
+DEADLINE: float | None = None  # time.monotonic() after which no Steam request starts
+
+
+class NotReady(ValueError):
+    """The Steam client has no web session to read yet: expected before its first sign-in."""
+
+
+def _timeout() -> float:
+    """The timeout for the next request: REQUEST_TIMEOUT, cut to what is left of the run's budget."""
+    if DEADLINE is None:
+        return REQUEST_TIMEOUT
+    left = DEADLINE - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("this run's time budget is spent")
+    return min(REQUEST_TIMEOUT, left)
+
+
+def _spent() -> bool:
+    return DEADLINE is not None and time.monotonic() >= DEADLINE
 
 
 def policy_ids(path: str) -> set[str]:
@@ -104,15 +127,21 @@ def community_cookies(htmlcache: str, user: str) -> dict[str, str]:
     key = wine_unprotect(ek[5:], user)
     if len(key) != 32:
         raise ValueError("Local State key is not an AES-256 key")
-    fd, tmp = tempfile.mkstemp()
-    os.close(fd)
-    try:  # the client holds the database open; read a copy
-        shutil.copy(os.path.join(htmlcache, "Default", "Network", "Cookies"), tmp)
-        con = sqlite3.connect(tmp)
-        rows = con.execute("select name, encrypted_value from cookies where host_key = 'steamcommunity.com'").fetchall()
-        con.close()
-    finally:
-        os.remove(tmp)
+    store = os.path.join(htmlcache, "Default", "Network", "Cookies")
+    with tempfile.TemporaryDirectory() as tmp:
+        # The client holds the database open, so read a copy. Recent writes may still be in its
+        # write-ahead log or rollback journal: those are copied beside it and SQLite applies them
+        # on open. The -shm index is left behind; SQLite rebuilds it from the log.
+        copy = os.path.join(tmp, "Cookies")
+        shutil.copyfile(store, copy)
+        for side in ("-wal", "-journal"):
+            if os.path.isfile(store + side):
+                shutil.copyfile(store + side, copy + side)
+        con = sqlite3.connect(copy)
+        try:
+            rows = con.execute("select name, encrypted_value from cookies where host_key = 'steamcommunity.com'").fetchall()
+        finally:
+            con.close()
     out = {}
     for name, ev in rows:
         if name in SESSION_COOKIES and ev[:3] in (b"v10", b"v11"):
@@ -127,7 +156,7 @@ def _req(path: str, cookies: dict[str, str], form: dict[str, str] | None = None)
     r = urllib.request.Request(BASE + path, data=data, headers={
         "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
         "Referer": BASE + "/", "User-Agent": "sn2-host friend-accept"})
-    with _OPEN(r, timeout=20) as resp:
+    with _OPEN(r, timeout=_timeout()) as resp:
         return resp.read()
 
 
@@ -147,7 +176,7 @@ def remove_friend(cookies: dict[str, str], steamid: str) -> bool:
 
 def friends_list(cookies: dict[str, str]) -> list[dict]:
     if "sessionid" not in cookies or "steamLoginSecure" not in cookies:
-        raise ValueError("the Steam client has no steamcommunity.com web session yet")
+        raise NotReady("the Steam client has no steamcommunity.com web session yet")
     body = json.loads(_req("/textfilter/ajaxgetfriendslist", cookies))
     if body.get("success") != 1:
         raise ValueError(f"friends list refused: success={body.get('success')}")
@@ -165,33 +194,49 @@ def pending(cookies: dict[str, str], banned: set[str], allowed: set[str], allowl
 def accept_pending(cookies: dict[str, str], dry_run: bool = False,
                    banned: set[str] | None = None, allowed: set[str] | None = None,
                    allowlist_only: bool = False) -> list[str]:
+    """At most MAX_ACTIONS accepts or removals, within the run's time budget; the rest are left
+    for the next run, which reads the list again."""
     lines = []
     banned, allowed = banned or set(), allowed or set()
+    acted = 0
     for f in friends_list(cookies):
         sid = str(f["ulfriendid"])
-        if sid in banned:
+        wanted = sid in banned or (f.get("efriendrelationship") == REQUEST_RECIPIENT
+                                   and (sid in allowed or not allowlist_only))
+        if wanted and (acted >= MAX_ACTIONS or _spent()):
+            lines.append(f"friend requests: {MAX_ACTIONS} handled or the time budget spent; the rest wait for the next run")
+            break
+        try:
+            if sid in banned:
+                acted += 1
+                if dry_run:
+                    lines.append(f"friend blocked (dry run): {sid}")
+                elif remove_friend(cookies, sid):
+                    lines.append(f"friend removed: {sid}")
+                else:
+                    lines.append(f"friend remove failed: {sid}")
+                continue
+            if f.get("efriendrelationship") != REQUEST_RECIPIENT:
+                continue
+            if allowlist_only and sid not in allowed:
+                lines.append(f"friend request ignored (not allowed): {sid}")
+                continue
+            acted += 1
+            name = name_of(sid, cookies)
             if dry_run:
-                lines.append(f"friend blocked (dry run): {sid}")
-            elif remove_friend(cookies, sid):
-                lines.append(f"friend removed: {sid}")
+                lines.append(f"friend pending (dry run): {name} ({sid})")
+                continue
+            r = json.loads(_req("/actions/AddFriendAjax", cookies,
+                                {"sessionID": cookies["sessionid"], "steamid": sid, "accept_invite": "1"}) or b"{}")
+            if r.get("success") in (1, True):
+                lines.append(f"friend accepted: {name} ({sid})")
             else:
-                lines.append(f"friend remove failed: {sid}")
-            continue
-        if f.get("efriendrelationship") != REQUEST_RECIPIENT:
-            continue
-        if allowlist_only and sid not in allowed:
-            lines.append(f"friend request ignored (not allowed): {sid}")
-            continue
-        name = name_of(sid, cookies)
-        if dry_run:
-            lines.append(f"friend pending (dry run): {name} ({sid})")
-            continue
-        r = json.loads(_req("/actions/AddFriendAjax", cookies,
-                            {"sessionID": cookies["sessionid"], "steamid": sid, "accept_invite": "1"}) or b"{}")
-        if r.get("success") in (1, True):
-            lines.append(f"friend accepted: {name} ({sid})")
-        else:
-            lines.append(f"friend accept failed: {name} ({sid}): {json.dumps(r)[:120]}")
+                lines.append(f"friend accept failed: {name} ({sid}): {json.dumps(r)[:120]}")
+        except OSError:
+            if not _spent():
+                raise
+            lines.append(f"friend requests: {MAX_ACTIONS} handled or the time budget spent; the rest wait for the next run")
+            break
     return lines
 
 
@@ -211,15 +256,16 @@ def own_lobby(cookies: dict[str, str], steamid: str) -> str:
     if not tok:
         raise ValueError("the community session handed out no web API token")
     q = urllib.parse.urlencode({"access_token": tok, "steamids[0]": steamid})
-    with _OPEN(f"{API}/IPlayerService/GetPlayerLinkDetails/v1/?{q}", timeout=20) as r:
+    with _OPEN(f"{API}/IPlayerService/GetPlayerLinkDetails/v1/?{q}", timeout=_timeout()) as r:
         acc = (json.load(r).get("response", {}).get("accounts") or [{}])[0]
     lobby = str((acc.get("private_data") or {}).get("lobby_steam_id") or "")
     return lobby if lobby.isdigit() and lobby != "0" else ""
 
 
 def main(argv: list[str]) -> int:
-    global READ_ONLY
+    global READ_ONLY, DEADLINE
     dry, READ_ONLY = "--dry-run" in argv, "--pending" in argv
+    DEADLINE = time.monotonic() + RUN_BUDGET
     htmlcache = os.environ.get("STEAM_HTMLCACHE") or os.path.join(
         os.environ.get("STEAM_SESSION_DIR")
         or os.path.join(os.environ.get("DATA_DIR", "/data"), "steam-session", "local-appdata"), "htmlcache")
@@ -259,8 +305,11 @@ def main(argv: list[str]) -> int:
             return 0
         for line in accept_pending(cookies, dry, *rules):
             print(line)
-    except (OSError, ValueError, KeyError) as e:  # never print a cookie value
+    except (NotReady, FileNotFoundError) as e:  # no web session or cookie store yet; never print a cookie value
         print(f"friend accept skipped: {type(e).__name__}: {str(e)[:160]}")
+        return 1
+    except (OSError, ValueError, KeyError) as e:  # never print a cookie value
+        print(f"friend accept failed: {type(e).__name__}: {str(e)[:160]}")
         return 1
     return 0
 

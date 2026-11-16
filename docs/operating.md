@@ -60,7 +60,7 @@ The game needs no forwarded port.
 
 1. `bin/moonpool players invite <steamid64 or profile link>`.
 2. The player sends the hosting account a friend request.
-3. Accept it in the viewer, or set `AUTO_ACCEPT_FRIENDS=1` and Moonpool accepts invited players within a minute.
+3. Accept it in the viewer, or set `AUTO_ACCEPT_FRIENDS=1` and Moonpool accepts invited players within a minute (five a minute at most).
 4. They press Join Game or use the join page.
 
 - `ALLOWLIST_ONLY=false` lets in anyone who asks.

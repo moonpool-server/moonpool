@@ -43,6 +43,20 @@ record_lobby() { # hex lobby id from the UE log
   python3 "$(dirname "$0")/join-page.py" || true
 }
 
+# friend-accept.py's lines into the log. "skipped" (no Steam web session or cookie store yet) stays
+# out; a "failed" set the same as the last run's is not repeated.
+friend_fail_was=''
+friend_log() {
+  local lines fail
+  lines=$(grep -v '^friend accept skipped') || true
+  fail=$(grep '^friend accept failed' <<<"$lines") || true
+  if [ -n "$fail" ] && [ "$fail" = "$friend_fail_was" ]; then
+    lines=$(grep -v '^friend accept failed' <<<"$lines") || true
+  fi
+  friend_fail_was=$fail
+  [ -z "$lines" ] || printf '%s\n' "$lines" | sed "s/^/[$(stamp)] /" >>"$OUT"
+}
+
 # A watcher restart recovers the hosted lobby from the log; the public build masks its id.
 LOBBY_RE='(LobbyId=|SessionId: )Lobby\[(0x[0-9A-Fa-f]+)\]'
 # The log outlives the game: only a running game means its last lobby is still open.
@@ -130,13 +144,16 @@ heartbeat() {
     [ $((n % 2)) -eq 0 ] || continue
     # Every minute: accept pending friend requests from invited players (AUTO_ACCEPT_FRIENDS=1),
     # or only count them, read-only, for moonpool status and the card.
+    # A run spends at most about 25 s on Steam and handles at most five requests (friend-accept.py).
     if [ "${AUTO_ACCEPT_FRIENDS:-0}" = 1 ]; then
-      STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" 2>&1 |
-        grep -v '^friend accept skipped' | sed "s/^/[$(stamp)] /" >>"$OUT" || true
+      friend_log < <(STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" 2>&1)
     elif STEAM_HTMLCACHE="$STEAM_SESSION_DIR/htmlcache" python3 "$(dirname "$0")/friend-accept.py" --pending \
       >"$RUN_DIR/friend-requests.json.tmp" 2>/dev/null; then
-      mv "$RUN_DIR/friend-requests.json.tmp" "$RUN_DIR/friend-requests.json"
-    else rm -f "$RUN_DIR/friend-requests.json"; fi
+      mv "$RUN_DIR/friend-requests.json.tmp" "$RUN_DIR/friend-requests.json"; friend_fail_was=""
+    else
+      friend_log <"$RUN_DIR/friend-requests.json.tmp"
+      rm -f "$RUN_DIR/friend-requests.json" "$RUN_DIR/friend-requests.json.tmp"
+    fi
     # For a build whose log masks the lobby id, Steam's own answer: once, then every 5 minutes.
     if [ -n "$pid" ] && jq -e '.hosted == true' "$CONTROL_DIR/readiness.json" >/dev/null 2>&1 &&
       { [ ! -s "$RUN_DIR/mod-session.json" ] || [ $((n % 10)) -eq 0 ]; }; then
