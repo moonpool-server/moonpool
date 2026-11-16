@@ -139,7 +139,11 @@ local function trim(w)
       local row = select(2, ucall(line_label, G.get_parent))
       if not (valid(cls) and valid(row)) then return nil end
       local b = StaticConstructObject(cls, w[G.tree])
-      if not valid(b) or not ucall(row, G.add_child, b) then return nil end
+      if not valid(b) then return nil end
+      local added, slot = ucall(row, G.add_child, b)
+      if not added then return nil end
+      -- The box fills the row, as the game's label did.
+      if valid(slot) then ucall(slot, G.slot_size, { SizeRule = G.slot_fill, Value = 1.0 }) end
       return b
     end)
     if ok and valid(made) then

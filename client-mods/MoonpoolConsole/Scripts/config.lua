@@ -120,6 +120,8 @@ return {
     textbox_get = '/Script/UMG.EditableTextBox:GetText',
     textbox_set = '/Script/UMG.EditableTextBox:SetText',
     get_parent = '/Script/UMG.Widget:GetParent',
+    slot_size = '/Script/UMG.HorizontalBoxSlot:SetSize',
+    slot_fill = 1,                      -- ESlateSizeRule: Fill
     keyboard_focus = '/Script/UMG.Widget:SetKeyboardFocus',
     list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
     row_item = 'Context',               -- what a row stands for: an item's name in the game's data
