@@ -37,7 +37,7 @@
 #   default:  true | false           (default true; false leaves an optional mod unticked the first
 #             time a player joins, until they tick it)
 #   (A mod the host itself runs is not listed here: it goes in ue4ss-local/Mods/<name>/
-#   in the data volume, see docs/operating.md)
+#   in the data volume, see docs/mods.md)
 #   version:  what you call this version, shown to players
 #   enabled:  true | false            (default true)
 #   install:

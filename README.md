@@ -69,7 +69,7 @@ The join page then offers Play with mods. Players install the launcher once, fro
 
 ![The launcher asking which of the demo's mods to install, with the site each comes from](docs/images/launcher-install.png)
 
-Mods run with the player's Windows rights, and Moonpool doesn't review them. Accept mods only from a host you trust. How the launcher is trusted, and how to check it yourself: [SECURITY.md](SECURITY.md). What it changes on a player's PC and how to uninstall: the [guide](docs/operating.md#mods).
+Mods run with the player's Windows rights, and Moonpool doesn't review them. Accept mods only from a host you trust. How the launcher is trusted, and how to check it yourself: [SECURITY.md](SECURITY.md). What it changes on a player's PC and how to uninstall: [docs/mods.md](docs/mods.md).
 
 ## What's exposed
 
@@ -87,7 +87,7 @@ The rest is in [SECURITY.md](SECURITY.md).
 - Backups with a one-command restore
 - Several worlds on one machine
 - A Discord card with who's on, and Join and Map buttons
-- A map of where everyone was a few minutes ago, over a map picture you choose ([guide](docs/operating.md#map))
+- A map of where everyone was a few minutes ago, over a map picture you choose ([docs/map.md](docs/map.md))
 - An empty server goes quiet: no saves, and with the friends preset a lower frame rate and a stopped clock
 
 ## Tested builds
@@ -108,7 +108,7 @@ The game's EULA and Steam's Subscriber Agreement bar modifying the game and runn
 
 ## More
 
-- [Running Moonpool](docs/operating.md): sizing, mods, admin, backups, troubleshooting. Settings: [.env.example](.env.example). Commands: `bin/moonpool help`.
+- [Running Moonpool](docs/operating.md): sizing, network, backups, updates, troubleshooting. Also [mods](docs/mods.md), [in-game admin](docs/admin.md) and [the map](docs/map.md). Settings: [.env.example](.env.example). Commands: `bin/moonpool help`.
 - [CONTRIBUTING.md](CONTRIBUTING.md). `pre-commit run --all-files` runs the CI checks. Don't commit game files, Steam sessions, logs or anything generated from the game.
 - MIT licensed: this code only, not Subnautica 2 or Steam.
 
