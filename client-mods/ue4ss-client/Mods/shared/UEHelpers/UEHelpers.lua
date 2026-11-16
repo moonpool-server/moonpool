@@ -62,6 +62,40 @@ function UEHelpers.GetGameViewportClient()
     return CreateInvalidObject() ---@type UGameViewportClient
 end
 
+-- A key bound by a mod that loads these helpers does not fire while the game's cheat panel is open:
+-- every UE4SS key bind hears every key, so typing "titanium" there would open a map bound to M.
+-- Wraps RegisterKeyBind once per Lua state; the check runs only when a bound key is pressed.
+local typingPanels = { "WBP_CheatInput_C" }
+local isActivated = "/Script/CommonUI.CommonActivatableWidget:IsActivated"
+local function typingPanelOpen()
+    local fn = StaticFindObject(isActivated)
+    if not (fn and fn:IsValid()) then return false end
+    for _, class in ipairs(typingPanels) do
+        for _, panel in ipairs(FindAllOf(class) or {}) do
+            local ok, open = pcall(function()
+                return panel:IsValid() and not panel:GetFullName():find("Default__", 1, true) and panel:CallFunction(fn)
+            end)
+            if ok and open == true then return true end
+        end
+    end
+    return false
+end
+if type(RegisterKeyBind) == "function" and not KeyBindsGuarded then
+    KeyBindsGuarded = true
+    local register = RegisterKeyBind
+    local function guarded(callback)
+        return function(...)
+            local ok, open = pcall(typingPanelOpen)
+            if ok and open then return end
+            return callback(...)
+        end
+    end
+    RegisterKeyBind = function(key, modifiersOrCallback, callback)
+        if callback == nil then return register(key, guarded(modifiersOrCallback)) end
+        return register(key, modifiersOrCallback, guarded(callback))
+    end
+end
+
 -- On some game builds a function looked up by name on an object throws ("Array failed invariants
 -- check") although the function exists. Then the function object is found along the object's class
 -- chain and called through it. Installed once per Lua state, on the shared object metatable.
