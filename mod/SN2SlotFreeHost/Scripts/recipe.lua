@@ -9,6 +9,7 @@ local idle = require('idle')
 local save_policy = require('save_policy')
 local access = require('access')
 local voice_range = require('voice_range')
+local trail = require('trail')
 local notify = require('notify')
 local hosted_poll_gate = require('hosted_poll')
 
@@ -1644,20 +1645,26 @@ pcall(function()
     status.invalidate()
   end)
 end)
-if VOICE_WARN then
+-- One reading of where everyone is every 2 s serves both the voice range check and the map's trail
+-- (trail.lua), which the status write takes in a batch. Neither on, no reading.
+local TRAIL = (os.getenv('SN2_WEB_MAP') or 'false') == 'true' and trail.new() or nil
+if VOICE_WARN or TRAIL then
   LoopAsync(2000, function()
     ExecuteInGameThread(function()
       local ok, err = pcall(function()
-        local store = ping_store()
-        if store then voice_range.update(VOICE, status.live_players(to_str, current_map()), store) end
+        local live = status.live_players(to_str, current_map())
+        if TRAIL then trail.add(TRAIL, live, HOST_NAME) end
+        if VOICE_WARN then
+          local store = ping_store()
+          if store then voice_range.update(VOICE, live, store) end
+        end
       end)
-      if not ok then log('voice range error: ' .. tostring(err)) end
+      if not ok then log('player reading error: ' .. tostring(err)) end
     end)
     return false
   end)
-else
-  log('voice range warnings are off')
 end
+if not VOICE_WARN then log('voice range warnings are off') end
 LoopAsync(STATUS_MS, function()
   ExecuteInGameThread(function()
     local ok, err = pcall(function()
@@ -1686,6 +1693,7 @@ LoopAsync(STATUS_MS, function()
       end
       st.settings = settings_block(tod, wx, os.date('!%Y-%m-%dT%H:%M:%SZ'))
       st.unlocks = unlocks.snapshot(UNLOCKS)
+      if TRAIL then st.visited, st.visited_cell_m = trail.take(TRAIL), trail.CELL_M end
       local tags = world_tags()
       if tags then
         st.cheats = {}

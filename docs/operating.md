@@ -367,7 +367,7 @@ For mentions on important alerts, set `DISCORD_ALERT_ROLE_ID` to an opt-in role'
 |---|---|
 | Each player where they were `MAP_DELAY_MINUTES` ago (15; 0 is the last position), coloured by depth, as "Player 1" etc. Names with `MAP_PLAYER_NAMES=true`, never with `SHOW_PLAYER_NAMES=false`. A player who left stays as a faded marker for an hour | Bases (the game's base position can be far from its rooms; name a signal there instead) |
 | Lifepods and PDA signals everyone can see, by name. A signal shows once it has stayed put for the delay, so a vehicle's shows where it was left | Signals hidden by default, such as undiscovered story places, and admin commands |
-| Fog over places nobody has visited, clearing on the same delay, when a map picture is set. The Discord picture too | Players, explored places and signals following something with `MAP_PLAYERS=false`; signals with `MAP_SIGNALS=false`. Both apply to `map.json` too |
+| Fog over places nobody has visited, clearing on the same delay, when a map picture is set. The Discord picture too. The host mod notes each player's 50 m square every 2 s and hands them over with each status write | Players, explored places and signals following something with `MAP_PLAYERS=false`; signals with `MAP_SIGNALS=false`. Both apply to `map.json` too |
 
 Moonpool ships no map picture. To set one:
 
