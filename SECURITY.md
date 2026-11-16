@@ -41,6 +41,10 @@ flowchart LR
   3. Setup downloads the launcher and its signature from this repository's latest release and checks the signature with the public key it carries before running it. The launcher does the same on every update.
   4. On a player's first join the launcher saves the server's key from its `moonpool.json`. A different key at the same address counts as a new server, and the player is asked before any mod is installed.
   5. Each mod archive is checked against the hash in the signed list (sha256, or the sha1 or md5 CurseForge publishes) before it is unpacked. Every placed file is recorded with its sha256 and checked again on later runs.
+- **How the launcher downloads.** Each web download is stopped, and its partial file deleted, when it goes past a size limit, a time limit or three redirects.
+  - Size, checked against both the declared length and the bytes actually read: `moonpool.json` 1 MB, the mod list 4 MB, the launcher 8 MB, each signature 64 KB. A mod archive stops at the size the signed list gives for it; a list without one, and the UE4SS loader, get the 4 GB unpack limit.
+  - Time: 2 minutes for the small files, 60 minutes for an archive or the loader, and at most 60 seconds' wait for any one read.
+  - A redirect from https must lead to https; one from http only to https or the same host.
 - **What the launcher touches on Windows.** It runs as the signed-in user and never asks for administrator rights.
   - Its own folder `%LOCALAPPDATA%\Moonpool`: the launcher, the ledger of placed files, one folder per server.
   - The registry key `HKCU\Software\Classes\moonpool`, so `moonpool:` links open it.
@@ -76,7 +80,7 @@ flowchart LR
   | GitHub | the game container | the pinned UE4SS archive | installing the loader |
   | Valve's CDN | the game container | `SteamSetup.exe` | first start |
   | Microsoft (`aka.ms`) | the game container | the Visual C++ runtime | when `NATIVE_MSVC` asks for it |
-  | GitHub, CurseForge | the game container | the mods you list, and their stars, downloads, dates and authors | publishing mods; stats at most every six hours |
+  | GitHub, CurseForge | the game container | the mods you list, and their stars, downloads, dates and authors | publishing mods; stats at most every six hours, and when the mod list changes |
   | the servers in `DISCORD_BOARD_PEERS` | the game container | their status for the card | a peer is set |
   | the map picture addresses you set | the game container, https only | the pictures behind the map and its still | `WEB_MAP=true` with a picture set |
   | cdnjs.cloudflare.com, cdn.jsdelivr.net | the map viewer's browser | the page's scripts and icon font | the map page is opened |

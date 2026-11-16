@@ -64,9 +64,13 @@ export PRESET HOST_PRUNE HIDE_HOST_BODY AUTO_ACCEPT_FRIENDS RESTART_CRON RESTART
 VOICE_RANGE_M="${VOICE_RANGE_M:-100}"
 export VOICE_RANGE_M VOICE_WARN
 
-# The host account counts as a player, so the session limit is PLAYER_SLOTS + 1.
-PLAYER_SLOTS="${PLAYER_SLOTS//[^0-9]/}"
-SESSION_LIMIT=$((${PLAYER_SLOTS:-4} + 1))
+# The host account counts as a player, so the session limit is PLAYER_SLOTS + 1. The range is the
+# slots command's (idle.session_limit in the mod): 1 to 63.
+case "$PLAYER_SLOTS" in
+  [1-9]|[1-5][0-9]|6[0-3]) ;;
+  *) printf 'PLAYER_SLOTS must be a whole number from 1 to 63 (got %q)\n' "$PLAYER_SLOTS" >&2; exit 64 ;;
+esac
+SESSION_LIMIT=$((PLAYER_SLOTS + 1))
 HOST_NAME="${HOST_NAME:-SN2 Host}"
 STEAM_BRANCH="${STEAM_BRANCH:-public}"
 # Empty SAVE_NAME = newest save, or a new world (Slot1) when none exists.

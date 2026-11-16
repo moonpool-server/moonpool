@@ -37,6 +37,15 @@ check(cfg.daylight == 'long', 'trailing comment dropped: ' .. tostring(cfg.dayli
 check(cfg.weather == 'clear', 'weather read')
 check(cfg.mods == nil and cfg.name == nil, 'an older mods: list is skipped whole')
 
+-- A quoted value with a comment after it: the comment goes, then the quotes.
+local quoted = assert(settings.parse(
+  'time_of_day: "08:00" # morning\nweather: \'clear\'   # sky\ndaylight: "frozen # held"\n'))
+check(quoted.time_of_day == '08:00', 'a quoted value before a comment loses its quotes: ' .. quoted.time_of_day)
+check(quoted.weather == 'clear', 'a single-quoted value before a comment loses its quotes: ' .. quoted.weather)
+check(quoted.daylight == 'frozen # held', 'a # inside the quotes is part of the value: ' .. quoted.daylight)
+local first_apply = settings.plan(quoted).apply[1]
+check(first_apply and first_apply.line == 'SetTimeOfDay 08:00', 'and it applies')
+
 -- Without a verified command every value is refused, none applied.
 local p = settings.plan(cfg, {})
 check(#p.apply == 0, 'nothing applied without a verified command')

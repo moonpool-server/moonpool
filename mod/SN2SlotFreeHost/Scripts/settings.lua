@@ -52,7 +52,12 @@ local function trim(s) return (s:gsub('^%s+', ''):gsub('%s+$', '')) end
 local function scalar(v)
   v = trim(v)
   local q = v:sub(1, 1)
-  if (q == '"' or q == "'") and v:sub(-1) == q and #v >= 2 then return v:sub(2, -2) end
+  if q == '"' or q == "'" then
+    -- A quoted value ends at its closing quote; only a # comment may follow it.
+    local close = v:find(q, 2, true)
+    local rest = close and v:sub(close + 1)
+    if rest and (rest == '' or rest:match('^%s+#')) then return v:sub(2, close - 1) end
+  end
   v = trim((v:gsub('%s+#.*$', '')))
   return v
 end

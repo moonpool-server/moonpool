@@ -19,7 +19,7 @@ bin/moonpool mods list
 - CurseForge needs `CURSEFORGE_API_KEY` in `.env` (free at console.curseforge.com) and an author who allows distribution; otherwise players download it from its page.
 - Nexus files, and CurseForge files their author keeps on CurseForge: run `bin/moonpool mods pin "<name>" <file.zip>` once. The server never fetches or serves these; players download them and the launcher checks they match.
 - `.pak` mods need `kind: pak`. Optional mods are ticked unless `default: false`.
-- The join page shows each mod's `summary`, or its own description from GitHub or CurseForge, with stars or downloads, last update and author. These are read at most every `MOD_STATS_MAX_AGE` seconds (21600, six hours). CurseForge needs the key; `GITHUB_TOKEN` in `.env` raises GitHub's limit of 60 reads an hour.
+- The join page shows each mod's `summary`, or its own description from GitHub or CurseForge, with stars or downloads, last update and author. These are read in the background at most every `MOD_STATS_MAX_AGE` seconds (21600, six hours), and again when the list's mods or their pages change. CurseForge needs the key; `GITHUB_TOKEN` in `.env` raises GitHub's limit of 60 reads an hour and is sent only to `https://api.github.com`.
 
 ## On the player's PC
 

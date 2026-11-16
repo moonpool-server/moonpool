@@ -71,7 +71,7 @@ fake_mod() {
 @test "Lua protocol checks stale requests, duplicate nonces, versions and UTF-8" {
   run lua5.4 tests/lua/protocol_spec.lua
   [ "$status" -eq 0 ]
-  [[ $output == *"11 tests, 0 failures"* ]]
+  [[ $output == *"24 tests, 0 failures"* ]]
 }
 
 @test "Lua access policy kicks banned names once per presence" {
@@ -1528,6 +1528,17 @@ c33() { env DATA_DIR="$1" bash -c ". '$BATS_TEST_DIRNAME/../scripts/common.sh'; 
   run c33 "$d" "vdf_get '$d/missing.acf' buildid"
   [ -z "$output" ]
   run ! grep -q '^vdf_get()' "$BATS_TEST_DIRNAME/../scripts/steam-config.sh"
+}
+
+@test "steam-config writes HOST_NAME into the persona as plain text, whatever it contains" {
+  export WINEPREFIX="$BATS_TEST_TMPDIR/wine" STEAM_BRANCH=public
+  cfg="$WINEPREFIX/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
+  mkdir -p "$(dirname "$cfg")"
+  printf '"users"\n{\n\t"76561190000000001"\n\t{\n\t\t"PersonaName"\t\t"old"\n\t\t"MostRecent"\t\t"1"\n\t}\n}\n' >"$cfg"
+  HOST_NAME=$'Fish & Chips / "Deep\\" \\1\nNext' run "$BATS_TEST_DIRNAME/../scripts/steam-config.sh"
+  [ "$status" -eq 0 ]
+  grep -qxF $'\t\t"PersonaName"\t\t"Fish & Chips / Deep 1Next"' "$cfg"
+  [ "$(wc -l <"$cfg")" -eq 8 ]
 }
 
 @test "host_steamid is the account Steam signs in as, not the first one in the file" {

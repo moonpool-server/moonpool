@@ -234,6 +234,7 @@
     "no_player": "No player matches {query}",
     "missing_arg": "use: {usage}",
     "denied": "{word} is on the deny list (console.json)",
+    "chained": "One command per line: no ; | ` or line breaks",
     "ran": "{count} line(s) for {players}: {lines}",
     "no_last": "Nothing to repeat yet",
     "more": "... and {count} more",

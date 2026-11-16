@@ -47,6 +47,19 @@ YAML
   [[ "$output" != *.zip* && "$output" != *moonpool.cmd* ]]
 }
 
+@test "the page shows the last mod numbers and never reads GitHub or CurseForge itself" {
+  command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
+  printf 'plugins:\n  - {name: A, summary: "Does a thing.", source: "https://github.com/o/r"}\n' >"$SN2_CONTROL_DIR/plugins.yaml"
+  # Numbers past their six hours: a page that read stats itself would rewrite this file.
+  printf '{"ts":1,"mods":{"A":{"site":"github","stars":4321,"updated":"2026-05-28","by":"o","project":"github:o/r"}}}\n' \
+    >"$DATA_DIR/run/mod-stats.json"
+  before=$(cat "$DATA_DIR/run/mod-stats.json")
+  run render
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'4,321 on GitHub'* ]]
+  [ "$(cat "$DATA_DIR/run/mod-stats.json")" = "$before" ]
+}
+
 @test "once the publisher has a manifest, the page offers the launcher and says what it installs" {
   command -v python3 >/dev/null || skip "python3 not installed (the pre-commit image adds it)"
   cat >"$SN2_CONTROL_DIR/plugins.yaml" <<'YAML'

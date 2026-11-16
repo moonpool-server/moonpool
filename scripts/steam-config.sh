@@ -41,12 +41,15 @@ elif [ "$STEAM_BRANCH" != public ]; then
   log "steam-config: branch $STEAM_BRANCH selected for the first download"
 fi
 
-name=${HOST_NAME//[\"\\]/}
+# A VDF string value: no quotes, backslashes or control characters (a newline would end the line).
+name=$(printf '%s' "$HOST_NAME" | tr -d '"\\[:cntrl:]')
+# In a sed replacement & is the match and / the delimiter: both escaped.
+sed_name=$(printf '%s' "$name" | sed 's/[&/]/\\&/g')
 # Both files carry the persona.
 for cfg in "$STEAM_DIR"/config/loginusers.vdf "$STEAM_DIR"/userdata/*/config/localconfig.vdf; do
   [ -f "$cfg" ] || continue
   if grep -q '"PersonaName"' "$cfg"; then
-    sed -i -E "s/(\"PersonaName\"\s*)\"[^\"]*\"/\1\"$name\"/" "$cfg"
+    sed -i -E "s/(\"PersonaName\"\s*)\"[^\"]*\"/\1\"$sed_name\"/" "$cfg"
     log "steam-config: persona set to '$name' in ${cfg#"$STEAM_DIR"/}"
   fi
 done
