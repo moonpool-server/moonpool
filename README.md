@@ -8,7 +8,7 @@ Unofficial. Not affiliated with Unknown Worlds, KRAFTON or Valve. No game files 
 
 ![The join page of a demo server: the branch and build, Play with mods, the server's mods with their summaries, and the live map beside them](docs/images/join-page.png)
 
-![The map page of the same demo, without a background picture: a 100 m grid, two players shown where they were 15 minutes ago, the lifepod and two PDA signals, and the panel listing them](docs/images/map.png)
+![The map page of the same demo over a made-up cartoon chart (islands, a rubber duck, a sea serpent), with the fog switched off: two players where they were 15 minutes ago, the lifepod and two PDA signals, and the panel listing them](docs/images/map.png)
 
 ## For your friends
 
@@ -99,7 +99,7 @@ Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-set
 - Admin from the shell (`bin/moonpool`) and in game (name a PDA signal `!help`)
 - One-command restore from backups
 - A Discord card with who's on and a Join button
-- An optional map of where everyone was a few minutes ago
+- An optional map of where everyone was a few minutes ago, over a map picture you choose ([guide](docs/operating.md#map))
 - An idle mode (friends preset): the clock stops and the frame rate drops while nobody is on
 - Your own wording for the join page, map page and card
 

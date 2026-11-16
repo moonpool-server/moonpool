@@ -421,12 +421,16 @@ def world_container():
     if isinstance(waiting, int) and waiting > 0:
         codes.append(T["friend_requests"].format(n=waiting))
 
-    head_component = {"type": 10, "content": clamp(head, 260)}
+    # Join and Map side by side under the title. Join stays clickable while the server is down or starting:
+    # the page it opens says so. The map picture below can't be clicked in Discord, so Map opens it.
+    buttons = []
     if join:
-        head_component = {"type": 9, "components": [head_component],
-                          "accessory": {"type": 2, "style": 5, "url": join,
-                                        "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Not open" if kind == "waiting" else "Starting…"}}
-    components = [head_component, {"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
+        buttons.append({"type": 2, "style": 5, "url": join,
+                        "label": "Join" if kind == "up" else "Offline" if kind == "down" else "Not open" if kind == "waiting" else "Starting…"})
+    if map_url:
+        buttons.append({"type": 2, "style": 5, "label": "Map", "url": map_url})
+    components = [{"type": 10, "content": clamp(head, 260)}] + ([{"type": 1, "components": buttons}] if buttons else [])
+    components += [{"type": 14, "divider": True, "spacing": 1}, {"type": 10, "content": clamp(aboard, 400)}]
     if kind == "waiting" and GAME_AGE["s"]:
         components.append({"type": 10, "content": clamp(T["not_hosting"].format(min=GAME_AGE["s"] // 60), 400)})
         if loader_crashed():
