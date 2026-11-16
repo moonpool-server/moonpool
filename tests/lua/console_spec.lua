@@ -59,18 +59,18 @@ local me = { name = 'dirtbikr59', key = '0002' }
 local function run(text, st) return console.handle(st or console.new(catalog), { sender = me, text = text }, game) end
 
 -- Shortcuts with arguments: the fewest letters that name one item are enough.
-local r = run('g tit 10')
+local r = run('give tit 10')
 check(#r.runs == 0 and r.lines[1]:find('Titanium Ingot', 1, true), 'g tit 10: two items start with tit, so it asks')
-r = run('g "titanium ingot" 10')
+r = run('give "titanium ingot" 10')
 check(r.runs[1] and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 10' and r.runs[1].player == 'dirtbikr59',
   'a quoted full name resolves')
-r = run('g cop')
+r = run('give cop')
 check(r.runs[1] and r.runs[1].line == 'Give DA_Copper_ItemType 1', 'a unique prefix resolves, and count defaults')
-r = run('g')
+r = run('give')
 check(#r.runs == 0 and r.lines[1]:find('item', 1, true), 'a missing argument is named')
 
 -- Targets: me by default, a fuzzy player, everyone, the host.
-r = run('@john h')
+r = run('@john heal')
 check(#r.runs == 4 and r.runs[1].player == 'Johnny Pappis' and r.runs[1].line == 'HealMe',
   '@john h heals Johnny with every line')
 r = run('@all HealMe')
@@ -87,11 +87,11 @@ check(#r.runs == 2, 'give everyone ITEM gives to every player')
 r = run('give titanium ingot 2')
 check(r.runs[1] and r.runs[1].player == 'dirtbikr59' and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 2',
   'a first word that starts no player name is part of the item')
-r = run('g johnny 3')
+r = run('give johnny 3')
 check(#r.runs == 0 and r.lines[1]:find('johnny', 1, true), 'a lone word after give is the item, never the player')
 r = run('heal johnny')
 check(#r.runs == 4 and r.runs[1].player == 'Johnny Pappis', 'heal PLAYER heals that player')
-r = run('h all')
+r = run('heal all')
 check(#r.runs == 8, 'heal all heals every player')
 r = run('heal zzz')
 check(#r.runs == 0 and r.lines[1]:find('zzz', 1, true), 'heal with an unknown player is refused, not run on you')
@@ -113,47 +113,46 @@ r = run('CrashServerNow')
 check(#r.runs == 0, 'a prefix pattern in the deny list holds')
 
 -- Discovery.
-r = run('f tita')
+r = run('find tita')
 check(#r.lines >= 2 and r.lines[1]:find('DA_Titanium', 1, true), 'find lists matches with their ids')
 r = run('tita')
 check(#r.runs == 0 and r.lines[1]:find('DA_Titanium', 1, true), 'a lone word that is no command means find')
-r = run('l i cop')
+r = run('list items cop')
 check(r.lines[1]:find('DA_Copper_ItemType', 1, true), 'ls with a kind alias and a filter')
-r = run('l')
+r = run('list')
 check(r.lines[1]:find('items', 1, true), 'ls without a kind names the kinds')
-r = run('w')
+r = run('who')
 check(#r.lines == 2 and r.lines[2]:find('Johnny Pappis', 1, true), 'who lists players with eos and ping')
-r = run('c')
+r = run('cheats')
 check(#r.lines == 1 and r.lines[1] == 'Cheat.FreeBuild', 'cheats lists only the cheat tags')
-r = console.handle(console.new(catalog), { sender = me, text = 'c' }, { list = function() return nil end })
+r = console.handle(console.new(catalog), { sender = me, text = 'cheats' }, { list = function() return nil end })
 check(r.lines[1] == catalog.messages.cheats_unknown, 'cheats says so when the tags cannot be read')
 
--- Repeat.
+-- No shortcuts: a short form is not a command (it goes to the game as typed), and nothing repeats.
 local st = console.new(catalog)
-run('g cop', st)
+r = run('g cop', st)
+check(r.runs[1] and r.runs[1].line == 'g cop', 'g is not give: the line goes to the game as typed')
 r = run('.', st)
-check(r.runs[1] and r.runs[1].line == 'Give DA_Copper_ItemType 1', '. repeats the last line')
-r = run('.', console.new(catalog))
-check(#r.runs == 0, '. with nothing before says so')
+check(r.runs[1] == nil or r.runs[1].line == '.', 'a dot repeats nothing')
 
 -- Forgiving input: a number answers a question, words and the number in any order, no quotes needed.
 st = console.new(catalog)
-r = run('g tit 10', st)
+r = run('give tit 10', st)
 check(#r.runs == 0 and r.lines[1]:find('1 Titanium  2 Titanium Ingot', 1, true), 'an unclear name asks with numbers')
 r = run('2', st)
 check(r.runs[1] and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 10', 'a bare number picks, and the line runs')
 r = run('2', st)
 check(#r.runs == 0 and not r.lines[1]:find('Ingot', 1, true), 'with no question waiting, a number picks nothing')
-run('g tit', st)
+run('give tit', st)
 r = run('9', st)
 check(#r.runs == 0 and r.lines[1]:find('1 to 2', 1, true), 'a number past the choices says the range')
-r = run('g 10 titanium ingot')
+r = run('give 10 titanium ingot')
 check(r.runs[1] and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 10', 'the number first, the name unquoted')
-r = run('h')
+r = run('heal')
 check(#r.runs == #catalog.commands.heal.lines and r.runs[1].line == catalog.commands.heal.lines[1],
-  'a shortcut with several lines runs each of them')
+  'a command with several lines runs each of them')
 local first = json.decode(json.encode(catalog)); first.on_ambiguous = 'first'
-r = console.handle(console.new(first), { sender = me, text = 'g tit' }, game)
+r = console.handle(console.new(first), { sender = me, text = 'give tit' }, game)
 check(r.runs[1] and r.runs[1].line == 'Give DA_Titanium_ItemType 1', 'on_ambiguous first takes the best match')
 
 -- Help.
@@ -189,7 +188,7 @@ check(console.spawned(u, 'k', 'Spawn DA_RAFT_ItemType', game) ~= nil, 'whatever 
 r = console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'undo' }, game)
 check(r.undo and r.undo.class == 'BP_Raft_C' and #r.runs == 0,
   'undo hands back the newest spawn and runs nothing itself')
-console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'u' }, game)
+console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'undo' }, game)
 r = console.handle(u, { sender = { name = 'dir', key = 'k' }, text = 'undo' }, game)
 check(not r.undo and r.lines[1] == catalog.messages.undo_none, 'with nothing left, undo says so')
 r = console.handle(u, { sender = { name = 'other', key = 'o' }, text = 'undo' }, game)

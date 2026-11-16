@@ -53,9 +53,9 @@ function M.merge(cat, own)
 end
 
 function M.new(catalog)
-  return { cat = catalog, last = {}, pending = {}, spawns = {},
+  return { cat = catalog, pending = {}, spawns = {},
     verbs = aliases(catalog.verbs), commands = aliases(catalog.commands), kinds = aliases(catalog.kinds),
-    targets = aliases(catalog.targets), repeats = aliases({ ['.'] = catalog['repeat'] or {} }) }
+    targets = aliases(catalog.targets) }
 end
 
 -- A reply line from the catalog's template; a missing key shows as itself, and a test catches it.
@@ -287,13 +287,6 @@ function M.handle(st, req, game)
     return M.handle(st, { sender = req.sender, text = p.text, forced = { [p.query] = p.found[picked].id } }, game)
   end
   if not req.forced then st.pending[key] = nil end
-
-  if tokens[1] and st.repeats[lower(tokens[1].text)] then
-    if not st.last[key] then say(M.msg(st, 'no_last')); return out end
-    tokens = st.last[key]
-  else
-    st.last[key] = tokens
-  end
 
   local who, aimed = { req.sender.name }, false
   local mark = st.cat.target_mark or '@'
