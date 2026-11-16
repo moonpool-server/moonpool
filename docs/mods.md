@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Moonpool\moonpool.ps
 - **Pak mods**: `.pak`, `.ucas` and `.utoc` files in `paks-local/` in the data volume. Each launch copies them into the game's `Content/Paks/~mods` and removes ones you've taken out. Mods that change game rules (storage sizes, vehicle stats) usually need to be on the server as well as in `plugins.yaml`; the host decides those in co-op.
 - **UE4SS mods**: `ue4ss-local/Mods/<name>/` in the data volume, with an empty `enabled.txt` beside `Scripts`; recreate the host. To remove one, delete it there and from `ue4ss/Mods` in the game folder. Most act on the local player, so they do nothing on a server; list those in `plugins.yaml` instead.
 
-Server mods run with the server's rights and Steam session. Only use ones you trust.
+> **A server mod is trusted like your hosting account's password.** It runs as the same user as Steam and the game, so it can read the Steam sign-in, the key that signs your mod list, your Discord webhook and the other secrets in the container. Only install server mods from people you'd hand that account to. Player mods (above) don't get this: they run on players' own PCs.
 
 ## Players' loader on experimental builds
 

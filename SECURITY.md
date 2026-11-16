@@ -19,6 +19,8 @@ gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-work
 - Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-setup.cmd` against it.
 - Setup runs PowerShell with `-ExecutionPolicy Bypass`, a PowerShell script setting that doesn't touch Defender. **Never turn Defender or SmartScreen off for it.**
 
+- **The setup file itself isn't signed.** `moonpool-setup.cmd` checks the launcher's signature before running it, but nothing checks the setup file: whoever could replace it on the release page could replace that check too. Its defences are the GitHub build attestation and the release's `moonpool-SHA256SUMS.txt` above; check either before running a setup file you didn't download from this repository's release page. Windows code signing would close this and isn't in place.
+
 ## What to expect from it
 
 How a player's launcher comes to trust a server's mods:
@@ -57,7 +59,7 @@ flowchart LR
   - That keeps them out of the game's crash dumps and child processes, not out of a mod's reach. Every service runs as the same user, so a host mod (UE4SS Lua can run programs) can read the volume, the Steam session, the mod-signing key and the other services' environment. Only run host mods you trust.
 - **Backups.** The backup container runs as its upstream image's default user, root. It sees the save staging folder read-only and the backups folder, reads `backup.env` and only the `BACKUP_*` values compose passes it (never `.env` as a whole), and gets no Steam session.
 - **The map** (`WEB_MAP=true`) is public data: `map.json` holds everything the page draws. The fog is a view, not a lock. `MAP_PLAYERS=false` leaves out players and where anyone has been; `MAP_SIGNALS=false` leaves out the PDA signals everyone in game can see.
-- **What listens.** The viewer (8080) listens on this machine only unless `VIEWER_BIND` says otherwise, and always has a password. Port 8081 is public on purpose: it serves one folder of static files (the join page, the signed mod list, the mod files and, when on, the map and the card) and runs no code for a request.
+- **What listens.** The viewer (8080) listens on this machine only unless `VIEWER_BIND` says otherwise, and always has a password. Inside Docker's network it is open to the other containers of this project (the tunnel and backup containers), because a published port needs the container's own address; its password is what keeps them out. Port 8081 is public on purpose: it serves one folder of static files (the join page, the signed mod list, the mod files and, when on, the map and the card) and runs no code for a request.
 - **What 8081 shows.** The join page shows the host account's Steam ID and the lobby ID. `PUBLISH_CARD=true` adds `/card.json` with the Discord card's contents, player names included.
 - **The first mod download.** The launcher saves the server's signing key on first contact and holds later lists to it, so the first connection is trusted on first use. Plain http is allowed only on a private network; elsewhere use the tunnel or HTTPS.
 - **The Steam web session.** `scripts/friend-accept.py` reads two cookies, `sessionid` and `steamLoginSecure`, from the Steam client's cookie store in the volume and sends them only to `steamcommunity.com`, fixed in the code. The web API token that session hands out goes only to `api.steampowered.com`. Without `AUTO_ACCEPT_FRIENDS=1` it only reads (the lobby id and the count of waiting friend requests); with it, it also accepts invited players and removes banned ones. It never prints a cookie.

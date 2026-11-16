@@ -34,7 +34,9 @@ They add the hosting account as a Steam friend and press Join Game, or open the 
 
 ## What you need
 
+- An x86-64 (amd64) machine. The image's Wine and other pieces are built for amd64 only; ARM machines such as a Raspberry Pi or an Apple Silicon Mac can't run it.
 - Docker Engine 26 and Compose 2.25 or newer, on Linux or Docker Desktop. On Windows, run the shell commands below in Docker Desktop's WSL shell.
+- Python 3.8 or newer on that machine, for `bin/moonpool`.
 - For 4 players: about 4 cores, 8 GB of memory and 40 GB of SSD. Four is the game's own limit; `PLAYER_SLOTS` allows more, but that's rarely tested.
 - A Steam account that owns the game and is used only for hosting. Signing it in anywhere else logs the host out.
 - Friends need their own copy on Steam. Xbox and Game Pass joining is experimental ([guide](docs/operating.md#xbox-and-game-pass-players)).
