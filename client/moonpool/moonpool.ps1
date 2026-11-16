@@ -460,7 +460,7 @@ function Get-ServerId($Config) {
 function Read-ServerConfig([string]$Address) {
   $file = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-config-' + [guid]::NewGuid().ToString('N') + '.json')
   try {
-    Save-Url "$($Address.TrimEnd('/'))/moonpool.json" $file
+    Save-Url "$($Address.TrimEnd('/'))/moonpool.json" $file 1MB
     $config = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
   } catch { Fail "could not read the server at ${Address}: $($_.Exception.Message)" }
   finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
@@ -596,15 +596,42 @@ function Resolve-Url([string]$Base, [string]$Value) {
   return (New-Object Uri([Uri]$Base, $Value)).AbsoluteUri
 }
 
-function Save-Url([string]$Url, [string]$Dest) {
+# A web download stops, and its file is deleted, past $MaxBytes (declared or read), past $Minutes
+# (checked after each read, and a read waits at most 60 s), or after three redirects. Redirects are
+# followed here rather than by .NET, so one from https can only lead to https, and one from http
+# only to https or the same host. $Limit names the size limit in the error.
+function Save-Url([string]$Url, [string]$Dest, [long]$MaxBytes, [string]$Limit = '', [int]$Minutes = 2) {
+  if (-not $Limit) {
+    if ($MaxBytes -ge 1GB) { $Limit = "$([Math]::Round($MaxBytes / 1GB)) GB" }
+    elseif ($MaxBytes -ge 1MB) { $Limit = "$([Math]::Round($MaxBytes / 1MB)) MB" }
+    else { $Limit = "$([Math]::Round($MaxBytes / 1KB)) KB" }
+  }
   if ($Url -match '^https?://') {
     Use-Tls12
-    $request = [Net.WebRequest]::Create($Url)
-    $request.UserAgent = 'moonpool launcher'
-    $request.Timeout = 60000
-    $request.ReadWriteTimeout = 60000
-    $response = $request.GetResponse()
+    $deadline = [DateTime]::UtcNow.AddMinutes($Minutes)
+    $at = [Uri]$Url
+    $tooBig = "$($at.Host) sent more than $Limit, so the download was stopped"
+    for ($hops = 0; ; $hops++) {
+      $request = [Net.WebRequest]::Create($at)
+      $request.UserAgent = 'moonpool launcher'
+      $request.Timeout = 60000
+      $request.ReadWriteTimeout = 60000
+      $request.AllowAutoRedirect = $false
+      $response = $request.GetResponse()
+      $code = [int]$response.StatusCode
+      if ($code -lt 300 -or $code -ge 400) { break }
+      $next = $response.Headers['Location']
+      $response.Close()
+      if ($hops -ge 3) { throw "$(([Uri]$Url).Host) redirected more than 3 times, so the download was stopped" }
+      if (-not $next) { throw "$($at.Host) answered $code with nowhere to go" }
+      $to = New-Object Uri($at, $next)
+      if ($to.Scheme -ne 'https' -and -not ($to.Scheme -eq 'http' -and $at.Scheme -eq 'http' -and $to.Host -eq $at.Host)) {
+        throw "$($at.Host) redirected to $($to.Scheme)://$($to.Host), which is not a secure address; the download was stopped"
+      }
+      $at = $to
+    }
     try {
+      if ($response.ContentLength -gt $MaxBytes) { throw $tooBig }
       $in = $response.GetResponseStream()
       $out = [IO.File]::Create($Dest)
       try {
@@ -612,8 +639,10 @@ function Save-Url([string]$Url, [string]$Dest) {
         $got = [long]0
         $shown = [DateTime]::UtcNow
         while (($n = $in.Read($buffer, 0, $buffer.Length)) -gt 0) {
-          $out.Write($buffer, 0, $n)
           $got += $n
+          if ($got -gt $MaxBytes) { throw $tooBig }
+          if ([DateTime]::UtcNow -gt $deadline) { throw "$($at.Host) took more than $Minutes minutes to send this file, so the download was stopped" }
+          $out.Write($buffer, 0, $n)
           if ($script:Ui -and $script:UiSteps -gt 0 -and ([DateTime]::UtcNow - $shown).TotalMilliseconds -gt 100) {
             $part = 0.0
             if ($response.ContentLength -gt 0) { $part = [double]$got / $response.ContentLength }
@@ -621,6 +650,10 @@ function Save-Url([string]$Url, [string]$Dest) {
             $shown = [DateTime]::UtcNow
           }
         }
+      } catch {
+        $out.Dispose()
+        Remove-Item -LiteralPath $Dest -Force -ErrorAction SilentlyContinue
+        throw
       } finally { $out.Dispose(); $in.Dispose() }
     } finally { $response.Close() }
   } else {
@@ -885,11 +918,11 @@ function Get-Manifest($Config) {
   New-Item -ItemType Directory -Path $work | Out-Null
   try {
     $manifestFile = Join-Path $work 'mods.json'
-    Save-Url $ManifestUrl $manifestFile
+    Save-Url $ManifestUrl $manifestFile 4MB
     if ($Config) {
       $sigUrl = $ManifestUrl + '.sig'
       $sigFile = Join-Path $work 'mods.json.sig'
-      Save-Url $sigUrl $sigFile
+      Save-Url $sigUrl $sigFile 64KB
       if (-not (Test-ManifestSignature $manifestFile $sigFile $Config.public_key)) {
         Fail 'the server mod list signature is invalid; nothing changed, game not started'
       }
@@ -909,8 +942,8 @@ function Update-Launcher {
   if (-not $url) { $url = "$ReleaseBase/moonpool.ps1" }
   $file = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-update-' + [guid]::NewGuid().ToString('N') + '.ps1')
   try {
-    Save-Url $url $file
-    Save-Url "$url.sig" "$file.sig"
+    Save-Url $url $file 8MB
+    Save-Url "$url.sig" "$file.sig" 64KB
     if (-not (Test-ManifestSignature $file "$file.sig" $ReleaseKey)) { return $false }
     if ((Get-Content -LiteralPath $file -Raw) -notmatch '(?m)^\$LauncherBuild = (\d+)' -or [int]$Matches[1] -le $LauncherBuild) { return $false }
     $errors = $null
@@ -1019,7 +1052,10 @@ function Get-ModArchive($Mod, [string]$Stage) {
   $fileName = [string](Get-Prop $source 'file_name' '')
   $dest = Join-Path $Stage $fileName
   if ($url) {
-    try { Save-Url (Resolve-Url $ManifestUrl $url) $dest }
+    # The signed list's size for the archive caps its download; a list without one gets the unpack limit.
+    $size = [long]0; $max = $MaxUnpackedBytes; $limit = ''
+    if ([long]::TryParse([string](Get-Prop $source 'size' 0), [ref]$size) -and $size -gt 0 -and $size -lt $max) { $max = $size; $limit = "the $size bytes the server's list gives" }
+    try { Save-Url (Resolve-Url $ManifestUrl $url) $dest $max $limit -Minutes 60 }
     catch { Fail "could not download $fileName for $($Mod.Name): $($_.Exception.Message); nothing changed, game not started" }
   } else {
     $page = [string](Get-Prop $source 'page' '')
@@ -1175,7 +1211,7 @@ function Expand-ModArchive($Mod, [string]$Archive, [string]$Stage) {
 # The loader itself, when the manifest says any mod needs it: the server's own pinned build.
 function Get-LoaderFiles($Spec, [string]$Stage) {
   $zip = Join-Path $Stage 'ue4ss.zip'
-  try { Save-Url (Resolve-Url $ManifestUrl ([string]$Spec.url)) $zip }
+  try { Save-Url (Resolve-Url $ManifestUrl ([string]$Spec.url)) $zip $MaxUnpackedBytes -Minutes 60 }
   catch { Fail "could not download the UE4SS loader: $($_.Exception.Message); nothing changed, game not started" }
   if ((Get-Sha256 $zip) -ne ([string]$Spec.sha256).ToLowerInvariant()) { Fail 'the UE4SS loader failed its sha256 check; nothing changed, game not started' }
   $loader = Join-Path $Stage 'unpacked-ue4ss'
