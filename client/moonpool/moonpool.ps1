@@ -774,6 +774,15 @@ function Install-ServerShortcuts($Config, [string]$ServerId, [string]$Game = '')
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     $links = @{ "Subnautica 2 ($server)" = "-Server $ServerId" }
     # The Desktop gets the server's shortcut only; the Start menu also gets the tools.
+    if ($folder -ne $folders[-1]) {
+      # Tool shortcuts an older launcher put here; only the Start menu has them now.
+      foreach ($old in @('Subnautica 2 (without Moonpool mods)', 'Subnautica 2 (collect logs for the host)')) {
+        $path = Join-Path $folder "$old.lnk"
+        if ((Test-Path -LiteralPath $path) -and (New-Object -ComObject WScript.Shell).CreateShortcut($path).Arguments -like "*$InstalledScript*") {
+          Remove-Item -LiteralPath $path -Force
+        }
+      }
+    }
     if ($folder -eq $folders[-1]) {
       $links['Subnautica 2 (without Moonpool mods)'] = '-DisableMoonpoolMods'
       $links['Subnautica 2 (collect logs for the host)'] = '-CollectLogs'
@@ -929,7 +938,7 @@ function Enter-Lock {
   $name = 'Global\moonpool-launcher-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $lock = New-Object Threading.Mutex($false, $name)
   # A run started by Change mods waits a little for the run it replaces to finish closing.
-  $wait = 0; if ($Choose) { $wait = 15000 }
+  $wait = 0; if ($Choose) { $wait = 60000 }  # longer than the old run's turning its mods off (up to 20 s)
   try { $held = $lock.WaitOne($wait) } catch [Threading.AbandonedMutexException] { $held = $true }
   if (-not $held) {
     # A second click on the link while the first launcher's window is up: that window comes forward and no second one opens.
@@ -1725,6 +1734,10 @@ function Invoke-Join {
     Say ("mods up to date (" + $wanted.Count + " mod(s) checked)")
   } else {
     foreach ($c in $changes) { Say $c }
+    # Cancel and Change mods are taken up to here and no further: the guard goes on before the window
+    # handles its clicks again, so a late click cannot stop a run that has started writing.
+    $script:UiInstalling = $true
+    Set-Status 'Installing mods' 100
     # The intent is recorded first: an interrupted run leaves every file it may have
     # placed owned and every changing mod not current, so the next run repairs it.
     $ledgerBefore = $null
@@ -1732,8 +1745,6 @@ function Invoke-Join {
     foreach ($path in @($desired.Keys)) { $ledger.files[$path] = $desired[$path] }
     foreach ($k in $staleKeys) { $ledger.mods.Remove($k) }
     Write-Ledger $ledgerPath $ledger
-    Set-Status 'Installing mods' 100
-    $script:UiInstalling = $true
     try { Install-Plan $plan $removals $script:Work }
     catch {
       if ($null -ne $ledgerBefore) { [IO.File]::WriteAllText($ledgerPath, $ledgerBefore) }
@@ -1755,9 +1766,9 @@ function Invoke-Join {
     $url = "steam://joinlobby/$appId/$($session.lobby_id)/$($session.host_steamid)"
   }
   Write-Host "moonpool: starting the game through $url"
+  if ($script:Ui) { $script:Ui.Change.Visible = $false }
   $script:UiInstalling = $false
   Set-Status 'Starting Subnautica 2 through Steam' 100
-  if ($script:Ui) { $script:Ui.Change.Visible = $false }
   if ($Launch) { & $Launch $url } else { Start-Process $url }
   # Steam gives back no process, so the game is watched for by name.
   $deadline = [DateTime]::UtcNow.AddSeconds($StartWait)

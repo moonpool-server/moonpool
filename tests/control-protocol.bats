@@ -850,6 +850,12 @@ policy_env() {
   [[ "$output" == *"trail: ok"* ]]
 }
 
+@test "hotbar slots: a slot mod's count past the build's cap, never lowered, cap before count" {
+  run lua5.4 tests/lua/toolbar_spec.lua
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"toolbar: ok"* ]]
+}
+
 @test "crash-sensitive game calls stay on the dump-derived allowlist" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/game_method_allowlist_spec.lua

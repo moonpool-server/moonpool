@@ -68,6 +68,7 @@ The default `PRESET=friends` changes the game for a group that drops in and out.
 | Shared unlocks | each joining player gets the base pieces, tools and scanned blueprints the host has unlocked | `UNLOCK_REPLAY` |
 | Story start | the first lifepod goals complete once a real player arrives, so lifepods launch on a fresh world | `STORY_GOALS` |
 | Voice range warning | a private amber signal marks another player who is too far away to hear | `VOICE_WARN`, `VOICE_RANGE_M` |
+| Hotbar slots | with a slot mod such as Ultimate Player Tweaks, the hotbar gets the mod's 10 slots; this game build otherwise caps it at 8 | `TOOLBAR_SLOTS` |
 | Launch hold | new joins wait while the lifepod launch cinematic plays (not yet proven) | `LIFEPOD_JOIN_HOLD` |
 | Empty server | the clock stops after 10 minutes with nobody in, and the frame rate drops | `IDLE_FREEZE_MINUTES`, `IDLE_MAX_FPS` |
 | Faster joins | each joiner gets world data at 3× the game's rate | `NET_MAX_CLIENT_RATE` |

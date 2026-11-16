@@ -14,7 +14,8 @@ read_globals = {
 globals = { "LoopAsync", "ExecuteWithDelay" }
 
 -- Vendored unmodified from github.com/swarn/fzy-lua v1.0.3 (MIT); kept as its author wrote it.
-exclude_files = { "mod/SN2SlotFreeHost/Scripts/fzy_lua.lua" }
+-- UE4SS's own UEHelpers (MIT), kept as its authors wrote it apart from the two marked changes.
+exclude_files = { "mod/SN2SlotFreeHost/Scripts/fzy_lua.lua", "client-mods/ue4ss-client/Mods/shared/UEHelpers/UEHelpers.lua" }
 
 -- SN2SlotFreeHost's main.lua is the working host's own file, kept as it ran: its
 -- hook callbacks name every argument of the hooked function, and it uses the
