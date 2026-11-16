@@ -133,6 +133,8 @@ bin/moonpool server restore backups/<file>.tar.gz Slot1
 Restore:
 
 - keeps a safety copy of the current saves and hosts again about a minute later
+- copies the backup in beside the live folder and swaps the two; if that fails, the current saves stay as they were and the game starts again
+- refuses an archive of more than 10,000 files or 4 GiB
 - checks the archive holds a save, not that the save is undamaged
 - hasn't been tried with players on
 
@@ -159,6 +161,7 @@ flowchart LR
 ```
 
 - The game loads only saves from its own branch and build, so update the game on the old PC first.
+- A zip is refused if its .sav and .bak files number more than 64, unpack to more than 512 MiB (256 MiB for one file), or one unpacks to more than 200 times its packed size.
 - `bin/moonpool server export` zips the hosted world (`Slot1.sav` by default). Loading that on a player's PC hasn't been tried.
 
 ## Move the server to another PC
