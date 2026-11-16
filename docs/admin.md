@@ -152,7 +152,7 @@ Not yet tested with a second player:
 | Enter | runs the row, with the count if one was typed (the list's own command, such as `Item <id> 10`); the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
 | Esc | steps back one level | |
 
-- Unpublished items are hidden unless `search.show_unpublished` is set.
+- Unpublished items, and items the game names `[DEPRECATED]`, `[PLACEHOLDER]` or `[TEST]`, are hidden unless `search.show_unpublished` is set.
 - History is the game's own list, which it sorts A to Z and fills only with lines the game ran itself. Lines the panel sends go straight to the server, so most never appear there. The panel keeps its own record, newest first, in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher), and moves any History row that is in it to the top. A list of the panel's own lines is not built yet.
 - `Scripts/config.lua` holds every setting: key, console word, position, which parts stay, and the game names the mod relies on.
 
