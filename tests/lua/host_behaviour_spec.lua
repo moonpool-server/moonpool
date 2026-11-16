@@ -146,6 +146,16 @@ found.BP_ClientLobbyGameMode_C, found.PlayerController = lobby_fn, pc_fn
 -- Lobby found: the call settles (the network login finishes after the lobby appears).
 tick(2)
 check(calls.host == 0, 'lobby found: no Host call while settling')
+-- The cheat gate must be in place before anyone can join: with one hook missing, no Host call.
+local relay_gate = _G.SN2_RELAY_GATE
+check(_G.SN2_CHEAT_GATE == true and relay_gate == true, 'both cheat gate hooks register before the Host call')
+_G.SN2_RELAY_GATE = nil
+tick(6)
+check(calls.host == 0, 'no Host call while a cheat gate hook is missing')
+local held = false
+for _, l in ipairs(log) do if l:find('HOLD: the cheat gate is not in place', 1, true) then held = true end end
+check(held, 'the hold is logged')
+_G.SN2_RELAY_GATE = relay_gate
 tick(1)
 check(calls.host == 1, 'exactly one Host call once armed (got ' .. calls.host .. ')')
 tick(20)
@@ -470,6 +480,32 @@ do
     check(asked == 1, 'one FindAllOf serves every lookup (got ' .. asked .. ')')
     _G.ForEachUObject, _G.FindObject, _G.FindAllOf = saved_each, saved_find, saved_all
   end
+end
+
+-- The gate never takes an unknown for safe: a read that fails is not "no cheat manager".
+do
+  local core = require('sn2_host_core')
+  check(core.has_cheats({}) == false, 'a controller with no cheat manager has none')
+  check(core.has_cheats({ CheatManager = obj({}) }) == true, 'a valid cheat manager is seen')
+  local erring = setmetatable({}, { __index = function() error('read failed') end })
+  check(core.has_cheats(erring) == nil, 'a failed read is unknown, not "none"')
+  check(core.clear_cheats(erring) == false, 'a failed read is never taken as removed')
+end
+
+-- recipe.lua carries the cheat gate: if it fails to load, the server never hosts.
+do
+  loops, calls.host = {}, 0
+  _G.SN2_CHEAT_GATE, _G.SN2_RELAY_GATE, _G.SN2_HOSTED = nil, nil, nil
+  package.loaded.recipe = nil
+  package.preload.recipe = function() error('recipe broke') end
+  local mok = pcall(dofile, dir .. 'main.lua')
+  check(mok, 'main.lua still loads when recipe.lua fails')
+  tick(40)
+  check(calls.host == 0, 'no Host call when recipe.lua (and its cheat gate) failed to load')
+  local said = false
+  for _, l in ipairs(log) do if l:find('so this server will not host', 1, true) then said = true end end
+  check(said, 'the log says why it will not host')
+  package.preload.recipe = nil
 end
 
 _G.print = real_print

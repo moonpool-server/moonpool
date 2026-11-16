@@ -120,7 +120,8 @@ The game runs a cheat line from any client without checking who sent it. It has 
 
 - From someone in `ADMINS`, the line runs unless `deny` names it, and only with console commands turned on. From anyone else it's dropped and logged as `cheat gate: dropped`.
 - `ExecuteForAll` asks the host to relay a line to every player's game. The host relays it only from an admin and only if `deny` doesn't name the command.
-- If the host can't stop a line, it runs and can't be called back. The log says `cheat gate: COULD NOT STOP` and a non-admin sender is removed (`on_gate_failure`; `log` only logs).
+- If the host can't stop a line, or can't tell whether it did, it counts as not stopped: the line may run and can't be called back. The log says `cheat gate: COULD NOT STOP` and a non-admin sender is removed (`on_gate_failure`; `log` only logs). The same goes for a relay it couldn't block.
+- The server makes no Host call until both gate hooks are in place, and doesn't host at all if the part of the mod that holds them fails to load. The log says `HOLD: the cheat gate is not in place`. `CHEAT_GATE=off` hosts without it ([diagnostic switches](operating.md#diagnostic-switches)).
 - `deny` reads the first word, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
 
 - A line starting with `signal_word` (`mp`) is a console line: `mp g copper 10` equals `!mp g copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
