@@ -37,7 +37,7 @@ flowchart LR
 
 - Mandatory mods are ticked and locked. Choices are remembered per server and asked again, with changes marked, when a mod is added or changes.
 - To change them any other time: the "Subnautica 2 (*server*, choose mods)" Start menu shortcut, or **Change mods** in the launcher's window, which shows only for the few seconds it takes to get ready.
-- Each row says whether the mod is installed, an update or new. The question says Install, Update or Choose to match.
+- Each row says where the mod stands: installed (this version, its files on disk as placed), update, new, or not installed (accepted before, but its files are missing). The question says Install, Update or Choose to match.
 - Mods are on only while the game the launcher started is running. If the launcher is killed mid-game, they stay on until its next run or the "Subnautica 2 (without Moonpool mods)" shortcut.
 - The player's own mods are left alone, except a `UE4SS_Signatures` folder the server didn't send, which is moved aside while Moonpool's mods are on.
 - A mod loader installed another way is replaced only after asking, with a copy in `%LOCALAPPDATA%\Moonpool-replaced`.
