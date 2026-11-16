@@ -297,3 +297,73 @@ def test_squares_the_host_mod_batched_between_writes_clear_too() -> None:
         write(1000, ["2,-1", "3,-1", "../x", 7], 50)
         write(1030, ["9,9"], 25)  # another square size: not this map's squares
         assert write(1000 + 900, [], 50) == [[100, -50], [150, -50]]
+
+
+def test_with_players_off_the_chart_keeps_no_positions_or_squares_and_drops_old_ones() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        alice = {"name": "Alice", "x": 500000, "y": 500000, "depth_m": 10}
+        run(tmp, 1000, [alice])
+        store = next(tmp.glob("map-chart-*.json"))
+        assert "Alice" in store.read_text()
+        run(tmp, 1060, [alice], MAP_PLAYERS="false")
+        kept = json.loads(store.read_text())
+        assert "Alice" not in store.read_text() and "divers" not in kept and "cells" not in kept
+        control = tmp / "control"
+        (control / "status.json").write_text(json.dumps({"ts": 1120, "players": [alice], "visited": ["7,7"], "visited_cell_m": 50}))
+        subprocess.run([sys.executable, str(SCRIPT)], check=True, env=dict(
+            os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"), MAP_PAGE=str(ROOT / "web" / "map.html"),
+            SN2_NOW="1120", HOST_NAME="Host", WEB_MAP="true", MAP_PLAYERS="false"))
+        kept = json.loads(store.read_text())
+        assert "divers" not in kept and "cells" not in kept
+        # Turned back on, nothing from the time it was off comes out.
+        assert json.loads(run(tmp, 1120 + 900, [], MAP_PLAYERS="true").read_text())["explored"] == []
+
+
+def test_a_moving_signal_leaves_no_old_spots_in_the_chart_after_an_hour() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        control = tmp / "control"
+        control.mkdir()
+
+        def at(now, x):
+            (control / "status.json").write_text(json.dumps({"ts": now, "players": [], "lifepods": [], "signals": [
+                {"name": "Tadpole", "x": x, "y": 0, "tracked": True}, {"name": "Base", "x": 0, "y": 0, "tracked": False}]}))
+            subprocess.run([sys.executable, str(SCRIPT)], check=True, env=dict(
+                os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW=str(now), HOST_NAME="Host", WEB_MAP="true"))
+            return json.loads((tmp / "public" / "map.json").read_text())["signals"]
+
+        for i in range(10):
+            at(1000 + 30 * i, 100000 + 10000 * i)
+        at(1000 + 300 + 3600 + 60, 300000)
+        kept = json.loads(next(tmp.glob("map-chart-*.json")).read_text())["signals"]
+        assert sorted(kept) == ["0,0,Base", "3000,0,Tadpole"]
+        # One left standing still shows once the delay has passed, and the base keeps its first sighting.
+        assert at(1000 + 300 + 3600 + 60 + 900, 300000) == [[0, 0, "Base"], [3000, 0, "Tadpole"]]
+
+
+def test_a_background_picture_too_large_or_of_another_format_is_left_out() -> None:
+    import importlib.util
+    import io
+    from PIL import Image
+    from unittest import mock
+    spec = importlib.util.spec_from_file_location("map_chart", SCRIPT)
+    chart = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(chart)
+
+    def body(size, fmt):
+        out = io.BytesIO()
+        Image.new("1", size).save(out, fmt)
+        return out.getvalue()
+
+    class Reply:
+        def __init__(self, b): self.b = b
+        def read(self, n=-1): return self.b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    for raw in (body((8193, 8193), "PNG"), body((16, 16), "GIF"), body((16, 16), "BMP")):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(chart, "_OPEN", return_value=Reply(raw)):
+            assert chart.fetch("https://tiles.example/0/0/0.png", Path(d)) is None
+    with tempfile.TemporaryDirectory() as d, mock.patch.object(chart, "_OPEN", return_value=Reply(body((512, 512), "PNG"))):
+        assert chart.fetch("https://tiles.example/0/0/0.png", Path(d)).size == (512, 512)
