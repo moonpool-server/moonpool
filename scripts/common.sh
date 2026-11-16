@@ -50,6 +50,7 @@ resolve_preset STORY_GOALS true false
 resolve_preset UNLOCK_REPLAY true false
 resolve_preset LIFEPOD_JOIN_HOLD true false
 resolve_preset VOICE_WARN true false
+resolve_preset TOOLBAR_SLOTS 10 ''
 resolve_preset IDLE_FREEZE_MINUTES 10 0
 resolve_preset IDLE_STOP_HOURS '' ''
 resolve_preset NET_MAX_CLIENT_RATE 300000 ''
@@ -62,7 +63,7 @@ RESTART_WARNING_SECONDS="${RESTART_WARNING_SECONDS:-120}"
 RESTART_SAVE_WAIT_SECONDS="${RESTART_SAVE_WAIT_SECONDS:-60}"
 export PRESET HOST_PRUNE HIDE_HOST_BODY AUTO_ACCEPT_FRIENDS RESTART_CRON RESTART_WARNING_SECONDS RESTART_SAVE_WAIT_SECONDS
 VOICE_RANGE_M="${VOICE_RANGE_M:-100}"
-export VOICE_RANGE_M VOICE_WARN
+export VOICE_RANGE_M VOICE_WARN TOOLBAR_SLOTS
 
 # The host account counts as a player, so the session limit is PLAYER_SLOTS + 1. The range is the
 # slots command's (idle.session_limit in the mod): 1 to 63.
