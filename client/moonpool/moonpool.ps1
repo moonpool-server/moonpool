@@ -367,12 +367,29 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
   $flow.Location = New-Object Drawing.Point 14, 10
   $flow.BackColor = Get-Color $Theme.Panel
   $boxes = @{}
-  # Each row says where it stands: installed (as accepted before), update (a new version of one
-  # accepted before) or new.
-  function Get-RowState([string]$Line, [string]$Name) {
-    if ($accepted -contains $Line) { return 'installed' }
-    if ($acceptedNames -contains $Name) { $script:PickerUpdate = $true; return 'update' }
+  # Each row says where it stands. installed: this version was accepted and the ledger records it
+  # placed, with its files on disk (on, or parked while the mods are off). update: a different version
+  # of one accepted or placed before. not installed: accepted, but its files are not all there (a run
+  # that stopped). new: never accepted.
+  $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
+  function Test-Placed([string]$Name, [string]$Archive, [string]$Identity) {
+    $key = "$ServerId/$Name"
+    if (-not $Archive -or -not $ledger.mods.ContainsKey($key)) { return $false }
+    $record = $ledger.mods[$key]
+    if ($record.archive -ne $Archive -or $record.identity -ne $Identity) { return $false }
+    $files = @($record.files)
+    if ($files.Count -eq 0) { return $false }
+    foreach ($f in $files) {
+      $path = [string]$f.path
+      if (-not ((Test-Path -LiteralPath $path) -or (Test-Path -LiteralPath "$path.moonpool-off"))) { return $false }
+    }
+    return $true
+  }
+  function Get-RowState([string]$Line, [string]$Name, [bool]$Placed) {
+    if ($accepted -contains $Line -and $Placed) { return 'installed' }
+    if ($accepted -notcontains $Line -and ($Placed -or $acceptedNames -contains $Name)) { $script:PickerUpdate = $true; return 'update' }
     $script:PickerNew = $true
+    if ($accepted -contains $Line) { return 'not installed' }
     return 'new'
   }
   $script:PickerNew = $false; $script:PickerUpdate = $false
@@ -382,7 +399,7 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
     $cb.ForeColor = Get-Color $Theme.Text
     $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
-    $tags = @(Get-RowState (Get-CodeSet @($m) $null)[0] $m.Name)
+    $tags = @(Get-RowState (Get-CodeSet @($m) $null)[0] $m.Name (Test-Placed $m.Name $m.ArchiveSha $m.Identity))
     $tags += @(Get-ModHost $m); if ($m.Native) { $tags += 'native code' }; if ($m.Required) { $tags += 'required' }
     $cb.Text = ("$($m.Name) $($m.Version)").Trim() + '   (' + ($tags -join ', ') + ')'
     $cb.Checked = $m.Required -or -not $Skipped.Contains($m.Name)
@@ -396,7 +413,7 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
     $cb.ForeColor = Get-Color $Theme.Text
     $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
-    $state = Get-RowState @(Get-CodeSet @() $LoaderSpec)[0] 'UE4SS loader'
+    $state = Get-RowState @(Get-CodeSet @() $LoaderSpec)[0] 'UE4SS loader' (Test-Placed 'UE4SS' ([string](Get-Prop $LoaderSpec 'sha256' '')).ToLowerInvariant() 'loader')
     $cb.Text = "UE4SS loader   ($state, this server, native code, for the UE4SS mods)"
     [void]$flow.Controls.Add($cb)
   }
@@ -787,7 +804,7 @@ function Install-ServerShortcuts($Config, [string]$ServerId, [string]$Game = '')
       # Tool shortcuts an older launcher put here; only the Start menu has them now.
       foreach ($old in @('Subnautica 2 (without Moonpool mods)', 'Subnautica 2 (collect logs for the host)')) {
         $path = Join-Path $folder "$old.lnk"
-        if ((Test-Path -LiteralPath $path) -and (New-Object -ComObject WScript.Shell).CreateShortcut($path).Arguments -like "*$InstalledScript*") {
+        if ((Test-Path -LiteralPath $path) -and (New-Object -ComObject WScript.Shell).CreateShortcut($path).Arguments.IndexOf("-File `"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) {
           Remove-Item -LiteralPath $path -Force
         }
       }
