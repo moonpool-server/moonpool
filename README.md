@@ -119,7 +119,8 @@ List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothi
 | `!mp heal`, `!mp @all heal` | heals you, or everyone |
 | `!mp who` | who's on, with their ping |
 
-- The answer appears in the signal's name and as a notification. `!mp` lines need [console commands](docs/admin.md#console-commands) turned on.
+- Two kinds of order. `!kick`, `!time`, `!weather` and the rest of the [fixed list](docs/admin.md#orders-through-a-pda-signal) are Moonpool's own and always work. `!mp` hands the rest of the line to the game's console, with shortcuts and name lookup, so anything the console can do works there; it needs [console commands](docs/admin.md#console-commands) turned on.
+- The answer appears in the signal's name and as a notification.
 - Orders from anyone not in `ADMINS` are dropped.
 - Admins who want a keyboard can add the optional admin panel: F2 opens the game's own cheat panel with search.
 
