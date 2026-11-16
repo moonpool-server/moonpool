@@ -357,6 +357,7 @@ local function place(lists)
     end, CFG.list.depth)
   end
 end
+local focus_line  -- below, with the text box
 local function follow_lists()
   if following or not CFG.search.live then return end
   following = true
@@ -372,7 +373,7 @@ local function follow_lists()
         -- open the game's own menu as well, so the panel is made the active menu again.
         -- The command line gets the keyboard back too, or what is typed next goes to the world.
         if rows == '' then
-          say_hint(CFG.hint.text); ucall(panel, G.activate); ucall(panel, G.focus); line = ''
+          say_hint(CFG.hint.text); ucall(panel, G.activate); focus_line(); line = ''
         else
           say_hint(CFG.hint.listing)
         end
@@ -402,6 +403,15 @@ end
 
 -- Up or Down while a list shows: the choice moves over the rows that show. Enter runs the chosen row
 -- through the list's own model, as a click on it does.
+-- The keyboard to the text box. CommonUI gives the panel's own focus target the keyboard when the
+-- panel activates, after this runs, so it is given again a moment later.
+focus_line = function()
+  if not valid(box) then return ucall(panel, G.focus) end
+  ucall(box, G.keyboard_focus)
+  ExecuteWithDelay(CFG.textbox.focus_again_ms, function()
+    ExecuteInGameThread(function() if shown and valid(box) then ucall(box, G.keyboard_focus) end end)
+  end)
+end
 local function box_text()
   local text = ''
   if valid(box) then pcall(function() text = select(2, ucall(box, G.textbox_get)):ToString() end) end
@@ -517,7 +527,7 @@ local function toggle()
   if want then
     if not trimmed then trim(w) end
     -- The command line takes the keyboard, or what is typed goes to the world.
-    if valid(box) then ucall(box, G.keyboard_focus) else ucall(w, G.focus) end
+    focus_line()
     back_in_history = 0
     line = ''
     say_hint(CFG.hint.text)

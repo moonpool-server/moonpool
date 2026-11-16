@@ -86,7 +86,7 @@ return {
   history = { file = '\\Moonpool\\console-recent.txt', keep = 50, title_part = 'Title', title = 'Command History' },
   -- textbox: Unreal's own text box in place of the game's command line label (replaces: that
   -- label's part name). on = false keeps the game's label.
-  textbox = { on = true, replaces = 'Input' },
+  textbox = { on = true, replaces = 'Input', focus_again_ms = 150 },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
