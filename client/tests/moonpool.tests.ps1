@@ -653,6 +653,10 @@ try {
   New-Item -ItemType Directory -Path (Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop') -Force | Out-Null
   $mine = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop\Subnautica 2 (my own).lnk'))
   $mine.TargetPath = "$env:SystemRoot\notepad.exe"; $mine.Save()
+  # A tool shortcut an older launcher put on the Desktop goes; it lives in the Start menu now.
+  $legacy = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop\Subnautica 2 (without Moonpool mods).lnk'))
+  $legacy.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+  $legacy.Arguments = "-NoProfile -File `"$(Join-Path $kit 'moonpool.ps1')`" -DisableMoonpoolMods"; $legacy.Save()
   $pristine = Snapshot $wx.Game
   $xrsa = New-Object Security.Cryptography.RSACryptoServiceProvider 2048
   $xpub = $xrsa.ExportParameters($false)
@@ -662,7 +666,7 @@ try {
   [IO.File]::WriteAllBytes($wx.Manifest + '.sig', $xrsa.SignData([IO.File]::ReadAllBytes($wx.Manifest), [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')))
   $r = Invoke-Join $wx -Extra "-Server '$(([Uri]$wx.Server).AbsoluteUri)'" -Shortcuts
   $links = @(Get-ChildItem -LiteralPath $env:MOONPOOL_SHORTCUTS -Filter '*.lnk' -Recurse)
-  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 6 -and @(Get-ChildItem -LiteralPath (Join-Path $env:MOONPOOL_SHORTCUTS 'Programs') -Filter '*choose mods).lnk').Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, five shortcuts of its own (one collects logs, one chooses mods, in the Start menu) and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
+  Check ($r.Code -eq 0 -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and $links.Count -eq 6 -and @(Get-ChildItem -LiteralPath (Join-Path $env:MOONPOOL_SHORTCUTS 'Programs') -Filter '*choose mods).lnk').Count -eq 1 -and -not (Test-Path -LiteralPath (Join-Path $env:MOONPOOL_SHORTCUTS 'Desktop\Subnautica 2 (without Moonpool mods).lnk')) -and (Test-Path -LiteralPath (Join-Path $kit 'moonpool.ps1'))) "set up: joined, handler, the old Desktop tool shortcut gone, five shortcuts of its own (one collects logs, one chooses mods, in the Start menu) and the installed copy (got $($r.Code), $($links.Count) links): $($r.Out.Trim())"
   Set-Content -LiteralPath (Join-Path $wx.Mods 'Foo\Scripts\lib.lua') -Value 'my edit' -NoNewline
   $r = Invoke-Join $wx -GameRunning -Extra '-Uninstall'
   Check ($r.Code -eq 2 -and $r.Out -match 'Subnautica 2 is running' -and (All-Off $wx) -and (Test-Path -LiteralPath $handlerKey) -and (Test-Path -LiteralPath (Join-Path $kit 'owned.json'))) "refused while the game runs, nothing changed (got $($r.Code)): $($r.Out.Trim())"
