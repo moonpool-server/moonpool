@@ -78,6 +78,28 @@ check(#r.runs == 2, '@all runs for every player')
 r = run('@zzz HealMe')
 check(#r.runs == 0 and r.lines[1]:find('zzz', 1, true), 'an unknown player is refused by name')
 
+-- The player first, as on most game servers: give john titanium 10, heal all.
+r = run('give johnny copper 5')
+check(r.runs[1] and r.runs[1].player == 'Johnny Pappis' and r.runs[1].line == 'Give DA_Copper_ItemType 5',
+  'give PLAYER ITEM COUNT gives to that player')
+r = run('give everyone copper')
+check(#r.runs == 2, 'give everyone ITEM gives to every player')
+r = run('give titanium ingot 2')
+check(r.runs[1] and r.runs[1].player == 'dirtbikr59' and r.runs[1].line == 'Give DA_TitaniumIngot_ItemType 2',
+  'a first word that starts no player name is part of the item')
+r = run('g johnny 3')
+check(#r.runs == 0 and r.lines[1]:find('johnny', 1, true), 'a lone word after give is the item, never the player')
+r = run('heal johnny')
+check(#r.runs == 4 and r.runs[1].player == 'Johnny Pappis', 'heal PLAYER heals that player')
+r = run('h all')
+check(#r.runs == 8, 'heal all heals every player')
+r = run('heal zzz')
+check(#r.runs == 0 and r.lines[1]:find('zzz', 1, true), 'heal with an unknown player is refused, not run on you')
+r = run('@john give dirt copper')
+check(#r.runs == 0, 'with @ already naming the player, the next word is part of the item')
+r = run('give')
+check(r.lines[1] == 'use: give [player] <item> [count]', 'a missing argument shows how the shortcut is typed')
+
 -- Anything else passes through as typed, with "quoted names" resolved.
 r = run('SpawnSomething 3')
 check(r.runs[1] and r.runs[1].line == 'SpawnSomething 3', 'an unknown line passes through untouched')

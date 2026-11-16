@@ -6,16 +6,19 @@
   "cheat_gap_s": 1,
   "cheat_per_sender": 12,
   "target_mark": "@",
+  "player_arg": "[player]",
   "targets": {
     "all": [
       "all",
+      "everyone",
       "*"
     ],
     "host": [
       "host"
     ],
     "me": [
-      "me"
+      "me",
+      "self"
     ]
   },
   "repeat": [
@@ -216,7 +219,7 @@
     "runmacro"
   ],
   "messages": {
-    "help": "mp [@who] <console line> | find <text> | ls <kind> [text] | who | cheats | . repeats | shortcuts: {shortcuts}",
+    "help": "give [player] <item> [count] | heal [player|all] | who | find <text> | ls <kind> [text] | cheats | . repeats | any console line | shortcuts: {shortcuts}",
     "find_row": "{kind}: {name} = {id}",
     "find_none": "Nothing matches {query}",
     "ls_row": "{name} = {id}",
@@ -229,7 +232,7 @@
     "cheats_unknown": "The game's world tags can't be read right now",
     "no_match": "No {kind} matches {query}",
     "no_player": "No player matches {query}",
-    "missing_arg": "{command} needs {arg}",
+    "missing_arg": "use: {usage}",
     "denied": "{word} is on the deny list (console.json)",
     "chained": "One command per line: no ; | ` or line breaks",
     "ran": "{count} line(s) for {players}: {lines}",
