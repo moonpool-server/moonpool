@@ -84,6 +84,9 @@ return {
   -- launcher's folder, which an uninstall removes. The game's list titled title (its part title_part)
   -- is its command history, shown in that order.
   history = { file = '\\Moonpool\\console-recent.txt', keep = 50, title_part = 'Title', title = 'Command History' },
+  -- textbox: Unreal's own text box in place of the game's command line label (replaces: that
+  -- label's part name). on = false keeps the game's label.
+  textbox = { on = true, replaces = 'Input', focus_again_ms = 150 },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
@@ -113,6 +116,19 @@ return {
     system = '/Script/Engine.Default__KismetSystemLibrary',
     set_visibility = '/Script/UMG.Widget:SetVisibility',
     set_text = '/Script/UMG.TextBlock:SetText',
+    textbox_class = '/Script/UMG.EditableText', -- the input without a frame, styled like the game's line
+    textbox_get = '/Script/UMG.EditableText:GetText',
+    textbox_set = '/Script/UMG.EditableText:SetText',
+    textbox_font = '/Script/UMG.EditableText:SetFont',
+    textbox_style = 'WidgetStyle',
+    style_color = 'ColorAndOpacity',
+    label_font = 'Font',
+    label_color = 'ColorAndOpacity',
+    get_parent = '/Script/UMG.Widget:GetParent',
+    slot = 'Slot',                      -- the slot a widget's parent made for it
+    slot_size = '/Script/UMG.HorizontalBoxSlot:SetSize',
+    slot_fill = 1,                      -- ESlateSizeRule: Fill
+    keyboard_focus = '/Script/UMG.Widget:SetKeyboardFocus',
     list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
     row_item = 'Context',               -- what a row stands for: an item's name in the game's data
     tree = 'WidgetTree',                -- where a panel keeps its widgets

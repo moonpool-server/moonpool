@@ -10,20 +10,15 @@
   "targets": {
     "all": [
       "all",
-      "everyone",
-      "*"
+      "everyone"
     ],
     "host": [
       "host"
     ],
     "me": [
-      "me",
-      "self"
+      "me"
     ]
   },
-  "repeat": [
-    "."
-  ],
   "max_lines": 12,
   "undo": {
     "verbs": [
@@ -62,65 +57,48 @@
   "kinds": {
     "items": {
       "aliases": [
-        "i",
-        "item",
         "items"
       ]
     },
     "players": {
       "aliases": [
-        "pl",
-        "player",
         "players"
       ]
     },
     "commands": {
       "aliases": [
-        "cmd",
-        "command",
         "commands"
       ]
     },
     "tags": {
       "aliases": [
-        "t",
-        "tag",
         "tags"
       ]
     }
   },
   "verbs": {
     "find": [
-      "f",
-      "find",
-      "?"
+      "find"
     ],
     "ls": [
-      "l",
-      "ls",
       "list"
     ],
     "who": [
-      "w",
       "who"
     ],
     "cheats": [
-      "c",
       "cheats"
     ],
     "help": [
-      "help",
-      "h?"
+      "help"
     ],
     "undo": [
-      "undo",
-      "u"
+      "undo"
     ]
   },
   "commands": {
     "give": {
       "aliases": [
-        "g",
         "give"
       ],
       "lines": [
@@ -139,7 +117,6 @@
     },
     "heal": {
       "aliases": [
-        "h",
         "heal"
       ],
       "lines": [
@@ -151,7 +128,7 @@
     },
     "tag": {
       "aliases": [
-        "tag+"
+        "tag"
       ],
       "lines": [
         "AddGlobalTag {tag}"
@@ -165,7 +142,7 @@
     },
     "untag": {
       "aliases": [
-        "tag-"
+        "untag"
       ],
       "lines": [
         "RemoveGlobalTag {tag}"
@@ -179,7 +156,6 @@
     },
     "normal": {
       "aliases": [
-        "off",
         "normal"
       ],
       "lines": [
@@ -219,7 +195,7 @@
     "runmacro"
   ],
   "messages": {
-    "help": "give [player] <item> [count] | heal [player|all] | who | find <text> | ls <kind> [text] | cheats | . repeats | any console line | shortcuts: {shortcuts}",
+    "help": "give [player] <item> [count] | heal [player|all] | who | find <text> | list <kind> [text] | cheats | undo | tag <tag> | untag <tag> | normal | any console line",
     "find_row": "{kind}: {name} = {id}",
     "find_none": "Nothing matches {query}",
     "ls_row": "{name} = {id}",
@@ -236,7 +212,6 @@
     "denied": "{word} is on the deny list (console.json)",
     "chained": "One command per line: no ; | ` or line breaks",
     "ran": "{count} line(s) for {players}: {lines}",
-    "no_last": "Nothing to repeat yet",
     "more": "... and {count} more",
     "console_off": "The console is off: add player to enabled_commands in sn2headless.json",
     "choose": "{query}? {choices}",

@@ -45,7 +45,8 @@ local function live(class)
   return out
 end
 
-local panel, shown, trimmed, commands, items, hint, backdrop
+local panel, shown, trimmed, commands, items, hint, backdrop, box
+local back_in_history = 0  -- how far Up has gone into the history; 0 is the line being typed
 -- The lines run from the panel, newest first, kept across sessions in the launcher's own folder,
 -- which an uninstall removes. The game's History list is shown in this order (newest_first below).
 local recent_file = (os.getenv('LOCALAPPDATA') or '') .. CFG.history.file
@@ -122,13 +123,50 @@ local function each_part(w, visit, depth)
 end
 
 local function trim(w)
-  local parts, block = {}, nil
+  local parts, block, line_label = {}, nil, nil
   each_part(w, function(widget, part, kind)
     if route.hidden(kind, part, CFG.panel) then parts[#parts + 1] = widget end
     if part == CFG.layout.part then block = widget end
     if part == CFG.hint.part then hint = widget end
     if part == CFG.backdrop.part then backdrop = widget end
+    if part == CFG.textbox.replaces then line_label = widget end
   end)
+  -- The game's command line is a label the game types into, with no cursor. Unreal's own text box
+  -- takes its place in the same row: cursor, arrows, Home, End, selection and paste come with it.
+  if CFG.textbox.on and valid(line_label) and not valid(box) then
+    local ok, made = pcall(function()
+      local cls = StaticFindObject(G.textbox_class)
+      local row = select(2, ucall(line_label, G.get_parent))
+      if not (valid(cls) and valid(row)) then return nil end
+      local b = StaticConstructObject(cls, w[G.tree])
+      if not valid(b) then return nil end
+      if not ucall(row, G.add_child, b) then return nil end
+      -- The box fills the row, as the game's label did: set on the slot the row made for it.
+      local slot
+      pcall(function() slot = b[G.slot] end)
+      if not (valid(slot) and ucall(slot, G.slot_size, { SizeRule = G.slot_fill, Value = 1.0 })) then
+        say('failed', { what = G.slot_size, tries = 1, error = 'the text box keeps its own width' })
+      end
+      -- It looks like the game's line: the label's own font and colour, read from the label.
+      local font, color
+      pcall(function() font = line_label[G.label_font] end)
+      pcall(function() color = line_label[G.label_color] end)
+      if not (font and ucall(b, G.textbox_font, font)) then
+        say('failed', { what = G.textbox_font, tries = 1, error = 'the text box keeps its default font' })
+      end
+      local styled = color and pcall(function() b[G.textbox_style][G.style_color] = color end)
+      if not styled then
+        say('failed', { what = G.textbox_style, tries = 1, error = 'the text box keeps its default colour' })
+      end
+      return b
+    end)
+    if ok and valid(made) then
+      box = made
+      ucall(line_label, G.set_visibility, G.hidden)
+    else
+      say('failed', { what = G.textbox_class, tries = 1, error = tostring(made) })
+    end
+  end
   for _, o in ipairs(parts) do ucall(o, G.set_visibility, G.hidden) end
   if valid(block) then dock(block, CFG.layout.top) end
   if valid(backdrop) then
@@ -337,6 +375,7 @@ local function place(lists)
     end, CFG.list.depth)
   end
 end
+local focus_line  -- below, with the text box
 local function follow_lists()
   if following or not CFG.search.live then return end
   following = true
@@ -352,7 +391,7 @@ local function follow_lists()
         -- open the game's own menu as well, so the panel is made the active menu again.
         -- The command line gets the keyboard back too, or what is typed next goes to the world.
         if rows == '' then
-          say_hint(CFG.hint.text); ucall(panel, G.activate); ucall(panel, G.focus); line = ''
+          say_hint(CFG.hint.text); ucall(panel, G.activate); focus_line(); line = ''
         else
           say_hint(CFG.hint.listing)
         end
@@ -382,13 +421,37 @@ end
 
 -- Up or Down while a list shows: the choice moves over the rows that show. Enter runs the chosen row
 -- through the list's own model, as a click on it does.
+-- The keyboard to the text box. CommonUI gives the panel's own focus target the keyboard when the
+-- panel activates, after this runs, so it is given again a moment later.
+focus_line = function()
+  if not valid(box) then return ucall(panel, G.focus) end
+  ucall(box, G.keyboard_focus)
+  ExecuteWithDelay(CFG.textbox.focus_again_ms, function()
+    ExecuteInGameThread(function() if shown and valid(box) then ucall(box, G.keyboard_focus) end end)
+  end)
+end
+local function box_text()
+  local text = ''
+  if valid(box) then pcall(function() text = select(2, ucall(box, G.textbox_get)):ToString() end) end
+  return text
+end
+local function set_box(text)
+  if valid(box) then ucall(box, G.textbox_set, FText(text)) end
+end
+-- Up and Down: with a list open, the choice moves over the rows that show; on the command line,
+-- the box steps through the lines run before, newest first (Down past the newest empties it).
 local function nav(step)
-  if shown and seen and seen ~= '' then choose(chosen + step) end
+  if not shown then return end
+  if seen and seen ~= '' then choose(chosen + step); return end
+  if not valid(box) then return end
+  back_in_history = math.max(0, math.min(#recent, back_in_history - step))
+  set_box(back_in_history == 0 and '' or recent[back_in_history])
 end
 local function run()
   if shown and not (seen and seen ~= '') then  -- no list: the line typed into the command line
-    local text = line
-    line = ''
+    local text = valid(box) and box_text() or line
+    line, back_in_history = '', 0
+    set_box('')
     if text ~= '' then typed(text) end
     return
   end
@@ -481,7 +544,9 @@ local function toggle()
   input_mode(pc, w, want)
   if want then
     if not trimmed then trim(w) end
-    ucall(w, G.focus)  -- the command line takes the keyboard, or what is typed goes to the world
+    -- The command line takes the keyboard, or what is typed goes to the world.
+    focus_line()
+    back_in_history = 0
     line = ''
     say_hint(CFG.hint.text)
     seen = nil
