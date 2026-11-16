@@ -368,7 +368,7 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
   $flow.BackColor = Get-Color $Theme.Panel
   $boxes = @{}
   # Each row says where it stands. installed: this version was accepted and the ledger records it
-  # placed, with its files on disk (on, or parked while the mods are off). update: a different version
+  # placed, with its files on disk as placed (on, or parked while the mods are off; hashes checked). update: a different version
   # of one accepted or placed before. not installed: accepted, but its files are not all there (a run
   # that stopped). new: never accepted.
   $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
@@ -381,7 +381,8 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     if ($files.Count -eq 0) { return $false }
     foreach ($f in $files) {
       $path = [string]$f.path
-      if (-not ((Test-Path -LiteralPath $path) -or (Test-Path -LiteralPath "$path.moonpool-off"))) { return $false }
+      if (-not (Test-Path -LiteralPath $path)) { $path = "$path.moonpool-off" }
+      if (-not (Test-Path -LiteralPath $path) -or (Get-Sha256 $path) -ne [string]$f.sha256) { return $false }
     }
     return $true
   }
