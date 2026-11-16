@@ -16,6 +16,20 @@
 | Lifepods and the PDA signals everyone can see. A signal shows once it has stayed put for the delay, so a vehicle's shows where it was left | Signals hidden by default, such as undiscovered story places, and admin commands |
 | Fog over places nobody has visited, clearing along each player's route on the same delay, when a map picture is set | Players, explored places and signals that follow something, with `MAP_PLAYERS=false`; signals with `MAP_SIGNALS=false`. Both apply to `map.json` too |
 
+## What the server keeps
+
+The server keeps a chart per branch and save, `map-chart-<branch>-<save>.json` in the data volume. It is not published.
+
+| Kept | For how long |
+|---|---|
+| Each player's positions | Until shown, then the last one until the delay plus an hour after they leave |
+| Squares visited | For the life of the save |
+| Lifepods | For the life of the save |
+| Signals, each spot a signal stood at | Until an hour after it was last seen there |
+
+- `MAP_PLAYERS=false` records no positions, visited squares or signals that follow something, and deletes the positions and visited squares already kept. Turned back on, the fog starts again from nothing.
+- Players are told apart by display name: two players with the same name are one dot. The game data the host mod reads has no player id that lasts across reconnects.
+
 ## A map picture
 
 Moonpool ships no map picture. To set one:
@@ -25,6 +39,7 @@ docker compose cp map-background.example.json sn2:/home/container/map-background
 ```
 
 - One entry per branch: a picture, or a list laid side by side. Each `url` is a tile address with `{z}`, a picture address or a file in the data volume. `bounds` are left, top, right, bottom in game units. Name the picture's author and licence in `credit`; the page shows it.
+- `map.png` draws only a picture or tile that is PNG, JPEG or WebP, at most 8192 x 8192 pixels (67 million), and, when downloaded, at most 20 MB. It leaves out any other.
 - Your own picture: stand on two far-apart spots and run `bin/moonpool map where <player>` on each, note their pixel positions, then `bin/moonpool map bounds` works out the edges. No rotation.
 - The example uses [joric's Subnautica 2 tileset](https://github.com/joric/subnautica2_tileset), loaded by players' browsers from joric's site: a community capture from May 2026, before the experimental branch, so newer builds may not match it. Its Unlicense covers joric's work, not the game's rights.
 - The experimental build has region pictures under `Subnautica2/Content/Debug`, bounds in `maps.json`. They're the studio's files; Moonpool doesn't ship or fetch them.
