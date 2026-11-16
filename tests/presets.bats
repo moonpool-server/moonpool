@@ -30,6 +30,22 @@ resolved() {
   [[ "$output" == *"unknown PRESET arcade"* ]]
 }
 
+@test "PLAYER_SLOTS outside 1 to 63 is refused by value, as the slots command refuses it" {
+  for bad in 0 64 100 -1 abc 4x 08 ' 4'; do
+    run resolved PLAYER_SLOTS="$bad"
+    [ "$status" -eq 64 ]
+    [[ "$output" == *"PLAYER_SLOTS must be a whole number from 1 to 63"* ]]
+  done
+  for good in 1 9 10 59 63; do
+    run resolved PLAYER_SLOTS="$good"
+    [ "$status" -eq 0 ]
+    [ "${output%%|*}" = "$good" ]
+  done
+  # shellcheck disable=SC2016 # expanded by the deliberately separate bash -c process
+  run env -i PATH="$PATH" PLAYER_SLOTS=63 bash -c '. "$1/scripts/common.sh"; echo "$SESSION_LIMIT"' bash "$ROOT"
+  [ "$output" = 64 ]
+}
+
 @test "env example and compose list the same behavior switches" {
   expected='AUTO_ACCEPT_FRIENDS HIDE_HOST_BODY IDLE_FREEZE_MINUTES IDLE_STOP_HOURS LIFEPOD_JOIN_HOLD PLAYER_SLOTS PRESET RESTART_CRON STORY_GOALS UNLOCK_REPLAY HOST_PRUNE VOICE_WARN VOICE_RANGE_M NET_MAX_CLIENT_RATE IDLE_MAX_FPS IDLE_SLOW_MINUTES'
   expected=$(tr ' ' '\n' <<<"$expected" | sort)

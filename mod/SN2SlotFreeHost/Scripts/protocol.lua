@@ -22,11 +22,16 @@ M.ALLOWLIST = {
   settings = { args = {} },
 }
 
--- A console line is one command: no separators or control characters, so a
--- request cannot chain a second command the allowlist did not name.
+-- True when a line holds one command only. The engine's console splits a line at | and at line
+-- breaks and runs each part; ; ` and every other control character are refused as well, so no
+-- line carries a second command past a check that reads only its first word.
+function M.one_command(line)
+  return type(line) == 'string' and not line:find('[%c;|`]')
+end
+
+-- A console line from a request: one command, 1..128 bytes.
 function M.console_line_ok(line)
-  return type(line) == 'string' and #line > 0 and #line <= 128
-    and not line:find('[%c;|`]')
+  return type(line) == 'string' and #line > 0 and #line <= 128 and M.one_command(line)
 end
 
 local NONCE_PATTERN = '^[0-9a-f]+$'
@@ -35,16 +40,32 @@ function M.valid_nonce(id)
   return type(id) == 'string' and #id >= 16 and #id <= 64 and id:match(NONCE_PATTERN) ~= nil
 end
 
--- Returns a new replay guard: remembers every nonce seen by this process.
-function M.new_seen(initial)
-  local seen, count = {}, 0
+-- Returns a new replay guard. A nonce is kept while a request carrying it could still pass the
+-- age check in validate(): until the clock is more than MAX_AGE_SECONDS past its timestamp.
+-- initial: nonces from before a restart, timestamps unknown; each is kept until 2 * MAX_AGE_SECONDS
+-- after start, the latest a request seen before start could still pass the age check.
+--   start  unix seconds when the guard is made
+function M.new_seen(initial, start)
+  local expires, count, pruned = {}, 0, nil
+  local function prune(now)
+    if pruned == now then return end
+    pruned = now
+    for id, at in pairs(expires) do
+      if at < now then expires[id] = nil; count = count - 1 end
+    end
+  end
   for _, id in ipairs(initial or {}) do
-    if M.valid_nonce(id) and not seen[id] then seen[id] = true; count = count + 1 end
+    if M.valid_nonce(id) and not expires[id] then
+      expires[id] = (start or 0) + 2 * M.MAX_AGE_SECONDS
+      count = count + 1
+    end
   end
   return {
-    check_and_add = function(id)
-      if seen[id] then return false end
-      seen[id] = true
+    -- id: the nonce; ts: its request's timestamp; now: the clock. False when the nonce is held.
+    check_and_add = function(id, ts, now)
+      prune(now)
+      if expires[id] then return false end
+      expires[id] = ts + M.MAX_AGE_SECONDS
       count = count + 1
       return true
     end,
@@ -94,7 +115,7 @@ function M.validate(msg, filename, now, enabled, seen)
   local spec = M.ALLOWLIST[msg.cmd]
   if type(msg.cmd) ~= 'string' or spec == nil then return nil, 'not_allowlisted' end
   if not enabled[msg.cmd] then return nil, 'disabled_by_config' end
-  if not seen.check_and_add(msg.id) then return nil, 'replay' end
+  if not seen.check_and_add(msg.id, msg.ts, now) then return nil, 'replay' end
   local args, err = check_args(spec.args, msg.args)
   if not args then return nil, err end
   if args.command ~= nil and not M.console_line_ok(args.command) then

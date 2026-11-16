@@ -189,7 +189,10 @@ end
 
 local run_as = host_core.run_as
 
+-- Reached from the control queue (already checked by protocol.validate) and from !cmd: either way
+-- the line must be one command.
 handlers.player = function(args)
+  if not protocol.console_line_ok(args.command) then return false, nil, 'bad_console_line' end
   local pc = controller_named(args.player)
   if not pc then return false, nil, 'unknown_player' end
   run_as(pc, args.command, args.player)
@@ -1177,7 +1180,7 @@ local NONCE_LEDGER = cpath('receipts', 'nonces.txt')
 local remembered = {}
 for id in (read_file(NONCE_LEDGER) or ''):gmatch('[0-9a-f]+') do remembered[#remembered + 1] = id end
 while #remembered > 1024 do table.remove(remembered, 1) end
-local seen = protocol.new_seen(remembered)
+local seen = protocol.new_seen(remembered, os.time())
 local function remember_nonce(id)
   remembered[#remembered + 1] = id
   while #remembered > 1024 do table.remove(remembered, 1) end

@@ -71,7 +71,7 @@ fake_mod() {
 @test "Lua protocol checks stale requests, duplicate nonces, versions and UTF-8" {
   run lua5.4 tests/lua/protocol_spec.lua
   [ "$status" -eq 0 ]
-  [[ $output == *"11 tests, 0 failures"* ]]
+  [[ $output == *"24 tests, 0 failures"* ]]
 }
 
 @test "Lua access policy kicks banned names once per presence" {
