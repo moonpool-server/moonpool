@@ -36,7 +36,7 @@ return {
   hint = { part = 'CommonTextBlock_2',
     text = 'Type a command and press Enter, or pick a list. Esc closes.',
     listing = 'Typing filters the list below. Esc: back to the command line.',
-    filtering = 'Filter: {query}_    {shown} of {all}    Up/Down choose, Enter runs, Esc back' },
+    filtering = 'Filter: {query}_    {shown} of {all}    a number at the end sets how many    Enter runs, Esc back' },
   -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
   panel = {
     hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
@@ -137,6 +137,7 @@ return {
     select = '/Script/CommonUI.CommonButtonBase:SetIsSelected',
     list_model = 'SN2CheatListViewModel', -- what a pick list shows and runs
     pick = '/Script/Subnautica2.SN2CheatListViewModel:SelectItem',
+    list_command = 'ConsoleCommand',    -- a pick list's own command, {0} for the picked row ("Item {0} 1")
     set_blur = '/Script/UMG.BackgroundBlur:SetBlurStrength',
   },
 }

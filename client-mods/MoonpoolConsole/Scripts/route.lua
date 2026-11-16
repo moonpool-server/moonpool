@@ -28,6 +28,29 @@ function M.matches(text, query)
   return true
 end
 
+-- A filter that ends in a number is a search and a count: "glass 10" finds Glass, 10 of it. Returns
+-- the search and the count (nil when there is none).
+function M.count(query)
+  local search, n = tostring(query):match('^(.-)%s+(%d+)%s*$')
+  n = tonumber(n)
+  if not n or n < 1 then return tostring(query), nil end
+  return search, math.floor(n)
+end
+
+-- A pick list's own command with the picked row in place of {0} and count in place of the list's
+-- own last number ("Item {0} 1" -> "Item DA_Glass_ItemType 10"). Nil when the command has no {0}.
+function M.counted(command, name, count)
+  command = tostring(command or '')
+  if not command:find('{0}', 1, true) then return nil end
+  local line = command:gsub('{0}', function() return name end)
+  if count then
+    local head, n = line:match('^(.-%s)(%d+)%s*$')
+    if not n then return nil end
+    line = head .. count
+  end
+  return line
+end
+
 -- What a list row is searched by: the item's own name and its name in the game's data, without the
 -- parts every such name shares (patterns from the settings).
 function M.search_text(id, label, strip)
