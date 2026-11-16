@@ -78,6 +78,10 @@ return {
     -- An item's category is the folder its data lives in (Tools, Resource, Equipment): typing it
     -- narrows the list. A Lua pattern over the item's full name.
     category = '/ItemType/([%w_]+)/' },
+  -- The lines run from the panel, kept newest first (at most keep) in file, under %LOCALAPPDATA%: the
+  -- launcher's folder, which an uninstall removes. The game's list titled title (its part title_part)
+  -- is its command history, shown in that order.
+  history = { file = '\\Moonpool\\console-recent.txt', keep = 50, title_part = 'Title', title = 'Command History' },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
@@ -114,6 +118,8 @@ return {
     container = '/Script/UMG.PanelWidget', -- the kind of widget that holds others
     child_count = '/Script/UMG.PanelWidget:GetChildrenCount',
     child_at = '/Script/UMG.PanelWidget:GetChildAt',
+    remove_child_at = '/Script/UMG.PanelWidget:RemoveChildAt',
+    add_child = '/Script/UMG.PanelWidget:AddChild',
     item_class = 'UWEItemType',
     item_label = 'Name',
     is_published = '/Script/UWEAssetRegistry.UWEPrimaryDataAssetBase:IsPublished',
