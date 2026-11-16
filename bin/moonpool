@@ -1290,6 +1290,28 @@ def import_world(a):
             drop_staged(given)
 
 
+ZIP_FILE_MAX = 256 * 1024 * 1024
+ZIP_TOTAL_MAX = 512 * 1024 * 1024
+ZIP_RATIO_MAX = 200  # a save that unpacks to more than this many times its packed size is not a save
+
+
+def unzip_saves(z, members, x, label):
+    """Unpack the members into x in chunks, counting the bytes that come out, not the sizes the zip declares."""
+    total = 0
+    for m in members:
+        written = 0
+        with z.open(m) as src, open(x / Path(m.filename).name, "wb") as out:
+            while chunk := src.read(1024 * 1024):
+                written += len(chunk)
+                total += len(chunk)
+                if written > ZIP_FILE_MAX or total > ZIP_TOTAL_MAX:
+                    usage_error(f"{label} holds more than one world's worth of files")
+                if written > 1024 * 1024 and written > ZIP_RATIO_MAX * max(m.compress_size, 1):
+                    usage_error(f"{label}: {Path(m.filename).name} unpacks to more than {ZIP_RATIO_MAX} times its "
+                                "packed size, which no save does")
+                out.write(chunk)
+
+
 def import_from(given, x, wanted):
     if given.is_dir():
         src = given
@@ -1300,12 +1322,11 @@ def import_from(given, x, wanted):
             with zipfile.ZipFile(given) as z:
                 members = [m for m in z.infolist() if not m.is_dir() and Path(m.filename).name.endswith((".sav", ".bak"))]
                 names = [Path(m.filename).name for m in members]
-                if len(members) > 64 or sum(m.file_size for m in members) > 512 * 1024 * 1024:
+                if len(members) > 64 or sum(m.file_size for m in members) > ZIP_TOTAL_MAX:
                     usage_error(f"{given.name} holds more than one world's worth of files")
                 if len(set(names)) != len(names):
                     usage_error(f"{given.name} holds two files with the same name; zip one SaveGames folder")
-                for m in members:
-                    (x / Path(m.filename).name).write_bytes(z.read(m))
+                unzip_saves(z, members, x, given.name)
         except (OSError, zipfile.BadZipFile) as err:
             usage_error(f"cannot read {given.name}: {err}")
         src = x
@@ -1369,6 +1390,8 @@ def export_world(a):
     if not name:
         newest = sorted(list_saves(save_dir), key=lambda f: f.stat().st_mtime, reverse=True)
         name = newest[0].stem if newest else ""
+    if name and not valid_save(name):
+        usage_error(f"refused: {name} is not a save name (letters, digits, _ and - only)")
     if not (name and (save_dir / f"{name}.sav").is_file()):
         refuse(f"refused: no world called {name or '(none)'} on this server (moonpool server saves)")
     # From a staged copy, taken once the game has stopped writing, never the live folder.
@@ -1397,10 +1420,34 @@ def restore(a):
         usage_error("save names are letters, digits, _ and - only")
     x = Path(tempfile.mkdtemp())
     try:
-        with tarfile.open(a[0], "r:gz") as tar:
-            tar.extractall(x, filter="data")
+        restore_from(a, x)
+    finally:
+        shutil.rmtree(x, ignore_errors=True)
+
+
+RESTORE_MAX_MEMBERS = 10000
+RESTORE_MAX_BYTES = 4 * 1024 * 1024 * 1024
+
+
+def extract_backup(archive, x):
+    """Unpack a backup one member at a time, stopping at RESTORE_MAX_MEMBERS members or
+    RESTORE_MAX_BYTES of file data, so a hostile archive cannot fill the disk."""
+    count = size = 0
+    try:
+        with tarfile.open(archive, "r:gz") as tar:
+            for m in tar:
+                count += 1
+                size += m.size if m.isfile() else 0
+                if count > RESTORE_MAX_MEMBERS or size > RESTORE_MAX_BYTES:
+                    refuse(f"refused: {archive} holds more than {RESTORE_MAX_MEMBERS} files or "
+                           f"{RESTORE_MAX_BYTES // 1024 ** 3} GiB, more than a backup of this server")
+                tar.extract(m, x, filter="data")
     except (OSError, tarfile.TarError, ValueError):
-        usage_error(f"cannot read {a[0]}")
+        usage_error(f"cannot read {archive}")
+
+
+def restore_from(a, x):
+    extract_backup(a[0], x)
     stamped = sorted(d for d in x.rglob("*") if d.is_dir() and re.fullmatch(r"20\d{6}T\d{6}Z", d.name))
     src = stamped[-1] / "SaveGames" if stamped else None
     if not (src and src.is_dir()):
@@ -1423,12 +1470,33 @@ def restore(a):
     safety = Path(f"{save_dir}.pre-restore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
     if safety.exists():
         safety = Path(f"{safety}-{os.getpid()}")
+    # The backup is copied next to the live folder first, then the two are swapped by renames,
+    # so a failed copy never leaves the server with half a SaveGames folder.
+    incoming = Path(f"{save_dir}.restoring-{os.getpid()}")
     try:
-        shutil.move(str(save_dir), str(safety))
-        save_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, save_dir, dirs_exist_ok=True)
+        shutil.copytree(src, incoming)
     except (OSError, shutil.Error) as err:
-        die(f"restore could not put the saves in place: {err}; the current saves are at {safety}")
+        shutil.rmtree(incoming, ignore_errors=True)
+        do_start_game()
+        die(f"restore could not copy the backup: {err}; the current saves were not touched and the game was started again")
+    try:
+        save_dir.rename(safety)
+    except OSError as err:
+        shutil.rmtree(incoming, ignore_errors=True)
+        do_start_game()
+        die(f"restore could not move the current saves aside: {err}; they were not touched and the game was started again")
+    try:
+        incoming.rename(save_dir)
+    except OSError as err:
+        try:
+            shutil.rmtree(save_dir, ignore_errors=True)
+            safety.rename(save_dir)
+            where = "were put back"
+        except OSError:
+            where = f"are at {safety}"
+        shutil.rmtree(incoming, ignore_errors=True)
+        do_start_game()
+        die(f"restore could not put the saves in place: {err}; the current saves {where} and the game was started again")
     if not R["json"]:
         print(f"restored from {a[0]} (the current saves were staged first and kept at {safety})")
     do_host(["--now", a[1] if len(a) == 2 else ""])
