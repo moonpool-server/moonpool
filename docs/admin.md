@@ -4,7 +4,7 @@ Orders from inside the game pass one gate on the server. The server's own shell 
 
 ```mermaid
 flowchart LR
-  sig["Rename a PDA signal<br/>!kick, !mp g tit 10"] --> gate
+  sig["Rename a PDA signal<br/>!kick, !mp g copper 10"] --> gate
   panel["Admin panel (F2) or any<br/>client sending cheat lines"] --> gate
   gate{"sender in ADMINS,<br/>command not denied?"}
   gate -- yes --> run(["runs on the server"])
@@ -48,9 +48,9 @@ Nothing to install: rename any PDA signal to a command.
 `!mp` takes any console line, plus shortcuts and name lookups:
 
 ```
-!mp g cop 10              Give the only item whose name starts with cop, 10 of it
+!mp g copper wire 10      Give the item with that exact name, 10 of it
 !mp g 10 titanium ingot   the name's words and the number in any order, no quotes needed
-!mp g tit                 an unclear name asks: tit? 1 Titanium  2 Titanium Ingot
+!mp g cop                 an unclear name asks: cop? 1 Copper  2 Copper Ingot  3 Copper Wire
 !mp 2                     ...and a bare number answers it
 !mp h                     heal, then oxygen, food and water to 100
 !mp @john h               heal the player whose name matches john; @all and @host work too
@@ -123,7 +123,7 @@ The game runs a cheat line from any client without checking who sent it. It has 
 - If the host can't stop a line, it runs and can't be called back. The log says `cheat gate: COULD NOT STOP` and a non-admin sender is removed (`on_gate_failure`; `log` only logs).
 - `deny` reads the first word, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
 
-- A line starting with `signal_word` (`mp`) is a console line: `mp g tit 10` equals `!mp g tit 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
+- A line starting with `signal_word` (`mp`) is a console line: `mp g copper 10` equals `!mp g copper 10` in a signal. The answer shows as a notification for `reply_seconds` (8).
 - A line for a player whose character isn't in the world yet is skipped.
 
 Not yet tested with a second player:
@@ -142,7 +142,7 @@ Not yet tested with a second player:
 | F2 | closes everything | opens the game's cheat panel and pick lists as one palette: tabs (Item, Spawn, Equip, Macro, History), the command line, the list |
 | typing | filters the list: a row shows if it has every typed word, in its name or category (`tools`, `resource`) | writes the command line |
 | Up, Down | pick a row | |
-| Enter | runs the row; the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g tit 10`) |
+| Enter | runs the row; the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
 | Esc | steps back one level | |
 
 - Unpublished items are hidden unless `search.show_unpublished` is set.

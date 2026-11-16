@@ -34,7 +34,8 @@ FORBIDDEN_NAMES = [
     re.compile(r"(^|/)(config/loginusers\.vdf|ssfn\d*|local\.vdf)$", re.I),
     re.compile(r"(^|/)\.env$"),
     # Game data and saves, and any picture: no game art, logo or capture can slip in.
-    # The one place a picture may live is docs/images, screenshots of Moonpool's own screens.
+    # The one place a picture may live is docs/images: screenshots of Moonpool's own screens, and one
+    # tight crop of the admin panel, which is the game's own cheat panel as MoonpoolConsole lays it out.
     re.compile(r"\.(sav|uasset|umap|bnk|png|jpe?g|gif|webp|bmp|ico|svg|tga|dds)$", re.I),
     re.compile(r"(^|/)\.github/FUNDING\.ya?ml$", re.I),
     # Layout sets and scan patterns are per game build and stay with the operator.
