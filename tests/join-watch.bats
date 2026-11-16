@@ -79,3 +79,49 @@ SH
   log="$BATS_TEST_TMPDIR/data/logs/join_watch.log"; cat "$log"
   grep -q 'friend accept failed: ValueError: friends list refused' "$log"
 }
+
+# The watcher with its helpers stubbed, a stub moonpool that records its arguments, and lines written
+# to the game log once it is running. $1: players in status.json (a JSON array of names).
+run_watcher_with_log_lines() {
+  local b="$BATS_TEST_TMPDIR/bin" t="$BATS_TEST_TMPDIR/tools" watcher children players=$1; shift
+  export DATA_DIR="$BATS_TEST_TMPDIR/data" SN2_CONTROL_DIR="$BATS_TEST_TMPDIR/data/control" HOST_NAME='SN2 Host'
+  export UE_LOG="$DATA_DIR/game.log" JOIN_WATCH_LOG="$DATA_DIR/game.log" PATH="$t:$PATH"
+  mkdir -p "$b" "$t" "$SN2_CONTROL_DIR" "$DATA_DIR/run" "$DATA_DIR/logs"; : >"$UE_LOG"
+  jq -n --argjson p "$players" '{players: ([{name: "SN2 Host"}] + ($p | map({name: .})))}' >"$SN2_CONTROL_DIR/status.json"
+  cp "$BATS_TEST_DIRNAME/../scripts/join-watch.sh" "$BATS_TEST_DIRNAME/../scripts/common.sh" "$b/"
+  for helper in join-page.py discord-notify.py map-chart.py friend-accept.py; do printf 'import sys\nsys.exit(0)\n' >"$b/$helper"; done
+  for helper in save-stage.sh steam-config.sh; do printf '#!/bin/sh\nexit 0\n' >"$b/$helper"; chmod +x "$b/$helper"; done
+  # shellcheck disable=SC2016 # expanded by the stub when the watcher calls it
+  printf '#!/bin/sh\necho "$*" >>"$DATA_DIR/moonpool.calls"\n' >"$t/moonpool"
+  printf '#!/bin/sh\n/bin/sleep .05\n' >"$t/sleep"
+  printf '#!/bin/sh\nexit 0\n' >"$t/x11vnc"
+  cat >"$t/grep" <<'SH'
+#!/bin/sh
+if [ "${1:-}" = -a ] && [ "${2:-}" = --line-buffered ]; then shift 2; set -- -a "$@"; fi
+exec /bin/grep "$@"
+SH
+  chmod +x "$t/"*
+  "$b/join-watch.sh" & watcher=$!
+  /bin/sleep .5
+  for line in "$@"; do printf '%s\n' "$line" >>"$UE_LOG"; /bin/sleep 1.5; done
+  /bin/sleep 1
+  children=$(pgrep -P "$watcher" 2>/dev/null || true)
+  while IFS= read -r child; do [ -z "$child" ] || kill "$child" 2>/dev/null || true; done <<<"$children"
+  kill "$watcher" 2>/dev/null || true
+  wait "$watcher" || true
+}
+
+FAILED='LogOnlineSession: Warning: EOS: [FOnlineSessionEOS::ReassertLobbyOwnership] Session GameSession: PromoteMember failed with EOS_EResult EOS_TimedOut.'
+
+@test "lobby ownership lost with nobody on: the game re-hosts" {
+  run_watcher_with_log_lines '[]' "$FAILED"
+  cat "$DATA_DIR/logs/join_watch.log"
+  [ "$(cat "$DATA_DIR/moonpool.calls")" = "server host --now" ]
+  grep -q 'nobody is on: re-hosting' "$DATA_DIR/logs/join_watch.log"
+}
+
+@test "lobby ownership lost with players on: logged, no re-host" {
+  run_watcher_with_log_lines '["Diver"]' "$FAILED"
+  [ ! -e "$DATA_DIR/moonpool.calls" ]
+  grep -q 'with players on: not re-hosting' "$DATA_DIR/logs/join_watch.log"
+}
