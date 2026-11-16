@@ -439,7 +439,7 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
     side = str(entry.get("side", "client")).lower()
     if side != "client":
         raise ValueError(f"{name}: side: {side} is not supported; this list is what players install. "
-                         "A mod the host runs goes in ue4ss-local/Mods/<name>/ (docs/operating.md)")
+                         "A mod the host runs goes in ue4ss-local/Mods/<name>/ (docs/mods.md)")
     source_type = str(install.get("type", "")).lower()
     archive = None
     if source_type == "github":
