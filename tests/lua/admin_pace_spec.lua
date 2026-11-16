@@ -45,4 +45,11 @@ local wide = pace.new(1, 12)
 for i = 1, 12 do assert(pace.push(wide, i, 'a'), 'a queue with its own cap takes up to it') end
 local took, said = pace.push(wide, 13, 'a')
 assert(not took and said == 'sender_busy', 'and refuses the next')
+-- One Enter can send a line twice; the second copy within the window is a repeat.
+local g = pace.new(1)
+assert(not pace.repeated(g, 'a', 'Item DA_Glass_ItemType 10', 100), 'a first line is not a repeat')
+assert(pace.repeated(g, 'a', 'Item DA_Glass_ItemType 10', 101), 'the same line a second later is')
+assert(not pace.repeated(g, 'a', 'Item DA_Glass_ItemType 10', 104), 'the same line after the window is not')
+assert(not pace.repeated(g, 'b', 'Item DA_Glass_ItemType 10', 104), 'another sender is not')
+assert(not pace.repeated(g, 'a', 'HealMe', 104), 'another line is not')
 print('admin_pace: ok')

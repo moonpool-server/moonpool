@@ -1026,6 +1026,11 @@ LoopAsync(5000, function()
           tostring(sender.eos)))
         return
       end
+      if admin_pace.repeated(cheat_queue, sender.eos or sender.name, text, os.time()) then
+        log(string.format('cheat gate: %s from admin %s: dropped, the same line arrived just before', text,
+          sender.name))
+        return
+      end
       -- It waits its turn in the same paced queue as the signal commands.
       local queued, why = admin_pace.push(cheat_queue, { sender = sender, text = text, forwarded = true },
         sender.eos or sender.name)
