@@ -148,12 +148,14 @@ Not yet tested with a second player:
 |---|---|---|
 | F2 | closes everything | opens the game's cheat panel and pick lists as one palette: tabs (Item, Spawn, Equip, Macro, History), the command line, the list |
 | typing | filters the list: a row shows if it has every typed word, in its name or category (`tools`, `resource`). A number at the end is how many: `glass 10` | writes the command line |
-| Up, Down | pick a row | |
+| Up, Down | pick a row | step through the lines run before, newest first |
 | Enter | runs the row, with the count if one was typed (the list's own command, such as `Item <id> 10`); the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
 | Esc | steps back one level | |
 
 - Unpublished items, and items the game names `[DEPRECATED]`, `[PLACEHOLDER]` or `[TEST]`, are hidden unless `search.show_unpublished` is set.
-- History is the game's own list, which it sorts A to Z and fills only with lines the game ran itself. Lines the panel sends go straight to the server, so most never appear there. The panel keeps its own record, newest first, in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher), and moves any History row that is in it to the top. A list of the panel's own lines is not built yet.
+- The command line is Unreal's own text field in the game line's font, so the cursor, arrows, Home, End, selection and paste work as in any text field. `textbox.on = false` keeps the game's label instead.
+- The History tab is the game's own list, sorted A to Z, of lines the game ran itself; lines sent from the panel are in Up/Down instead, kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
+- While the panel is open, other mods' key binds stay quiet (the shared UE4SS helper the server ships), so typing does not set off their keys.
 - `Scripts/config.lua` holds every setting: key, console word, position, which parts stay, and the game names the mod relies on.
 
 ## Console commands
