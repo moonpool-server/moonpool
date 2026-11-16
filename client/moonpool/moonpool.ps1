@@ -597,7 +597,7 @@ function Resolve-Url([string]$Base, [string]$Value) {
 }
 
 # A web download stops, and its file is deleted, past $MaxBytes (declared or read), past $Minutes
-# (checked after each read, and a read waits at most 60 s), or after three redirects. Redirects are
+# (redirects included; checked after each read, and a read waits at most 60 s), or after three redirects. Redirects are
 # followed here rather than by .NET, so one from https can only lead to https, and one from http
 # only to https or the same host. $Limit names the size limit in the error.
 function Save-Url([string]$Url, [string]$Dest, [long]$MaxBytes, [string]$Limit = '', [int]$Minutes = 2) {
@@ -611,51 +611,58 @@ function Save-Url([string]$Url, [string]$Dest, [long]$MaxBytes, [string]$Limit =
     $deadline = [DateTime]::UtcNow.AddMinutes($Minutes)
     $at = [Uri]$Url
     $tooBig = "$($at.Host) sent more than $Limit, so the download was stopped"
-    for ($hops = 0; ; $hops++) {
-      $request = [Net.WebRequest]::Create($at)
-      $request.UserAgent = 'moonpool launcher'
-      $request.Timeout = 60000
-      $request.ReadWriteTimeout = 60000
-      $request.AllowAutoRedirect = $false
-      $response = $request.GetResponse()
-      $code = [int]$response.StatusCode
-      if ($code -lt 300 -or $code -ge 400) { break }
-      $next = $response.Headers['Location']
-      $response.Close()
-      if ($hops -ge 3) { throw "$(([Uri]$Url).Host) redirected more than 3 times, so the download was stopped" }
-      if (-not $next) { throw "$($at.Host) answered $code with nowhere to go" }
-      $to = New-Object Uri($at, $next)
-      if ($to.Scheme -ne 'https' -and -not ($to.Scheme -eq 'http' -and $at.Scheme -eq 'http' -and $to.Host -eq $at.Host)) {
-        throw "$($at.Host) redirected to $($to.Scheme)://$($to.Host), which is not a secure address; the download was stopped"
-      }
-      $at = $to
-    }
+    $late = "$($at.Host) took more than $Minutes minutes to send this file, so the download was stopped"
     try {
-      if ($response.ContentLength -gt $MaxBytes) { throw $tooBig }
-      $in = $response.GetResponseStream()
-      $out = [IO.File]::Create($Dest)
-      try {
-        $buffer = New-Object byte[] 65536
-        $got = [long]0
-        $shown = [DateTime]::UtcNow
-        while (($n = $in.Read($buffer, 0, $buffer.Length)) -gt 0) {
-          $got += $n
-          if ($got -gt $MaxBytes) { throw $tooBig }
-          if ([DateTime]::UtcNow -gt $deadline) { throw "$($at.Host) took more than $Minutes minutes to send this file, so the download was stopped" }
-          $out.Write($buffer, 0, $n)
-          if ($script:Ui -and $script:UiSteps -gt 0 -and ([DateTime]::UtcNow - $shown).TotalMilliseconds -gt 100) {
-            $part = 0.0
-            if ($response.ContentLength -gt 0) { $part = [double]$got / $response.ContentLength }
-            Set-Status '' ([int](100 * (($script:UiStep - 1 + $part) / $script:UiSteps)))
-            $shown = [DateTime]::UtcNow
-          }
+      for ($hops = 0; ; $hops++) {
+        # Each wait is the smaller of 60 s and the time left, so redirects count against $Minutes too.
+        $left = [int][Math]::Min(60000, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+        if ($left -le 0) { throw $late }
+        $request = [Net.WebRequest]::Create($at)
+        $request.UserAgent = 'moonpool launcher'
+        $request.Timeout = $left
+        $request.ReadWriteTimeout = $left
+        $request.AllowAutoRedirect = $false
+        $response = $request.GetResponse()
+        $code = [int]$response.StatusCode
+        if ($code -lt 300 -or $code -ge 400) { break }
+        $next = $response.Headers['Location']
+        $response.Close()
+        if ($hops -ge 3) { throw "$(([Uri]$Url).Host) redirected more than 3 times, so the download was stopped" }
+        if (-not $next) { throw "$($at.Host) answered $code with nowhere to go" }
+        $to = New-Object Uri($at, $next)
+        if ($to.Scheme -ne 'https' -and -not ($to.Scheme -eq 'http' -and $at.Scheme -eq 'http' -and $to.Host -eq $at.Host)) {
+          throw "$($at.Host) redirected to $($to.Scheme)://$($to.Host), which is not a secure address; the download was stopped"
         }
-      } catch {
-        $out.Dispose()
-        Remove-Item -LiteralPath $Dest -Force -ErrorAction SilentlyContinue
-        throw
-      } finally { $out.Dispose(); $in.Dispose() }
-    } finally { $response.Close() }
+        $at = $to
+      }
+      try {
+        if ($response.ContentLength -gt $MaxBytes) { throw $tooBig }
+        $in = $response.GetResponseStream()
+        try {
+          $out = [IO.File]::Create($Dest)
+          try {
+            $buffer = New-Object byte[] 65536
+            $got = [long]0
+            $shown = [DateTime]::UtcNow
+            while (($n = $in.Read($buffer, 0, $buffer.Length)) -gt 0) {
+              $got += $n
+              if ($got -gt $MaxBytes) { throw $tooBig }
+              if ([DateTime]::UtcNow -gt $deadline) { throw $late }
+              $out.Write($buffer, 0, $n)
+              if ($script:Ui -and $script:UiSteps -gt 0 -and ([DateTime]::UtcNow - $shown).TotalMilliseconds -gt 100) {
+                $part = 0.0
+                if ($response.ContentLength -gt 0) { $part = [double]$got / $response.ContentLength }
+                Set-Status '' ([int](100 * (($script:UiStep - 1 + $part) / $script:UiSteps)))
+                $shown = [DateTime]::UtcNow
+              }
+            }
+          } finally { $out.Dispose() }
+        } finally { $in.Dispose() }
+      } finally { $response.Close() }
+    } catch {
+      Remove-Item -LiteralPath $Dest -Force -ErrorAction SilentlyContinue
+      throw
+    }
   } else {
     # Local paths are for tests only: a server's file: address could reach a network share.
     if (-not ($script:AllowLocal -or $env:SN2_JOIN_UPDATE_URL)) { throw "not a web address: $Url" }
