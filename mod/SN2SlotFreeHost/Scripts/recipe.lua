@@ -1692,7 +1692,8 @@ local function toolbar_slots(live)
     if p.name ~= HOST_NAME then pcall(function() pawn = p.player.PawnPrivate end) end
     if valid(pawn) then
       local ok, set = pcall(toolbar.apply, TOOLBAR_SLOTS, pawn, TOOLBAR_GAME)
-      local said = ok and (set and ('set to ' .. set) or nil) or ('failed: ' .. tostring(set))
+      local said
+      if not ok then said = 'failed: ' .. tostring(set) elseif set then said = 'set to ' .. set end
       if said and toolbar_said[p.name] ~= said then
         toolbar_said[p.name] = said
         log('hotbar slots for ' .. tostring(p.name) .. ': ' .. said)
