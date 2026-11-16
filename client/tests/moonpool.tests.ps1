@@ -701,6 +701,73 @@ try {
   $r = Link-Run "-Server 'https://x.invalid'"
   Check ($r.Code -ne 0) 'an unreachable server stops the run'
 
+  Write-Host 'a web download stops at its size limit, and at a few redirects'
+  $wh = New-World; $worlds += $wh
+  $tcp = New-Object Net.Sockets.TcpListener ([Net.IPAddress]::Loopback, 0)
+  $tcp.Start()
+  $web = "http://127.0.0.1:$($tcp.LocalEndpoint.Port)"
+  $foo = [IO.File]::ReadAllBytes((Join-Path $wh.Server 'Foo.zip'))
+  New-Zip (Join-Path $wh.Server 'Foo2.zip') @('Foo\Scripts\main.lua') '2'
+  $foo2 = [IO.File]::ReadAllBytes((Join-Path $wh.Server 'Foo2.zip'))
+  $padded = New-Object byte[] ($foo2.Length + 2MB); [Array]::Copy($foo2, $padded, $foo2.Length)
+  $bigJson = [Text.Encoding]::ASCII.GetBytes('{"public_key":{"modulus":"AQAB","exponent":"AQAB"}}' + (' ' * 3MB))
+  # Each route: a status, an optional Location, a body, and whether a Content-Length is sent.
+  $routes = @{
+    '/big/moonpool.json' = @(200, '', $bigJson, $true)
+    '/stream/moonpool.json' = @(200, '', $bigJson, $false)
+    '/ok/moonpool.json' = @(200, '', [Text.Encoding]::ASCII.GetBytes('{"server_name":"x"}'), $true)
+    '/Foo.zip' = @(200, '', $foo, $true)
+    '/FooPadded.zip' = @(200, '', $padded, $false)
+  }
+  foreach ($i in 1..5) { $routes["/r$i/moonpool.json"] = @(302, "/r$($i - 1)/moonpool.json", [byte[]]@(), $true) }
+  $routes['/r0/moonpool.json'] = $routes['/ok/moonpool.json']
+  $webServer = [PowerShell]::Create()
+  [void]$webServer.AddScript({
+    param($Listener, $Routes)
+    while ($true) {
+      try { $c = $Listener.AcceptTcpClient() } catch { return }
+      try {
+        $s = $c.GetStream()
+        $head = ''
+        while (-not $head.EndsWith("`r`n`r`n")) { $b = $s.ReadByte(); if ($b -lt 0) { break }; $head += [char]$b }
+        $route = $Routes[($head -split ' ')[1]]
+        if (-not $route) { $route = @(404, '', [byte[]]@(), $true) }
+        $h = "HTTP/1.1 $($route[0]) X`r`nConnection: close`r`n"
+        if ($route[1]) { $h += "Location: $($route[1])`r`n" }
+        if ($route[3]) { $h += "Content-Length: $($route[2].Length)`r`n" }
+        $h = [Text.Encoding]::ASCII.GetBytes("$h`r`n")
+        $s.Write($h, 0, $h.Length)
+        $s.Write($route[2], 0, $route[2].Length)
+      } catch { } finally { $c.Close() }
+    }
+  }).AddArgument($tcp).AddArgument($routes)
+  $webHandle = $webServer.BeginInvoke()
+  try {
+    $gameOff = "-IsGameRunning { `$false } -NoShortcuts"
+    $r = Link-Run "-Server '$web/big' $gameOff"
+    Check ($r.Code -ne 0 -and $r.Out -match 'sent more than 1 MB') "a moonpool.json declared larger than 1 MB is refused (got: $($r.Out.Trim()))"
+    $r = Link-Run "-Server '$web/stream' $gameOff"
+    Check ($r.Code -ne 0 -and $r.Out -match 'sent more than 1 MB') "a moonpool.json with no declared size is stopped once 1 MB is read (got: $($r.Out.Trim()))"
+    $r = Link-Run "-Server '$web/r3' $gameOff"
+    Check ($r.Code -ne 0 -and $r.Out -match 'has no signing key') "three redirects are followed (got: $($r.Out.Trim()))"
+    $r = Link-Run "-Server '$web/r5' $gameOff"
+    Check ($r.Code -ne 0 -and $r.Out -match 'redirected more than 3 times') "a fourth redirect is refused (got: $($r.Out.Trim()))"
+    $fooMod = Mod $wh 'Foo' 'Foo.zip' 'Foo' 'Foo'
+    $fooMod.source.url = "$web/Foo.zip"; $fooMod.source.size = $foo.Length
+    Write-Manifest $wh @($fooMod)
+    $r = Invoke-Join $wh
+    Check ($r.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $wh.Mods 'Foo\Scripts\main.lua'))) "an archive of the size the list gives is installed over http (got $($r.Code)): $($r.Out.Trim())"
+    $fooMod = Mod $wh 'Foo' 'Foo2.zip' 'Foo' 'Foo' $true '2.0'
+    $fooMod.source.url = "$web/FooPadded.zip"; $fooMod.source.size = $foo2.Length
+    Write-Manifest $wh @($fooMod)
+    $r = Invoke-Join $wh
+    Check ($r.Code -ne 0 -and $r.Out -match "could not download Foo2\.zip for Foo: 127\.0\.0\.1 sent more than the $($foo2.Length) bytes the server's list gives" -and $null -eq $r.Launched) "an archive longer than the list's size is stopped at that size (got: $($r.Out.Trim()))"
+  } finally {
+    $tcp.Stop()
+    [void]$webServer.EndInvoke($webHandle)
+    $webServer.Dispose()
+  }
+
   Write-Host 'the launcher updates only from its own release address, and only as the installed copy'
   $w10 = New-World; $worlds += $w10
   New-Item -ItemType Directory -Path (Join-Path $w10.Root 'moonpool') | Out-Null
