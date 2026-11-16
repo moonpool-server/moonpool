@@ -17,8 +17,8 @@ loader_crashed: >-
 scanned: "Scanned lately: {scans}"
 # placeholders: {n}, {url}
 mods: >-
-  • **Mods** ({n}): press **Play with mods** on the [join page]({url}/join) instead of Join Game; it
-  installs them at the server's versions and joins
+  • **Mods** ({n}): press **Join**, then **Play with mods** on the [page]({url}/join). It installs
+  them at the server's versions and joins
 how_to_join: "### How to join"
 steam_title: "**Steam**"
 # placeholders: {branch}

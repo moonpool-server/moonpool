@@ -4,6 +4,7 @@
 Without a lobby it's a retrying "starting" page. With published mods the launcher leads
 and nothing joins by itself; otherwise the page hands off to Steam on its own.
 """
+import hashlib
 import json
 import os
 import re
@@ -68,7 +69,8 @@ BANNER_TYPES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 
 def publish_banner(templates, public):
     """The host's own picture for the top of the page, templates/banner.<png|jpg|jpeg|webp|gif>, copied
-    into the web root; the name to show, or "" when there is none (and any old copy goes)."""
+    into the web root; its address with a fingerprint of its content, so a new picture is not hidden by a
+    cache, or "" when there is none (and any old copy goes)."""
     def plain(p):  # a regular file directly in templates, never a link to something else
         return p.is_file() and not p.is_symlink() and p.resolve().parent == templates.resolve()
     found = None if templates.is_symlink() else next((templates / f"banner{ext}" for ext in BANNER_TYPES if plain(templates / f"banner{ext}")), None)
@@ -83,7 +85,7 @@ def publish_banner(templates, public):
         tmp = public / (found.name + ".tmp")
         shutil.copyfile(found, tmp)
         os.replace(tmp, target)
-    return found.name
+    return found.name + "?" + hashlib.sha256(target.read_bytes()).hexdigest()[:12]
 
 
 def main():
@@ -121,6 +123,8 @@ def main():
                                  capture_output=True, text=True, timeout=30).stdout
     except (OSError, subprocess.SubprocessError):
         modnote = ""
+    # The launcher's button and the mod list go to different places on the page.
+    mod_action, _, mod_list = modnote.partition("<!--mod-list-->")
     try:
         published = len(json.loads((public / "mods.json").read_text(encoding="utf-8")).get("mods") or []) > 0
     except (OSError, ValueError, AttributeError):
@@ -141,7 +145,7 @@ def main():
     # shipped one. A copy that fails to render is said in the log and the shipped page is used.
     banner = publish_banner(data / "templates", public)
     values = dict(world=os.environ.get("WORLD_NAME") or "Subnautica 2 server", join=join, friend=friend, refresh=refresh, banner=banner,
-                  modnote=modnote, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:],
+                  modnote=modnote, mod_action=mod_action, mod_list=mod_list, mods_published=published, build=build, branch=branch, branch_label=branch[:1].upper() + branch[1:],
                   map=map_still(public), map_facts=map_facts(public))
     shipped = str(HERE.parent / "web")
     values["theme"] = publish_theme(data, public, shipped)

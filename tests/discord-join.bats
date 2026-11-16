@@ -81,7 +81,7 @@ map_status() {
   [ "$(jq .type <<<"$panel")" -eq 17 ]
   head=$(jq -c '.components[0]' <<<"$panel")
   [ "$(jq .type <<<"$head")" -eq 9 ]
-  [ "$(jq -r '.accessory | "\(.style) \(.url) \(.label) \(.disabled)"' <<<"$head")" = '5 https://play.example/join Offline true' ]
+  [ "$(jq -r '.accessory | "\(.style) \(.url) \(.label) \(.disabled)"' <<<"$head")" = '5 https://play.example/join Offline null' ]
   [[ $(jq -r '.components[0].content' <<<"$head") == '## 🌊 Deep Blue'$'\n''🔴 **Down** since <t:1700000000:R>'* ]]
   [[ $panel == *'**Xbox** add code **ABCD**'* ]]
   [[ $(jq -r '.components[-1].content' <<<"$body") == *'How to join'* ]]
@@ -123,23 +123,31 @@ map_status() {
   [ "$(cat "$DATA_DIR/hook.out")" = 'join|Ada Lovelace' ]
 }
 
-@test "Discord card offers the map only when the map is on" {
+@test "Discord card shows the map picture only when the map is on, and never a second button" {
   printf '{"ts":1700000000,"players":[]}' >"$CONTROL_DIR/status.json"
   body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $body != *'/map'* ]]
   body=$(WEB_MAP=true SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
-  [ "$(jq -r '[.. | objects | select(.label == "Map")][0].url' <<<"$body")" = https://play.example/map ]
+  [ "$(jq '[.. | objects | select(.type == 2)] | length' <<<"$body")" -le 1 ]
   [ "$(jq '[.. | objects | select(.type == 12)] | length' <<<"$body")" -eq 0 ]  # no still yet, no picture
   mkdir -p "$DATA_DIR/public"; printf '{"still":"abc123"}' >"$DATA_DIR/public/map.json"
   body=$(WEB_MAP=true SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [ "$(jq -r '[.. | objects | select(.type == 12)][0].items[0].media.url' <<<"$body")" = 'https://play.example/map.png?v=abc123' ]
 }
 
+@test "Discord card has one button while up: Join opens the page with the map" {
+  printf '{"ts":1700000000,"players":[]}' >"$CONTROL_DIR/status.json"
+  mkdir -p "$DATA_DIR/discord"; printf up >"$DATA_DIR/discord/override"; printf 9999999999 >"$DATA_DIR/discord/override.expires"
+  body=$(WEB_MAP=true SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
+  [ "$(jq -r '[.. | objects | select(.type == 2)] | map(.label) | join(",")' <<<"$body")" = Join ]
+  [ "$(jq -r '[.. | objects | select(.label == "Join")][0].url' <<<"$body")" = https://play.example/join ]
+}
+
 @test "Discord card sends players with mods to the join page's Play with mods, never to a file the server no longer serves" {
   mkdir -p "$PUBLIC_DIR"
   printf '{"schema":3,"mods":[{"name":"A"},{"name":"B"}]}' >"$PUBLIC_DIR/mods.json"
   body=$(SN2_NOW=1700000000 SN2_PUBLIC_URL=https://play.example python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
-  [[ "$body" == *'**Mods** (2)'*'**Play with mods**'*'https://play.example/join)'* ]]
+  [[ "$body" == *'**Mods** (2)'*'**Join**'*'**Play with mods**'*'https://play.example/join)'* ]]
   [[ "$body" != *moonpool.cmd* ]]
 }
 
@@ -248,14 +256,14 @@ echo 4242
   printf '{"hosted":false}' >"$CONTROL_DIR/readiness.json"
   body=$(PATH="$fake:$PATH" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Starting**'* ]]
-  [ "$(jq -r '.components[0].components[0].accessory.disabled' <<<"$body")" = true ]
+  [ "$(jq -r '.components[0].components[0].accessory.disabled' <<<"$body")" = null ]
   # Past STARTING_MAX seconds of game run time the card stops saying Starting and says nobody can join.
   printf '#!/usr/bin/env bash
 echo 1500
 ' >"$fake/ps"; chmod +x "$fake/ps"
   body=$(PATH="$fake:$PATH" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Not hosting**'* ]]
-  [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Not open true' ]
+  [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Not open null' ]
   [[ $(jq -r '.components[0].components[3].content' <<<"$body") == 'The game has run for 25 min without opening its world. Nobody can join until it does.' ]]
   [[ $(jq -r '.components[0].components[4].content' <<<"$body") != *'crash report'* ]]
   # A crash dump from this run and no mods started: the card says the loader is why.
@@ -277,7 +285,7 @@ echo 1500
   printf '{"hosted":true}' >"$CONTROL_DIR/readiness.json"
   body=$(PATH="$fake:$PATH" SN2_NOW=1700000010 SN2_PUBLIC_URL=https://play.example     python3 "$ROOT/scripts/discord-notify.py" --dry-run status | grep '^{')
   [[ $(jq -r '.components[0].components[0].components[0].content' <<<"$body") == *'**Open**'* ]]
-  [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Join false' ]
+  [ "$(jq -r '.components[0].components[0].accessory | "\(.label) \(.disabled)"' <<<"$body")" = 'Join null' ]
 }
 
 @test "a world without a webhook publishes its panel; a board shows it beside its own, and a silent world as Offline" {

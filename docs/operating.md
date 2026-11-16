@@ -361,7 +361,7 @@ For mentions on important alerts, set `DISCORD_ALERT_ROLE_ID` to an opt-in role'
 
 ## Map
 
-`WEB_MAP=true` adds `/map` and a Map button on the card. Anyone with the link can fetch `map.json`, which holds everything the page draws, fogged or not.
+`WEB_MAP=true` adds `/map` and puts the live map on the join page, so the card's Join button opens both. The button stays clickable while the server is down or starting; the page then says so. Anyone with the link can fetch `map.json`, which holds everything the page draws, fogged or not.
 
 | Shows | Leaves out |
 |---|---|
@@ -401,7 +401,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 ```
 
 - `templates/theme.css`: every colour, font, size and edge of the join page, map page and map still. Pages pick it up on refresh.
-- `templates/join.html.j2`: the join page. A copy that fails to render is logged and the shipped page used. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote`, `mods_published`, `build`, `branch`, `branch_label`, `map` (the map still, or empty), `map_facts` (such as `15 min behind`, `2 players`), `game` (`GAME_NAME`, or Subnautica 2) and `theme` (a fingerprint; link `theme.css?{{ theme }}`).
+- `templates/join.html.j2`: the join page. A copy that fails to render is logged and the shipped page used. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote` (the launcher button and the mod list), `mod_action` and `mod_list` (the same, split), `mods_published`, `build`, `branch`, `branch_label`, `map` (the map still, or empty when the map is off; the page then embeds `map.html?embed=1`), `map_facts` (such as `15 min behind`, `2 players`), `game` (`GAME_NAME`, or Subnautica 2) and `theme` (a fingerprint; link `theme.css?{{ theme }}`).
 - `templates/banner.png` (or `.jpg`, `.jpeg`, `.webp`, `.gif`): a picture at the top of the join page, full card width, served as is.
 - `templates/map.html`, from `web/map.html`: a whole page you own, scripts included.
 - `card.yaml`, from [card.example.yaml](../card.example.yaml): the Discord card's wording. Layout and buttons stay. A bad line is logged and the shipped one kept.

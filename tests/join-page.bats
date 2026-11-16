@@ -129,7 +129,7 @@ JSON
   printf 'png bytes' >"$DATA_DIR/templates/banner.png"
   run render
   [ "$status" -eq 0 ]
-  [[ "$output" == *'<main class="card"><img class="banner" src="banner.png" alt=""><p class="readout">'* ]]
+  [[ "$output" == *'<header class="head"><img class="banner" src="banner.png?'"$(printf 'png bytes' | sha256sum | cut -c1-12)"'" alt=""><p class="readout">'* ]]
   [ "$(cat "$DATA_DIR/public/banner.png")" = 'png bytes' ]
   rm "$DATA_DIR/templates/banner.png"
   run render

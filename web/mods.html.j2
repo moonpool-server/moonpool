@@ -22,6 +22,7 @@
 {#- -#}
 <script>(function(){var b=document.getElementById("playmods"),o=document.getElementById("opening"),n=document.getElementById("nothing"),t=0;if(!b||!o||!n)return;function wait(){clearTimeout(t);t=setTimeout(function(){if(document.visibilityState==="visible"&&document.hasFocus()){o.hidden=true;n.hidden=false;}},4000);}var c=0;b.addEventListener("click",function(e){if(Date.now()-c<2000){e.preventDefault();return;}c=Date.now();b.classList.add("pressed");setTimeout(function(){b.classList.remove("pressed");},2000);o.hidden=false;n.hidden=true;wait();});window.addEventListener("blur",function(){clearTimeout(t);});window.addEventListener("focus",function(){if(!o.hidden)wait();});})();</script>
 {%- endif -%}
+<!--mod-list-->
 <h2>Mods on this server</h2>
 {#- -#}
 <ul class="mods">
