@@ -281,3 +281,19 @@ def test_a_reading_at_the_worlds_origin_clears_nothing() -> None:
         run(tmp, 1000, [{"name": "Cy", "x": 0, "y": 0, "depth_m": 0}])  # no body yet
         run(tmp, 1060, [{"name": "Cy", "x": 40000, "y": 0, "depth_m": 0}])
         assert json.loads(run(tmp, 1060 + 900, []).read_text())["explored"] == [[400, 0]]
+
+
+def test_squares_the_host_mod_batched_between_writes_clear_too() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        control = tmp / "control"
+        control.mkdir()
+        def write(now, visited, cell_m):
+            (control / "status.json").write_text(json.dumps({"ts": now, "players": [], "lifepods": [], "visited": visited, "visited_cell_m": cell_m}))
+            full = dict(os.environ, DATA_DIR=str(tmp), CONTROL_DIR=str(control), PUBLIC_DIR=str(tmp / "public"),
+                        MAP_PAGE=str(ROOT / "web" / "map.html"), SN2_NOW=str(now), HOST_NAME="Host", WEB_MAP="true")
+            subprocess.run([sys.executable, str(SCRIPT)], check=True, env=full)
+            return json.loads((tmp / "public" / "map.json").read_text())["explored"]
+        write(1000, ["2,-1", "3,-1", "../x", 7], 50)
+        write(1030, ["9,9"], 25)  # another square size: not this map's squares
+        assert write(1000 + 900, [], 50) == [[100, -50], [150, -50]]

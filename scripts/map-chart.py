@@ -82,6 +82,12 @@ def record(chart, status, host, now):
     for key in signal_keys(status):
         seen.setdefault(key, now)
     cells = chart.setdefault("cells", {})
+    # The squares the host mod saw players in since its last write, read every 2 s (trail.lua).
+    visited = status.get("visited")
+    if status.get("visited_cell_m") == CELL_M and isinstance(visited, list):
+        for key in visited:
+            if isinstance(key, str) and re.fullmatch(r"-?[0-9]+,-?[0-9]+", key):
+                cells.setdefault(key, {"t": now})
     divers = chart.setdefault("divers", {})
     players = status.get("players")
     for row in players if isinstance(players, list) else []:

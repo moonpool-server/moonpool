@@ -752,6 +752,14 @@ policy_env() {
   [[ "$output" == *"all passed"* ]]
 }
 
+@test "the map trail passes its Lua spec" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/trail_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"trail: ok"* ]]
+}
+
 @test "crash-sensitive game calls stay on the dump-derived allowlist" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/game_method_allowlist_spec.lua
