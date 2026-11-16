@@ -59,13 +59,18 @@ Anyone already friends with the hosting account can join too. `ALLOWLIST_ONLY=fa
 
 ## Gameplay defaults
 
-The default `PRESET=friends` turns on, among others:
+The default `PRESET=friends` changes the game for a group that drops in and out. `PRESET=stock` turns all of it off; each can also be set on its own in [.env.example](.env.example).
 
-- **Shared unlocks.** Each joining player gets the base pieces, tools and scanned blueprints the host has unlocked, so nobody repeats the early game.
-- **Story start.** The first lifepod goals complete once a real player arrives, so lifepods launch on a fresh world.
-- **Empty server.** After 10 minutes with nobody in, the in-game clock stops until the next join.
+| Change | What players notice | Setting |
+|---|---|---|
+| Shared unlocks | each joining player gets the base pieces, tools and scanned blueprints the host has unlocked | `UNLOCK_REPLAY` |
+| Story start | the first lifepod goals complete once a real player arrives, so lifepods launch on a fresh world | `STORY_GOALS` |
+| Voice range warning | a private amber signal marks another player who is too far away to hear | `VOICE_WARN`, `VOICE_RANGE_M` |
+| Launch hold | new joins wait while the lifepod launch cinematic plays (not yet proven) | `LIFEPOD_JOIN_HOLD` |
+| Empty server | the clock stops after 10 minutes with nobody in, and the frame rate drops | `IDLE_FREEZE_MINUTES`, `IDLE_MAX_FPS` |
+| Faster joins | each joiner gets world data at 3× the game's rate | `NET_MAX_CLIENT_RATE` |
 
-`PRESET=stock` turns these and the preset's other changes off. Each can also be set on its own in [.env.example](.env.example).
+Always on: the hosting account has no visible body and isn't counted as crew.
 
 ## Bring your world
 
@@ -99,6 +104,27 @@ The join page then offers **Play with mods**. Players install the launcher once,
 | How the launcher is trusted, and checking it yourself | [SECURITY.md](SECURITY.md) |
 | What it changes on a player's PC, uninstalling | [docs/mods.md](docs/mods.md) |
 
+## Admin in game
+
+List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothing to install: rename any PDA signal.
+
+| Rename a signal to | Does |
+|---|---|
+| `!help` | lists the orders |
+| `!kick NAME` | removes a player |
+| `!time 12:00`, `!weather DA_Storm` | sets the clock or weather |
+| `!mp g titanium 10` | gives 10 titanium (names are looked up, a vague one asks) |
+| `!mp heal`, `!mp @all heal` | heals you, or everyone |
+| `!mp who` | who's on, with their ping |
+
+- The answer appears in the signal's name and as a notification. `!mp` lines need [console commands](docs/admin.md#console-commands) turned on.
+- Orders from anyone not in `ADMINS` are dropped.
+- Admins who want a keyboard can add the optional admin panel: F2 opens the game's own cheat panel with search.
+
+![The admin panel open in game: Item, Spawn, Equip and Macro tabs, and the item list filtered to the three matches for "copper"](docs/images/admin-panel.png)
+
+Details: [docs/admin.md](docs/admin.md).
+
 ## What's exposed
 
 - **Port 8081**, public by default: the join page, the signed mod list and mod files, and the map when it's on. It shows the host account's Steam ID and the lobby ID; `PUBLISH_CARD=true` adds the Discord card with player names. `MODS_BIND=127.0.0.1` closes it when you use the tunnel.
@@ -110,13 +136,19 @@ The rest is in [SECURITY.md](SECURITY.md).
 
 ## Features
 
-- Hosts by itself and comes back after a restart
-- In-game admin for the players you list, and `bin/moonpool` from the shell
-- Backups with a one-command restore
-- Several worlds on one machine
-- A Discord card with who's on, and Join and Map buttons
-- A map of where everyone was a few minutes ago, over a map picture you choose ([docs/map.md](docs/map.md))
-- An empty server goes quiet: no saves, and with the friends preset a lower frame rate and a stopped clock
+| Area | What you get |
+|---|---|
+| Hosting | hosts by itself and comes back after a restart; several worlds on one machine; scheduled restarts with a countdown for players (`RESTART_CRON`) |
+| Players | invites, auto-accepted friend requests, kick, bans, announcements (`notify`); Xbox and Game Pass joining (experimental) |
+| Admin | in game through PDA signals or the F2 panel, and `bin/moonpool` from the shell ([docs/admin.md](docs/admin.md)) |
+| Worlds | backups every 30 minutes with a one-command restore; import and export; moving the server to another PC |
+| Discord | a card with who's on, time, weather and recent scans, and Join and Map buttons; a board of several worlds; alerts that can mention a role |
+| Map | where everyone was a few minutes ago, over a map picture you choose ([docs/map.md](docs/map.md)) |
+| Address | a quick tunnel, Tailscale Funnel or your own domain ([guide](docs/operating.md#public-address)) |
+| Your look | theme, banner, join page and card wording from the data volume |
+| Your scripts | a hook on join, leave, restart and update, and your own schedule |
+| Help | `diag verify-fresh` checks every stage; `diag bundle` makes one zip with secrets removed; a tick report for lag |
+| Empty server | no saves, and with the friends preset a lower frame rate and a stopped clock |
 
 ## Tested builds
 
