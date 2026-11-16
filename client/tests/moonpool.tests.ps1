@@ -219,6 +219,16 @@ try {
   Check ($r.Code -eq 0 -and (Text $during) -eq $own -and (Text $ini) -eq $own) "the player's own values are left alone, during and after (got: $(Text $during))"
   Remove-Item -LiteralPath (Join-Path $w.Game 'Subnautica2\Saved') -Recurse -Force
 
+  Write-Host "started from PowerShell 7, whose module folders come first, the launcher still finds Windows PowerShell's own"
+  $pwshHome = $null
+  if (Get-Command pwsh -ErrorAction SilentlyContinue) { $pwshHome = (& pwsh -NoProfile -Command '$PSHOME' | Select-Object -First 1) }
+  if ($pwshHome -and (Test-Path -LiteralPath (Join-Path $pwshHome 'Modules'))) {
+    $savedPath = $env:PSModulePath
+    $env:PSModulePath = (Join-Path $pwshHome 'Modules') + ';' + $savedPath
+    try { $r = Invoke-Join $w } finally { $env:PSModulePath = $savedPath }
+    Check ($r.Code -eq 0 -and $r.Out -notmatch 'is not recognized') "a join works with PowerShell 7's modules first (got $($r.Code)): $($r.Out.Trim())"
+  } else { Write-Host '  skipped: no PowerShell 7 on this PC' }
+
   Write-Host 'second run with nothing changed writes nothing and downloads nothing'
   $before = Snapshot $w.Win64
   Remove-Item -LiteralPath (Join-Path $w.Server 'ue4ss.zip')   # a download now would fail
