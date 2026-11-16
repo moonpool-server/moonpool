@@ -367,14 +367,40 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
   $flow.Location = New-Object Drawing.Point 14, 10
   $flow.BackColor = Get-Color $Theme.Panel
   $boxes = @{}
+  # Each row says where it stands. installed: this version was accepted and the ledger records it
+  # placed, with its files on disk (on, or parked while the mods are off). update: a different version
+  # of one accepted or placed before. not installed: accepted, but its files are not all there (a run
+  # that stopped). new: never accepted.
+  $ledger = Read-Ledger (Join-Path $KitHome 'owned.json')
+  function Test-Placed([string]$Name, [string]$Archive, [string]$Identity) {
+    $key = "$ServerId/$Name"
+    if (-not $Archive -or -not $ledger.mods.ContainsKey($key)) { return $false }
+    $record = $ledger.mods[$key]
+    if ($record.archive -ne $Archive -or $record.identity -ne $Identity) { return $false }
+    $files = @($record.files)
+    if ($files.Count -eq 0) { return $false }
+    foreach ($f in $files) {
+      $path = [string]$f.path
+      if (-not ((Test-Path -LiteralPath $path) -or (Test-Path -LiteralPath "$path.moonpool-off"))) { return $false }
+    }
+    return $true
+  }
+  function Get-RowState([string]$Line, [string]$Name, [bool]$Placed) {
+    if ($accepted -contains $Line -and $Placed) { return 'installed' }
+    if ($accepted -notcontains $Line -and ($Placed -or $acceptedNames -contains $Name)) { $script:PickerUpdate = $true; return 'update' }
+    $script:PickerNew = $true
+    if ($accepted -contains $Line) { return 'not installed' }
+    return 'new'
+  }
+  $script:PickerNew = $false; $script:PickerUpdate = $false
   foreach ($m in $All) {
     $cb = New-Object Windows.Forms.CheckBox
     $cb.AutoSize = $true
     $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
     $cb.ForeColor = Get-Color $Theme.Text
     $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
-    $tags = @(Get-ModHost $m); if ($m.Native) { $tags += 'native code' }; if ($m.Required) { $tags += 'required' }
-    if ($accepted -notcontains (Get-CodeSet @($m) $null)[0]) { if ($acceptedNames -contains $m.Name) { $tags += 'changed' } else { $tags += 'new' } }
+    $tags = @(Get-RowState (Get-CodeSet @($m) $null)[0] $m.Name (Test-Placed $m.Name $m.ArchiveSha $m.Identity))
+    $tags += @(Get-ModHost $m); if ($m.Native) { $tags += 'native code' }; if ($m.Required) { $tags += 'required' }
     $cb.Text = ("$($m.Name) $($m.Version)").Trim() + '   (' + ($tags -join ', ') + ')'
     $cb.Checked = $m.Required -or -not $Skipped.Contains($m.Name)
     if ($m.Required) { $cb.AutoCheck = $false }  # always installed: shown ticked and readable, not greyed out
@@ -387,16 +413,14 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
     $cb.Font = New-Object Drawing.Font 'Segoe UI', 10
     $cb.ForeColor = Get-Color $Theme.Text
     $cb.Margin = New-Object Windows.Forms.Padding 0, 3, 0, 3
-    $cb.Text = 'UE4SS loader   (this server, native code, needed by the UE4SS mods)'
+    $state = Get-RowState @(Get-CodeSet @() $LoaderSpec)[0] 'UE4SS loader' (Test-Placed 'UE4SS' ([string](Get-Prop $LoaderSpec 'sha256' '')).ToLowerInvariant() 'loader')
+    $cb.Text = "UE4SS loader   ($state, this server, native code, for the UE4SS mods)"
     [void]$flow.Controls.Add($cb)
   }
   $flow.Size = New-Object Drawing.Size 492, ([Math]::Min(30 * $flow.Controls.Count + 4, 240))
   $noteText = (Get-KeyWarning $Config $ServerId) + "Ticked mods are installed and turned on for this game session only. They run with your Windows account's rights, so only install mods from a host you trust."
   if ($LoaderSpec) {
-    $noteText += ' UE4SS mods also need the UE4SS loader, from this server, native code'
-    $loaderLine = @(Get-CodeSet @() $LoaderSpec)[0]
-    if ($accepted -notcontains $loaderLine) { $noteText += " ($(Get-Prop $LoaderSpec 'asset' ''), " + $(if ($acceptedNames -contains 'UE4SS loader') { 'changed' } else { 'new' }) + ')' }
-    $noteText += '.'
+    $noteText += " UE4SS mods also need the UE4SS loader, from this server, native code ($(Get-Prop $LoaderSpec 'asset' ''))."
   }
   $noteText += "`n`nServer: $([string](Get-Prop $Config 'address' ''))"
   $note = New-UiLabel 14 0 492 10 'Segoe UI' 9.5 $Theme.Muted
@@ -410,8 +434,10 @@ function Show-ModPicker($All, $Skipped, $Config, [string]$ServerId, $LoaderSpec)
   $ui.Form.ClientSize = New-Object Drawing.Size 560, $height
   $ui.Primary.Location = New-Object Drawing.Point 378, ($height - 58)
   $ui.Secondary.Location = New-Object Drawing.Point 206, ($height - 58)
-  $ui.Heading.Text = "Install mods from ${name}?"
-  $ui.Primary.Text = 'Install and play'
+  # The question names what the answer does: install something new, update, or only choose.
+  if ($script:PickerNew) { $ui.Heading.Text = "Install mods from ${name}?"; $ui.Primary.Text = 'Install and play' }
+  elseif ($script:PickerUpdate) { $ui.Heading.Text = "Update mods from ${name}?"; $ui.Primary.Text = 'Update and play' }
+  else { $ui.Heading.Text = "Choose mods for ${name}"; $ui.Primary.Text = 'Play' }
   $ui.Secondary.Text = 'Cancel'
   $yes = Wait-UiAnswer
   if (-not $yes) { Fail 'you declined; nothing changed, game not started. The join page can join without mods.' 3 }
@@ -778,7 +804,7 @@ function Install-ServerShortcuts($Config, [string]$ServerId, [string]$Game = '')
       # Tool shortcuts an older launcher put here; only the Start menu has them now.
       foreach ($old in @('Subnautica 2 (without Moonpool mods)', 'Subnautica 2 (collect logs for the host)')) {
         $path = Join-Path $folder "$old.lnk"
-        if ((Test-Path -LiteralPath $path) -and (New-Object -ComObject WScript.Shell).CreateShortcut($path).Arguments -like "*$InstalledScript*") {
+        if ((Test-Path -LiteralPath $path) -and (New-Object -ComObject WScript.Shell).CreateShortcut($path).Arguments.IndexOf("-File `"$InstalledScript`"", [StringComparison]::OrdinalIgnoreCase) -ge 0) {
           Remove-Item -LiteralPath $path -Force
         }
       }
