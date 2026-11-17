@@ -115,6 +115,7 @@ svc_game() {
   if [ "$state" != installed ]; then
     case $state in
       installing*) install_progress "$state" ;;
+      paused*) say_on_change install "Steam stopped the game download (${state#paused: }) and waits; free disk space, then see Updates in docs/operating.md" ;;
       *)
         # Asked on every start and every 10 min within one, until Steam starts the download.
         local asked="$RUN_DIR/install-asked"
