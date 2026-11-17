@@ -8,7 +8,7 @@ Hosting, the network, backups, worlds, updates and troubleshooting.
 | [admin.md](admin.md) | in-game admin |
 | [map.md](map.md) | the map |
 | [SECURITY.md](../SECURITY.md) | trust, listeners, secrets |
-| `.env.example`, `bin/moonpool help` | every setting, every command |
+| `.env.example`, `bin/moonpool help` | the usual settings (diagnostic switches are [below](#diagnostic-switches)), every command |
 
 ## Size
 

@@ -159,7 +159,7 @@ Not yet tested with a second player:
 
 ## Console commands
 
-Off by default. To turn them on, add to `enabled_commands` in `sn2headless.json` in the data volume (keep the other commands you use), then recreate the host:
+Off by default. To turn them on, add to `enabled_commands` in the host mod's settings file, `sn2headless.json` in the data volume, (keep the other commands you use), then recreate the host:
 
 | Add | Turns on |
 |---|---|
