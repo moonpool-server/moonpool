@@ -4,6 +4,13 @@
 local DIR = debug.getinfo(1, 'S').source:gsub('^@', ''):gsub('panel%.lua$', '')
 local CFG = dofile(DIR .. 'config.lua')
 local route = dofile(DIR .. 'route.lua')
+-- A player's own changes (config.lua's own_settings): read with no libraries, so it can only return
+-- a table of values; its keys are laid over config.lua.
+local own = loadfile((os.getenv('LOCALAPPDATA') or '') .. CFG.own_settings, 't', {})
+if own then
+  local ok, t = pcall(own)
+  if ok then route.merge(CFG, t) else print(CFG.log.tag .. 'own settings not read: ' .. tostring(t) .. '\n') end
+end
 local G = CFG.game
 
 local function say(key, values)

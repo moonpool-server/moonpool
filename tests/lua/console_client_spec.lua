@@ -116,5 +116,16 @@ for _, name in ipairs(marked) do
 end
 check(not unfinished('#LeviathanAwakens Poster') and not unfinished('Acid rain'), 'a finished row stays')
 
+local base = { key = 'F2', layout = { top = 0.2, left = 0.36 }, panel = { hide = { 'A', 'B' } } }
+route.merge(base, { key = 'F3', layout = { top = 0.1 }, panel = { hide = { 'C' } } })
+check(base.key == 'F3' and base.layout.top == 0.1 and base.layout.left == 0.36,
+  "a player's own settings change only the keys they name")
+check(#base.panel.hide == 1 and base.panel.hide[1] == 'C', 'a list in them replaces the shipped list whole')
+check(route.merge(base, 'not a table') == base, 'settings that are not a table change nothing')
+local sandboxed = load("return { key = os and 'escaped' or 'kept' }", 'own', 't', {})
+check(sandboxed().key == 'kept', 'the own-settings file runs with no libraries')
+check(type(cfg.own_settings) == 'string' and cfg.own_settings:find('Moonpool', 1, true),
+  "a player's own settings live beside the panel's history")
+
 if failures > 0 then os.exit(1) end
 print('console client: ok')
