@@ -2561,3 +2561,54 @@ container_start_with() {
   [ -n "$mirror" ]; [ -n "$upstream" ]; [ "$mirror" -lt "$upstream" ]
   grep -q 'releases/download/ue4ss-mirror' "$f"
 }
+
+# ---- pack and unpack a whole server --------------------------------------------
+# A data folder with settings, a Steam sign-in that must never be packed, and a stand-in
+# save-stage.sh that stages the saves under a timestamped folder as the real one does.
+loadout_env() {
+  save_env
+  export DATA_DIR="$BATS_TEST_TMPDIR" SN2_STAGING_DIR="$BATS_TEST_TMPDIR/backup-staging"
+  echo GSWU-world >"$SN2_SAVE_DIR/Slot1.sav"
+  # shellcheck disable=SC2016 # $d is expanded by the stub when it runs
+  printf '#!/bin/sh\nd="%s/20261117T120000Z/SaveGames"; mkdir -p "$d" && cp -a "%s"/. "$d"/\n' \
+    "$SN2_STAGING_DIR" "$SN2_SAVE_DIR" >"$SN2_BIN/save-stage.sh"
+  echo 'plugins: []' >"$SN2_CONTROL_DIR/plugins.yaml"
+  mkdir -p "$DATA_DIR/mod-signing" "$DATA_DIR/steam-session" "$DATA_DIR/client-mods/Panel"
+  echo KEY >"$DATA_DIR/mod-signing/private.pem"
+  echo COOKIE >"$DATA_DIR/steam-session/cookies"
+  echo lua >"$DATA_DIR/client-mods/Panel/main.lua"
+  ln -s "$DATA_DIR/steam-session/cookies" "$DATA_DIR/client-mods/Panel/link"
+}
+
+@test "pack holds the world and the listed settings, never the Steam sign-in or a link, readable by its owner only" {
+  loadout_env
+  run "$CTL" server pack "$BATS_TEST_TMPDIR/out.tar.gz"
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "$BATS_TEST_TMPDIR/out.tar.gz")" = 600 ]
+  list=$(tar -tzf "$BATS_TEST_TMPDIR/out.tar.gz")
+  [[ $list == *world/SaveGames/Slot1.sav* ]]
+  [[ $list == *data/control/plugins.yaml* ]]
+  [[ $list == *data/mod-signing/private.pem* ]]
+  [[ $list == *data/client-mods/Panel/main.lua* ]]
+  [[ $list != *steam-session* ]]
+  [[ $list != *Panel/link* ]]
+}
+
+@test "unpack-data puts back only the listed settings" {
+  loadout_env
+  src="$BATS_TEST_TMPDIR/in"
+  mkdir -p "$src/control" "$src/mod-signing" "$src/steam-session" "$src/run"
+  echo 'plugins: [new]' >"$src/control/plugins.yaml"
+  echo NEWKEY >"$src/mod-signing/private.pem"
+  echo EVIL >"$src/steam-session/cookies"
+  echo EVIL >"$src/run/stopped"
+  ln -s /etc/passwd "$src/control/settings.yaml"
+  run "$CTL" server unpack-data "$src"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$SN2_CONTROL_DIR/plugins.yaml")" = 'plugins: [new]' ]
+  [ "$(cat "$DATA_DIR/mod-signing/private.pem")" = NEWKEY ]
+  [ "$(stat -c %a "$DATA_DIR/mod-signing/private.pem")" = 600 ]
+  [ "$(cat "$DATA_DIR/steam-session/cookies")" = COOKIE ]
+  [ ! -e "$DATA_DIR/run/stopped" ]
+  [ ! -e "$SN2_CONTROL_DIR/settings.yaml" ]
+}

@@ -166,37 +166,30 @@ flowchart LR
 
 ## Move the server to another PC
 
-Move these three and the new PC hosts the same world at the same address:
-
-| Piece | Holds |
-|---|---|
-| the image | the game runtime |
-| volume `<project>_sn2-data` | game, Steam sign-in, saves |
-| volume `<project>_sn2-signing` | the mod-list key |
-| `.env` | your settings and secrets |
-
-`<project>` is `COMPOSE_PROJECT_NAME`, `moonpool` unless set.
+Everything that makes the server yours fits in one file. The game, Steam and Wine download again on the new PC.
 
 ```sh
-# old PC: nobody on, then save and stop
-bin/moonpool players && bin/moonpool server save
-docker compose stop
+# old PC: nobody on
+bin/moonpool server pack                     # moonpool-loadout-<date>.tar.gz
+bin/moonpool server stop
 
-# new PC, in a checkout of the same commit, with the old PC's .env copied in (it holds your secrets)
-ssh old "docker save <the image in SN2_IMAGE> moonpool:backup" | docker load
-docker compose create      # makes the volumes with compose's own labels, starts nothing
-for v in sn2-data sn2-signing; do
-  ssh old "docker run --rm -v moonpool_$v:/d alpine tar -C /d -cf - ." |
-    docker run --rm -i -v moonpool_$v:/d alpine tar -C /d -xpf -
-done
-docker compose up -d
+# new PC: a fresh install (README "Start it"), signed in to Steam, game downloaded, then
+bin/moonpool server unpack moonpool-loadout-<date>.tar.gz
 ```
 
-- The new volumes must be empty first; tar leaves stale files in place. Before starting, compare `find /d -type f | wc -l` in both copies of `sn2-data`, and the save's size and time.
-- From Git Bash on Windows, prefix the `docker run` lines with `MSYS_NO_PATHCONV=1`.
-- Steam signs in by itself from the copied sign-in. If it asks, sign in through the viewer.
-- Never run both: they share one Steam account and one tunnel. `docker update --restart=no` on the old PC's containers keeps a reboot from starting them.
-- Copy `backups/` for the older archives. The image can also be built on the new PC: `docker build --build-arg WINE_RUNTIME=tkg -t <the image in SN2_IMAGE> .`
+| In the file | Not in it |
+|---|---|
+| every world in SaveGames, from a quiet copy taken as you pack | the game, Steam and Wine |
+| `.env` | the Steam sign-in: sign in once on the new PC |
+| the mod-list signing key, so players' launchers still know the server | logs, backups, caches |
+| `plugins.yaml`, `settings.yaml`, `admins.txt`, `console.json`, `card.yaml`, the map background | |
+| mod overrides: `client-mods/`, `ue4ss-client/`, `ue4ss-local/`, `paks-local/` | |
+
+- **The file holds your secrets** (`.env`, the signing key). Keep it like a password. It is written readable by its owner only on Linux; on Windows that folder's permissions decide who can read it.
+- `unpack` keeps an existing `.env` and puts the packed one beside it as `.env.loadout`; compare the two, then `docker compose up -d`. It puts settings back only on the list above, skips links, then brings the world in through `server restore`, which keeps a dated copy of the saves it replaces.
+- Sign in on the new PC only after the old one has stopped: one Steam account, signed in twice, logs the first out. Never run both: they also share one tunnel. `docker update --restart=no` on the old PC's containers keeps a reboot from starting them.
+- Free space: a fresh install takes about 35 GB inside Docker's disk. Old volumes count; `docker system df -v` shows them.
+- Use the same release on both PCs; `git describe --tags` says which.
 
 ## Updates
 

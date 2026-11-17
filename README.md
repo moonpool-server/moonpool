@@ -80,9 +80,12 @@ Always on: the hosting account has no visible body and isn't counted as crew.
 ```sh
 bin/moonpool server import SaveGames.zip   # a world from the PC that hosted it
 bin/moonpool server export                 # a zip of the hosted world
+bin/moonpool server pack                   # the whole server in one file: worlds, settings, mod key
+bin/moonpool server unpack <file>          # put it back, here or on a new PC
 ```
 
 - If the game can't load an imported world, the old one is put back.
+- A packed server holds `.env` and the mod-list key: keep the file like a password. Moving to another PC: [guide](docs/operating.md#move-the-server-to-another-pc).
 - Where saves are and which builds load them: [guide](docs/operating.md#bring-your-world).
 
 ## Mods
