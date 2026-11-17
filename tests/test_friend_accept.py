@@ -18,7 +18,6 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.error
 import urllib.parse
 
 sys.dont_write_bytecode = True
@@ -373,7 +372,7 @@ def main() -> int:
     try:
         fa._req("/textfilter/ajaxgetfriendslist", {"sessionid": "s", "steamLoginSecure": "secret"})
         followed = True
-    except urllib.error.HTTPError:
+    except OSError:  # requests' HTTPError, raised for the refused redirect
         followed = False
     fa.BASE = kept
     bounce.shutdown(); away.shutdown()

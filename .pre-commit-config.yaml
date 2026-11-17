@@ -68,7 +68,7 @@ repos:
         files: ^(scripts/check_repo_policy\.py|tests/test_repo_policy\.py)$
       - id: friend-accept-test
         name: friend auto-accept (Wine DPAPI, cookie read, accept flow)
-        entry: uv run --no-project --with cryptography python tests/test_friend_accept.py
+        entry: uv run --no-project --with cryptography --with requests python tests/test_friend_accept.py
         language: system
         pass_filenames: false
         files: ^(scripts/friend-accept\.py|tests/test_friend_accept\.py)$

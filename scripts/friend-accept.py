@@ -34,20 +34,20 @@ import struct
 import sys
 import tempfile
 import time
-import urllib.parse
-import urllib.request
+
+import requests
 
 WINE_SECRET = b"I'm hunting wabbits"  # crypt32_protectdata_secret, protectdata.c
 REQUEST_RECIPIENT = 2  # EFriendRelationship.RequestRecipient
 BASE = "https://steamcommunity.com"  # fixed: the session cookies go nowhere else
 
 
-class _Stay(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs):  # a redirect is an error, never a second request
-        return None
-
-
-_OPEN = urllib.request.build_opener(_Stay).open
+def _get(url: str, **kw) -> requests.Response:
+    """One request; a redirect is an error, never a second request, so cookies reach no other host."""
+    r = requests.request(kw.pop("method", "GET"), url, allow_redirects=False, timeout=_timeout(), **kw)
+    if r.status_code >= 300:
+        raise requests.HTTPError(f"HTTP {r.status_code} from {url.split('?')[0]}", response=r)
+    return r
 READ_ONLY = False
 REQUEST_TIMEOUT = 20  # seconds for one Steam request
 RUN_BUDGET = 25.0  # seconds of Steam requests one run may spend; main() starts the clock
@@ -152,12 +152,8 @@ def community_cookies(htmlcache: str, user: str) -> dict[str, str]:
 def _req(path: str, cookies: dict[str, str], form: dict[str, str] | None = None) -> bytes:
     if form is not None and READ_ONLY:
         raise ValueError(f"read-only: refused POST {path}")
-    data = urllib.parse.urlencode(form).encode() if form is not None else None
-    r = urllib.request.Request(BASE + path, data=data, headers={
-        "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
-        "Referer": BASE + "/", "User-Agent": "sn2-host friend-accept"})
-    with _OPEN(r, timeout=_timeout()) as resp:
-        return resp.read()
+    return _get(BASE + path, method="POST" if form is not None else "GET", data=form, cookies=cookies,
+                headers={"Referer": BASE + "/", "User-Agent": "sn2-host friend-accept"}).content
 
 
 def name_of(steamid: str, cookies: dict[str, str]) -> str:
@@ -255,9 +251,8 @@ def own_lobby(cookies: dict[str, str], steamid: str) -> str:
     tok = (cfg.get("data") or {}).get("webapi_token")
     if not tok:
         raise ValueError("the community session handed out no web API token")
-    q = urllib.parse.urlencode({"access_token": tok, "steamids[0]": steamid})
-    with _OPEN(f"{API}/IPlayerService/GetPlayerLinkDetails/v1/?{q}", timeout=_timeout()) as r:
-        acc = (json.load(r).get("response", {}).get("accounts") or [{}])[0]
+    r = _get(f"{API}/IPlayerService/GetPlayerLinkDetails/v1/", params={"access_token": tok, "steamids[0]": steamid})
+    acc = (r.json().get("response", {}).get("accounts") or [{}])[0]
     lobby = str((acc.get("private_data") or {}).get("lobby_steam_id") or "")
     return lobby if lobby.isdigit() and lobby != "0" else ""
 
