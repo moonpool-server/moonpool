@@ -54,3 +54,14 @@ two_whole_stagings() {
   two_whole_stagings
   [ -z "$(find "$STAGE" -name '.stage.*' -type d)" ]
 }
+
+@test "a fresh install with no save folder yet is not a failure; a lost one after earlier copies is" {
+  rm -rf "$SAVE_DIR"
+  run "$S" --now
+  [ "$status" -eq 0 ]
+  grep -q 'nothing to stage: no world saved yet' "$DATA_DIR/logs/backup.log"
+  mkdir -p "$STAGE/20260101T000000Z"
+  run "$S" --now
+  [ "$status" -eq 1 ]
+  grep -q 'FAILED: save folder missing' "$DATA_DIR/logs/backup.log"
+}
