@@ -19,6 +19,8 @@ Hosting, the network, backups, worlds, updates and troubleshooting.
 
 Two players was measured on a test host; four is scaled from it. `metrics.csv` in the data volume shows what your host uses.
 
+On Windows, Docker Desktop keeps everything in one disk file on the system drive. It grows as the game downloads and does not shrink when volumes are deleted, so the 40 GB has to be free on that drive. A drive that fills mid-download leaves Steam's update paused ([Updates](#updates)).
+
 An empty server costs less with the friends preset:
 
 - Two minutes after the last player leaves (`IDLE_SLOW_MINUTES`), the frame cap drops to `IDLE_MAX_FPS` (10). It comes back when someone logs in, or at the latest at the next roster check. On a test host that took an empty game from about 3.3 cores to two-thirds of one. `IDLE_MAX_FPS=0` turns it off.
