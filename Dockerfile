@@ -23,7 +23,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # printer daemon and mDNS, which a headless host has no use for, so they come back out.
 # WINE_RUNTIME (below) is read here too: with tkg, WineHQ's own Wine program (/opt/wine-staging,
 # about 1.8 GB) is deleted in this same layer and only the system libraries it brought stay.
-ARG WINE_RUNTIME=winehq
+ARG WINE_RUNTIME=tkg
 # hadolint ignore=DL3008,DL3015
 RUN dpkg --add-architecture i386 \
  && apt-get update \
@@ -52,7 +52,9 @@ RUN dpkg --add-architecture i386 \
 # builds dropped for ntsync. WineHQ's packages stay installed for their system dependencies, the 32-bit
 # ones too; their Wine program itself is gone (above).
 # Proton's Wine was tried first and left out: the Windows Steam client does not start under it
-# ("InternalAPI_Init_Internal failed"), with or without fsync. The default is winehq until measured.
+# ("InternalAPI_Init_Internal failed"), with or without fsync. tkg is the default: on an idle server its p95
+# frame time was 0.12 s against WineHQ's 1.55 s (14 frames over 1 s against none), and with one player
+# 0.20 s against 0.61 s. --build-arg WINE_RUNTIME=winehq builds the WineHQ image instead.
 ARG WINE_TKG_VERSION=10.10
 ARG WINE_TKG_SHA256=1d97bb21a931ac1839e9291bce9f321c80d1cc84183badbc1a86e6c42ebf678a
 RUN mkdir -p /opt/sn2 \
