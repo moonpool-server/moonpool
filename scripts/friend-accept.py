@@ -296,7 +296,7 @@ def main(argv: list[str]) -> int:
         rules = (policy_ids(os.path.join(control, "bans.txt")), policy_ids(os.path.join(control, "allowlist.txt")),
                  os.environ.get("ALLOWLIST_ONLY", "true").strip().lower() != "false")
         if READ_ONLY:
-            print(json.dumps(pending(cookies, *rules, os.environ.get("SHOW_PLAYER_NAMES", "true") == "true")))
+            print(json.dumps(pending(cookies, *rules, os.environ.get("SHOW_PLAYER_NAMES", "false") == "true")))
             return 0
         for line in accept_pending(cookies, dry, *rules):
             print(line)
