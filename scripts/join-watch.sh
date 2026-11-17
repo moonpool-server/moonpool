@@ -188,6 +188,8 @@ trap 'kill $! 2>/dev/null' EXIT
 # An Epic timeout while the host takes ownership of its lobby leaves a session that looks hosted but
 # that no one can find: the game's lobby lookup answers 404. With nobody on, the game re-hosts, at
 # most once per REHOST_GAP_S; with players on it is only logged, since a re-host would drop them.
+# Tested: the re-host with nobody on and the log-only case with players on (tests/join-watch.bats).
+# Not tested: the gap itself; the bats harness can't feed a second log line reliably.
 REHOST_GAP_S=${REHOST_GAP_S:-900}
 rehost_at=0
 lobby_lost() {
