@@ -2,8 +2,15 @@
 name: CI
 
 "on":
+  # A pull request is tested once, as a pull request; pushes run only for main and release tags.
   push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
