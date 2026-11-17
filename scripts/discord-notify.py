@@ -230,7 +230,7 @@ def others(st):
 def player_lines(st):
     rows = []
     for i, p in enumerate(others(st)):
-        name = p.get("name") if E.get("SHOW_PLAYER_NAMES", "true") == "true" and p.get("name") else f"Player {i + 1}"
+        name = p.get("name") if E.get("SHOW_PLAYER_NAMES", "false") == "true" and p.get("name") else f"Player {i + 1}"
         ping = p.get("ping_ms")
         rows.append(name + (f" · {round(ping)} ms" if isinstance(ping, (int, float)) and not isinstance(ping, bool) else ""))
     return rows

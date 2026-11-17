@@ -107,7 +107,7 @@ def main():
     players_seen = None
     if join_log.is_file():
         names = sorted({m.group(1) for m in re.finditer(r"Join succeeded: (.*)$", join_log.read_text(encoding="utf-8", errors="replace"), re.M)})
-        players_seen = len(names) if env("SHOW_PLAYER_NAMES", "true") == "false" else names
+        players_seen = len(names) if env("SHOW_PLAYER_NAMES", "false") != "true" else names
     day = None
     try:
         value = json.loads(status_json.read_text(encoding="utf-8")).get("day")

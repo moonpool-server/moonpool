@@ -443,7 +443,7 @@ def main():
     players = os.environ.get("MAP_PLAYERS", "true") == "true"
     record(chart, status, os.environ.get("HOST_NAME", "SN2 Host"), now, players)
     public.mkdir(parents=True, exist_ok=True)
-    names = os.environ.get("MAP_PLAYER_NAMES", "false") == "true" and os.environ.get("SHOW_PLAYER_NAMES", "true") == "true"
+    names = os.environ.get("MAP_PLAYER_NAMES", "false") == "true" and os.environ.get("SHOW_PLAYER_NAMES", "false") == "true"
     page_data = published(chart, status, os.environ.get("WORLD_NAME", ""), delay_s, now, names)
     if not players:  # no dots and no fog: the chart holds no player positions or visited squares
         page_data["divers"], page_data["explored"] = [], None
