@@ -1,10 +1,10 @@
--- Runs SN2SlotFreeHost's main.lua against a fake game and asserts what it DOES:
+-- Runs MoonpoolHost's main.lua against a fake game and asserts what it DOES:
 -- the Host call is made once when armed, the lobby and world limits are written,
 -- hosted is claimed only after the session limit reads back, the host's
 -- PlayerState is pruned, the lifepod goals unlock once on the first real body,
 -- and the recipe's slots handler changes the three limits.
 -- Run: lua5.4 tests/lua/host_behaviour_spec.lua
-local dir = 'mod/SN2SlotFreeHost/Scripts/'
+local dir = 'mod/MoonpoolHost/Scripts/'
 package.path = dir .. '?.lua;' .. package.path
 
 local fails = 0

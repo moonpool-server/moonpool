@@ -114,4 +114,4 @@ repos:
         pass_filenames: false
         files: |
           (?x)^(bin/moonpool|docker/sn2-service\.sh|scripts/(common|verify-fresh|save-stage)\.sh|scripts/discord-notify\.py
-          |mod/SN2SlotFreeHost/Scripts/.*\.lua|tests/.*)$
+          |mod/MoonpoolHost/Scripts/.*\.lua|tests/.*)$

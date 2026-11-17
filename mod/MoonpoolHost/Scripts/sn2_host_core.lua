@@ -3,7 +3,7 @@ local status = require('status')
 
 local M = {}
 
-local TAG = '[SN2SlotFreeHost] '
+local TAG = '[MoonpoolHost] '
 local function log(msg) print(TAG .. msg .. '\n') end
 M.log = log
 

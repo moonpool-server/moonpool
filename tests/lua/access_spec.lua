@@ -1,5 +1,5 @@
 -- Pure-Lua checks for name-based access enforcement.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local access = require('access')
 local fails = 0
 local function check(v, why) print((v and 'ok ' or 'not ok ') .. why); if not v then fails = fails + 1 end end

@@ -1,9 +1,9 @@
--- Fake-game tests for mod/SN2SlotFreeHost/Scripts/unlock_replay.lua (the
+-- Fake-game tests for mod/MoonpoolHost/Scripts/unlock_replay.lua (the
 -- unlock replay on a pruned host: starter set, base pieces, scanned tools).
 -- Plain Lua 5.4, no framework:
 --   lua5.4 tests/lua/unlock_replay_spec.lua   (from the repository root)
 -- Exits 1 on the first failure; bats runs it in tests/control-protocol.bats.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local ur = require('unlock_replay')
 
 local failures, ran = 0, 0

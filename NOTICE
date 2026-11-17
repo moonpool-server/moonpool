@@ -39,7 +39,7 @@ UE4SS (RE-UE4SS)
 fzy-lua
   Project: https://github.com/swarn/fzy-lua, version v1.0.3
   License: MIT License, Copyright (c) 2020 Seth Warn
-  mod/SN2SlotFreeHost/Scripts/fzy_lua.lua is that project's src/fzy_lua.lua,
+  mod/MoonpoolHost/Scripts/fzy_lua.lua is that project's src/fzy_lua.lua,
   unmodified. The host mod's admin console uses it to match names.
 
 ------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ Map backgrounds
   a community capture of the game loaded from joric's site by the viewer's browser.
   That licence covers joric's work and can't speak for the game's own rights.
 
-SN2SlotFreeHost (this project's host mod)
-  mod/SN2SlotFreeHost is this project's own Lua mod. It is part of this
+MoonpoolHost (this project's host mod)
+  mod/MoonpoolHost is this project's own Lua mod. It is part of this
   repository and under its MIT
   licence (LICENSE); it has no upstream.
