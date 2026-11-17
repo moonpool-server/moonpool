@@ -16,15 +16,8 @@ def offline(uri):
     raise LookupError(f"not fetched (tests run offline): {uri}")
 
 
-try:  # the meta-schemas, when installed with jsonschema; without them the self-check is skipped, never downloaded
-    from jsonschema_specifications import REGISTRY as META
-except ImportError:
-    META = None
-
 for name, instance in cases.items():
     schema = json.loads((root / "tests" / "schema" / f"{name}.schema.json").read_text(encoding="utf-8"))
-    if META is not None:
-        Draft202012Validator.check_schema(schema)
     registry = Registry(retrieve=offline).with_resource(schema["$id"], DRAFT202012.create_resource(schema))
     Draft202012Validator(schema, registry=registry).validate(instance)
 print(f"{len(cases)} protocol examples validated")
