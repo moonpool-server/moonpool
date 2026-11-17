@@ -151,8 +151,9 @@ heartbeat() {
       prev_names=$cur
     fi
     build=$("$(dirname "$0")/steam-config.sh" --report 2>/dev/null | sed -nE 's/.*buildid=([0-9]+).*/\1/p')
-    if [ -n "$build" ] && [ "$build" != "$oldbuild" ]; then
-      [ -n "$oldbuild" ] && python3 "$NOTIFY" event update "build $oldbuild -> $build"
+    # Build 0 is Steam's answer before the game is installed: neither a build nor a change.
+    if [ -n "$build" ] && [ "$build" != 0 ] && [ "$build" != "$oldbuild" ]; then
+      [ -n "$oldbuild" ] && [ "$oldbuild" != 0 ] && python3 "$NOTIFY" event update "build $oldbuild -> $build"
       echo "$build" >"$RUN_DIR/last-buildid"; oldbuild=$build
     fi
     [ $((n % 2)) -eq 0 ] || continue

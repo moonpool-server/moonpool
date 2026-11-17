@@ -58,22 +58,21 @@ TEXT = {
     "loader_crashed": "The mod loader wrote a crash report during this run before its mods started. That usually means it doesn't fit this game build; the host's guide covers this under Updates.",
     "scanned": "Scanned lately: {scans}",
     "mods": "• **Mods** ({n}): press **Join**, then **Play with mods** on the [page]({url}/join). It installs them at the server's versions and joins",
-    "how_to_join": "### How to join",
-    "steam_title": "**Steam**",
-    "steam_beta": "• Right-click **Subnautica 2** › **Properties** › **Betas** › pick **{branch}**",
-    "steam_add": "• Add the world's host as a friend with its code above; {accepts}",
-    "accepts_auto": "it accepts within a minute",
-    "accepts_invite": "an admin has to invite you first",
-    "accepts_manual": "the host accepts it by hand",
-    "steam_join": "• Press **Join**, or **Friends** › right-click the host › **Join Game**",
+    "how_to_join": "**How to join**: step by step on the [join page]({url}/join)",
+    "steam_beta": "-# Steam: first pick **{branch}** in Subnautica 2 › **Properties** › **Betas**. Friend requests: {accepts}",
+    "steam_add": "-# Steam: add the host with its code above. Friend requests: {accepts}",
+    "accepts_auto": "accepted within a minute",
+    "accepts_invite": "an admin invites you first",
+    "accepts_manual": "the host accepts them by hand",
     "friend_requests": "-# Friend requests waiting for the host: {n}",
-    "xbox_title": "**Xbox / PC Game Pass**",
-    "xbox_beta": "• Join the Subnautica 2 preview in **Xbox Insider Hub**",
-    "xbox_add": "• In the game's **Friends** menu add the world's Xbox code, then join the host from your in-game friends list. No Xbox code above? Ask the host to run moonpool diag friend-code",
+    "xbox_add": "-# Xbox / Game Pass: {beta}add the host's Xbox code in the game's **Friends** menu",
+    "xbox_beta": "the Subnautica 2 preview in **Xbox Insider Hub**, then ",
     "tip": "-# Tip: turn on background audio in the game's audio settings, so voice keeps playing when you alt-tab",
     "footer": "-# Unofficial and not affiliated with Unknown Worlds, KRAFTON or Valve",
 }
-PLACEHOLDERS = {"last_aboard": {"when"}, "not_hosting": {"min"}, "scanned": {"scans"}, "mods": {"n", "url"}, "steam_beta": {"branch"}, "steam_add": {"accepts"}, "friend_requests": {"n"}}
+PLACEHOLDERS = {"last_aboard": {"when"}, "not_hosting": {"min"}, "scanned": {"scans"}, "mods": {"n", "url"},
+                "how_to_join": {"url"}, "steam_beta": {"branch", "accepts"}, "steam_add": {"accepts"},
+                "xbox_add": {"beta"}, "friend_requests": {"n"}}
 TEXT_MAX = 400
 
 
@@ -459,13 +458,11 @@ def how_to_join():
         accepts = T["accepts_manual"]
     else:
         accepts = T["accepts_auto"] if E.get("ALLOWLIST_ONLY", "true") == "false" else T["accepts_invite"]
-    lines = [T["how_to_join"], T["steam_title"]]
-    if beta:
-        lines.append(T["steam_beta"].format(branch=branch))
-    lines += [T["steam_add"].format(accepts=accepts), T["steam_join"], T["xbox_title"]]
-    if beta:
-        lines.append(T["xbox_beta"])
-    lines.append(T["xbox_add"])
+    # Short on purpose: Discord cannot fold a message, and the join page has every step.
+    url = public_url().rstrip("/")
+    lines = [T["how_to_join"].format(url=url) if url else "**How to join**"]
+    lines.append(T["steam_beta"].format(branch=branch, accepts=accepts) if beta else T["steam_add"].format(accepts=accepts))
+    lines.append(T["xbox_add"].format(beta=T["xbox_beta"] if beta else ""))
     lines.append(T["tip"])
     if E.get("DISCORD_CARD_NOTE"):
         lines.append(E["DISCORD_CARD_NOTE"])
@@ -597,6 +594,9 @@ def peer_containers():
         world = (body or {}).get("world") if isinstance(body, dict) else None
         world = clamp(world, 60) if isinstance(world, str) and world else "another world"
         ts = (body or {}).get("ts") if isinstance(body, dict) else None
+        # A world gone for days is left off the board, not shown as Offline for ever.
+        if isinstance(ts, int) and not isinstance(ts, bool) and now() - ts > 86400 * int(E.get("DISCORD_PEER_HIDE_DAYS") or 7):
+            continue
         seen = f" · last seen <t:{ts}:R>" if isinstance(ts, int) and not isinstance(ts, bool) and 0 < ts <= now() + 60 else ""
         out.append({"type": 17, "accent_color": 9807270, "components": [{"type": 10, "content": f"## 🌊 {esc(world)}\n⚪ **Offline**{seen}"}]})
     return out
