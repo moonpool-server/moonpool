@@ -1302,7 +1302,7 @@ end
 -- game log, the limit is the players already in.
 local hold = require('cinematic_hold')
 local LIFEPOD_JOIN_HOLD = (os.getenv('SN2_LIFEPOD_JOIN_HOLD') or 'true') ~= 'false'
-local HOLD = hold.new()
+local HOLD = hold.new({ max_hold_s = tonumber(os.getenv('SN2_LIFEPOD_HOLD_MAX_SECS') or '') })
 local HOLD_LOG = os.getenv('SN2_GAME_LOG_WIN') or '..\\..\\Saved\\Logs\\Subnautica2.log'
 local hold_pos, hold_buf = nil, ''
 local function world_limit(cap)
