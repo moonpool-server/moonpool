@@ -104,7 +104,7 @@ set_ini bUseUObjectArrayCache false
 # Our mod: original Lua and the operator's config.
 mods="$UE4SS_DIR/Mods"
 rm -rf "$mods/MoonpoolHost"
-# The host mod's name before 2026-11: left in place it would load beside this one, every hook twice.
+# The host mod's old name: a folder left in place would load beside this one, every hook twice.
 rm -rf "$mods/SN2SlotFreeHost"
 [ ! -f "$mods/mods.txt" ] || sed -i '/^SN2SlotFreeHost/d' "$mods/mods.txt"
 mkdir -p "$mods/MoonpoolHost"
