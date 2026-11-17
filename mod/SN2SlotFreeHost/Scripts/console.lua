@@ -454,6 +454,8 @@ function M.handle(st, req, game)
     for _, l in ipairs(lines) do out.runs[#out.runs + 1] = { player = p, line = l } end
   end
   say(M.msg(st, 'ran', { count = #out.runs, players = table.concat(who, ', '), lines = table.concat(lines, ' | ') }))
+  -- Only the run itself to report: the game's own result (the item arriving) says it.
+  out.ran = #out.lines == 1
   return out
 end
 
