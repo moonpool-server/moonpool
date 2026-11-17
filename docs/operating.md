@@ -19,6 +19,8 @@ Hosting, the network, backups, worlds, updates and troubleshooting.
 
 Two players was measured on a test host; four is scaled from it. `metrics.csv` in the data volume shows what your host uses.
 
+On Windows, Docker Desktop keeps everything in one disk file on the system drive. It grows as the game downloads and does not shrink when volumes are deleted, so the 40 GB has to be free on that drive. A drive that fills mid-download leaves Steam's update paused ([Updates](#updates)).
+
 An empty server costs less with the friends preset:
 
 - Two minutes after the last player leaves (`IDLE_SLOW_MINUTES`), the frame cap drops to `IDLE_MAX_FPS` (10). It comes back when someone logs in, or at the latest at the next roster check. On a test host that took an empty game from about 3.3 cores to two-thirds of one. `IDLE_MAX_FPS=0` turns it off.
@@ -280,6 +282,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 |---|---|
 | Not sure the host is right | `bin/moonpool diag verify-fresh` checks each stage from Steam to the hosted save |
 | No session | `bin/moonpool status`, then `bin/moonpool logs game` |
+| Container up, game not running, `bin/moonpool status` says `stopped by moonpool server stop` | the stop holds across `docker compose up -d` and restarts; `bin/moonpool server start` lifts it |
 | No session, and `logs join_watch` says `host mod never started` | the UE4SS loader failed as the game started (its `UE4SS.log` ends in `Fatal Error`). The server stops the game once, 10 minutes after launch, so it starts again; if the next start fails too it leaves it and says so. Seen once on build 26496980, then fine on the next start |
 | Join Game is missing | check in the viewer that Steam is signed in and on the right branch |
 | A player connects and drops | compare branch and build, then `bin/moonpool logs join_watch` |
