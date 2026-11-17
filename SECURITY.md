@@ -54,7 +54,7 @@ flowchart LR
   - Downloads and setup go through `%TEMP%`.
   - It reads `HKCU\Software\Valve\Steam` and Steam's `libraryfolders.vdf` and `appmanifest` files to find the game.
   - `-Uninstall` removes the game files it placed that are unchanged, the handler and shortcuts that still point at it, and all of `%LOCALAPPDATA%\Moonpool`. It leaves what setup put in `%TEMP%`, and the copies in `%LOCALAPPDATA%\Moonpool-replaced` of the player's files it replaced after asking.
-- **One user, no capabilities.** Steam, the game, UE4SS and the host's mods run in the game container as one unprivileged user with every Linux capability dropped. A server mod can read anything that user can.
+- **One user, no capabilities.** Steam, the game, UE4SS and the host's mods run in the game container as one unprivileged user with every Linux capability dropped. A server mod can read anything that user can, and write anything it can, the public folder port 8081 serves included: a hostile host mod could publish a secret there. The web server doesn't follow symbolic links, so a link in that folder serves nothing.
 - **The volumes are the secret.** The data volume holds the hosting account's Steam sign-in and the viewer password. The mod-list signing key has its own volume, mounted at `mod-signing/`, so the data volume can be rebuilt without players seeing a new server. Both are mounted in the game container; anything running there can read both. Anyone with the data volume can sign in as the hosting account. Never host on your own Steam account.
 - **Secrets in `.env`.**
   - The tunnel token is blanked in the game container and removed before anything in it starts.

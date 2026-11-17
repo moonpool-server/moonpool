@@ -29,8 +29,8 @@ RUN dpkg --add-architecture i386 \
  && apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
  && mkdir -p /etc/apt/keyrings \
- && curl -fsSL -o /tmp/winehq.key https://dl.winehq.org/wine-builds/winehq.key \
- && curl -fsSL -o /etc/apt/sources.list.d/winehq-trixie.sources \
+ && curl -fsSL --retry 5 --retry-all-errors -o /tmp/winehq.key https://dl.winehq.org/wine-builds/winehq.key \
+ && curl -fsSL --retry 5 --retry-all-errors -o /etc/apt/sources.list.d/winehq-trixie.sources \
       https://dl.winehq.org/wine-builds/debian/dists/trixie/winehq-trixie.sources \
  && printf '%s  %s\n' \
       d965d646defe94b3dfba6d5b4406900ac6c81065428bf9d9303ad7a72ee8d1b8 /tmp/winehq.key \
@@ -59,7 +59,7 @@ RUN mkdir -p /opt/sn2 \
  && case "${WINE_RUNTIME}" in \
       winehq) ;; \
       tkg) f="wine-${WINE_TKG_VERSION}-staging-tkg-amd64.tar.xz" \
-        && curl -fsSL -o "/tmp/$f" "https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_TKG_VERSION}/$f" \
+        && curl -fsSL --retry 5 --retry-all-errors -o "/tmp/$f" "https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_TKG_VERSION}/$f" \
         && echo "${WINE_TKG_SHA256}  /tmp/$f" | sha256sum -c - \
         && mkdir -p /opt/wine-tkg && tar -C /opt/wine-tkg --strip-components=1 -xJf "/tmp/$f" && rm -f "/tmp/$f" \
         && for b in /opt/wine-tkg/bin/*; do ln -s "$b" /usr/local/bin/; done \
@@ -77,26 +77,26 @@ WORKDIR /tmp
 ARG PILLOW_WHEEL=pillow-13.0.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
 ARG PILLOW_URL=https://files.pythonhosted.org/packages/ef/fe/f5cdaa2d1c4086e757430f368c271a58ee29cfe7378e7ae7b9d964015c25
 ARG PILLOW_SHA256=5f56499c1a74d2b862beb0c33b8016f99d095858455df9d21583bbbc1c15b582
-RUN curl -fsSL -o "${PILLOW_WHEEL}" "${PILLOW_URL}/${PILLOW_WHEEL}" \
+RUN curl -fsSL --retry 5 --retry-all-errors -o "${PILLOW_WHEEL}" "${PILLOW_URL}/${PILLOW_WHEEL}" \
  && echo "${PILLOW_SHA256}  ${PILLOW_WHEEL}" | sha256sum -c - \
  && unzip -q "${PILLOW_WHEEL}" -d /usr/local/lib/python3.13/dist-packages \
  && rm -f "${PILLOW_WHEEL}" \
  && python3 -c 'import PIL.Image, PIL.ImageGrab; assert PIL.__version__ == "13.0.0"'
 ARG NOVNC_VERSION=1.7.0
 ARG NOVNC_SHA256=b1003a11b6e6e8d8f7f5e5586daae7f8ca651d8aee0aa155ff9ac841c48f52c6
-RUN curl -fsSL -o novnc.tar.gz "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
+RUN curl -fsSL --retry 5 --retry-all-errors -o novnc.tar.gz "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
  && echo "${NOVNC_SHA256}  novnc.tar.gz" | sha256sum -c - \
  && mkdir -p /usr/share/novnc && tar -C /usr/share/novnc --strip-components=1 -xzf novnc.tar.gz \
  && rm -f novnc.tar.gz
 RUN base="https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}" \
- && curl -fsSLO "$base/s6-overlay-noarch.tar.xz" && curl -fsSLO "$base/s6-overlay-x86_64.tar.xz" \
+ && curl -fsSL --retry 5 --retry-all-errors -O "$base/s6-overlay-noarch.tar.xz" && curl -fsSL --retry 5 --retry-all-errors -O "$base/s6-overlay-x86_64.tar.xz" \
  && echo "${S6_NOARCH_SHA256}  s6-overlay-noarch.tar.xz" | sha256sum -c - \
  && echo "${S6_X86_64_SHA256}  s6-overlay-x86_64.tar.xz" | sha256sum -c - \
  && tar -C / -Jxpf s6-overlay-noarch.tar.xz && tar -C / -Jxpf s6-overlay-x86_64.tar.xz \
  && rm -f s6-overlay-noarch.tar.xz s6-overlay-x86_64.tar.xz
 ARG SUPERCRONIC_VERSION=v0.2.51
 ARG SUPERCRONIC_SHA256=cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
-RUN curl -fsSL -o /usr/local/bin/supercronic \
+RUN curl -fsSL --retry 5 --retry-all-errors -o /usr/local/bin/supercronic \
       "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-amd64" \
  && echo "${SUPERCRONIC_SHA256}  /usr/local/bin/supercronic" | sha256sum -c - \
  && chmod 0755 /usr/local/bin/supercronic
