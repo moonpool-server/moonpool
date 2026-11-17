@@ -1887,7 +1887,7 @@ def outer(r):
         if n != 1:
             usage_error("usage: moonpool diag screenshot <file.png>")
         shot = f"/tmp/sn2-screenshot-{R['request_id']}.png"
-        if not forward_quiet("screenshot", shot):
+        if not forward_quiet("diag", "screenshot", shot):
             die("the container could not capture its display (moonpool logs services)")
         run_compose("cp", f"{SERVICE}:{shot}", a[0])
         finish("ok", f"saved {a[0]}", "", {"file": a[0]})
