@@ -779,7 +779,8 @@ local function admin_call(name, args)
     end
     -- The answer goes to the sender's screen as one of the game's own notifications: a signal name
     -- shows about 40 characters, and a line sent from the cheat panel has no signal to answer in.
-    if #r.lines > 0 then
+    -- A line that only ran shows no card unless reply_on_run is set; the game's own result is the answer.
+    if #r.lines > 0 and not (r.ran and CATALOG.reply_on_run ~= true) then
       pcall(function()
         local to = notify.targets(status.live_players(to_str), HOST_NAME, { args.sender.name })
         notify.send({ find = StaticFindObject, world = function() return to[1] end, log = log, text = FText },
