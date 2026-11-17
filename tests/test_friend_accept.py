@@ -269,8 +269,10 @@ def main() -> int:
         Fake.friends += [{"ulfriendid": listed_and_banned, "efriendrelationship": 3}]
         Fake.posts, Fake.post_paths, Fake.get_paths = [], [], []
         out = io.StringIO()
+        os.environ["SHOW_PLAYER_NAMES"] = "true"  # names looked up; the default only counts
         with contextlib.redirect_stdout(out):
             rc = fa.main(["--pending"])
+        del os.environ["SHOW_PLAYER_NAMES"]
         check(rc == 0 and json.loads(out.getvalue()) == {"count": 1, "names": ["Player 55"]},
               "--pending counts only the requests the accept rules would let in")
         check(Fake.post_paths == [] and Fake.posts == [], "--pending posts nothing, not even for a banned friend")

@@ -16,6 +16,7 @@ setup() {
 stats() { run python3 "$ROOT/scripts/world-stats.py"; }
 
 @test "world history combines saves, metrics, joins, and status" {
+  export SHOW_PLAYER_NAMES=true  # names shown; the default numbers players
   printf save >"$SAVE/Slot1.sav"
   printf old >"$STAGE/old/SaveGames/Slot1.sav"
   touch -t 202611011200.00 "$SAVE/Slot1.sav"

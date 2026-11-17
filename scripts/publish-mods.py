@@ -470,7 +470,7 @@ def manifest_mod(entry, args, data, public, pins, temp_dir):
     tier = str(entry.get("tier", "optional")).lower()
     # default: false leaves an optional mod unticked in a player's launcher until they tick it.
     return {"name": name, "version": str(entry.get("version", "")), "summary": str(entry.get("summary", "")),
-            "required": tier == "mandatory", "default_on": entry.get("default", True) is not False, "kind": kind, "folder": folder, "prefix": root["prefix"],
+            "required": tier == "mandatory", "default_on": entry.get("default", False) is True, "kind": kind, "folder": folder, "prefix": root["prefix"],
             "native": bool(root.get("native")), "source": source}
 
 

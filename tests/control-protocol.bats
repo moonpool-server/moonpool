@@ -95,6 +95,7 @@ fake_mod() {
 }
 
 @test "status says how many friend requests wait for the host, by name, and nothing when none do" {
+  export SHOW_PLAYER_NAMES=true  # names shown; the default numbers players
   export SN2_RUN_DIR="$BATS_TEST_TMPDIR/run"; mkdir -p "$SN2_RUN_DIR"
   run "$CTL" status
   [ "$status" -eq 0 ]
@@ -1854,6 +1855,7 @@ stub_discord() {
 }
 
 @test "one card contains state world players and every available join path" {
+  export SHOW_PLAYER_NAMES=true  # names shown; the default numbers players
   command -v jq >/dev/null || skip "jq not installed"
   welcome_env
   mkdir -p "$DATA_DIR/public"

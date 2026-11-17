@@ -61,7 +61,7 @@ Anyone already friends with the hosting account can join too. `ALLOWLIST_ONLY=fa
 
 ## Gameplay defaults
 
-The default `PRESET=friends` changes the game for a group that drops in and out. `PRESET=stock` turns all of it off; each can also be set on its own in [.env.example](.env.example).
+`PRESET=stock` (the default) runs the game as shipped. `PRESET=friends` turns on these changes for a group that drops in and out; each can also be set on its own in [.env.example](.env.example).
 
 | Change | What players notice | Setting |
 |---|---|---|
@@ -159,7 +159,7 @@ The rest is in [SECURITY.md](SECURITY.md).
 | Your look | theme, banner, join page and card wording from the data volume |
 | Your scripts | a hook on join, leave, restart and update, and your own schedule |
 | Help | `diag verify-fresh` checks every stage; `diag bundle` makes one zip with secrets removed; a tick report for lag |
-| Empty server | no saves, and with the friends preset a lower frame rate and a stopped clock |
+| Empty server | with `SAVE_EVERY_MINUTES` set, no saves while empty; with the friends preset, a lower frame rate and a stopped clock |
 
 ## Tested builds
 

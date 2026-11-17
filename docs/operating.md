@@ -115,9 +115,9 @@ bin/moonpool --instance family status
 
 ## Backups
 
-| | Game's autosave (`SAVE_EVERY_MINUTES=0`) | Default |
+| | Game's autosave (default, `SAVE_EVERY_MINUTES=0`) | `SAVE_EVERY_MINUTES=10` |
 |---|---|---|
-| When | every 2 minutes | every `SAVE_EVERY_MINUTES` (10), and after players leave |
+| When | every 2 minutes | every 10 minutes, and after players leave |
 | Cost | each save stalls the server a second or more | the same, less often |
 | Empty server | as the game decides | skips saves and archives |
 | A crash loses | up to 2 minutes | up to `SAVE_EVERY_MINUTES` |

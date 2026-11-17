@@ -1140,7 +1140,7 @@ end
 
 -- Saving (save_policy.lua): with SAVE_EVERY_MINUTES set, the game's own 2-minute autosave is
 -- switched off and the host saves every N minutes and once after each batch of leavers.
-local SAVES = save_policy.new({ every_s = idle.seconds(os.getenv('SN2_SAVE_EVERY_MINUTES') or '10', 60) })
+local SAVES = save_policy.new({ every_s = idle.seconds(os.getenv('SN2_SAVE_EVERY_MINUTES') or '0', 60) })
 local GAME_LOG = os.getenv('SN2_GAME_LOG_WIN')
 local game_log_pos = nil
 -- autosave_completed lines the game log gained since the last call; complete lines only, and none
