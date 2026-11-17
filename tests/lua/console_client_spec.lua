@@ -106,5 +106,15 @@ check(table.concat(order, ',') == '3,4,1,2', 'newest first, then the rest in the
 check(table.concat(route.newest_first({ 'a', 'b' }, { 'zzz' }), ',') == '1,2',
   'lines the list does not have change nothing')
 
+local function unfinished(name)
+  for _, pattern in ipairs(cfg.search.unfinished) do if name:find(pattern) then return true end end
+  return false
+end
+local marked = { '[PLACEHOLDER FIX OR DELETE]', '[PH] Resource Overflow', '[DEPRECATED] Old Tank', '[TEST] Box' }
+for _, name in ipairs(marked) do
+  check(unfinished(name), 'a row the game marks unfinished is hidden: ' .. name)
+end
+check(not unfinished('#LeviathanAwakens Poster') and not unfinished('Acid rain'), 'a finished row stays')
+
 if failures > 0 then os.exit(1) end
 print('console client: ok')

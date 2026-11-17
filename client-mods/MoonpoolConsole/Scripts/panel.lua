@@ -259,7 +259,7 @@ local function rows_of(list)
     local id = ''
     pcall(function() id = row[G.row_item]:ToString() end)
     local fact = facts[id] or { label = '', published = true, category = '' }
-    -- An item whose name the game marks as unfinished ([DEPRECATED], [PLACEHOLDER], [TEST]) counts as
+    -- An item whose name the game marks as unfinished ([DEPRECATED], [PLACEHOLDER...], [PH], [TEST]) counts as
     -- unpublished too, though the game calls it published.
     local finished = true
     for _, pattern in ipairs(CFG.search.unfinished or {}) do finished = finished and not fact.label:find(pattern) end
