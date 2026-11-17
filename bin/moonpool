@@ -4,6 +4,7 @@
 On the Docker host it drives the container with docker compose; inside it (SN2_IN_CONTAINER=1)
 it talks to the SN2SlotFreeHost mod through the file-drop queue in the control folder.
 """
+import io
 import json
 import os
 import re
@@ -92,6 +93,11 @@ The server
                                the world as a zip to drop into a player's SaveGames folder
   server restore <backup.tar.gz> [save]
                                stage the current saves, put the backup back, host on [save]
+  server pack [file.tar.gz]    this server in one file: the world, .env, the mod-list signing key,
+                               plugins.yaml, settings, admins and mod overrides (not the Steam
+                               sign-in). It holds your secrets: keep it like a password
+  server unpack <file.tar.gz>  put a packed server back: its settings, then its world through
+                               restore. An existing .env is kept; the packed one goes to .env.loadout
   server save                  force an asynchronous world save on the host controller
 
 Looking inside
@@ -134,7 +140,8 @@ WORLD_USAGE = "usage: moonpool world [time <HH:MM|frozen|normal> | weather <type
 MAP_USAGE = "usage: moonpool map where <player> | bounds <width> <height> <px1> <py1> <x1> <y1> <px2> <py2> <x2> <y2>"
 MODS_USAGE = "usage: moonpool mods list | publish [plugins.yaml] | pin <name> <archive.zip> | enable <name> | disable <name>"
 SERVER_USAGE = ("usage: moonpool server start | stop [--now] | restart [--now] | cancel | arm | disarm | saves | "
-                "host [save] [--now] | slots <N> | backup | import <save.zip> [name] | export [save] [file.zip] | restore <backup> [save] | save")
+                "host [save] [--now] | slots <N> | backup | import <save.zip> [name] | export [save] [file.zip] | restore <backup> [save] | save | "
+                "pack [file.tar.gz] | unpack <file.tar.gz>")
 
 # ---- the run's state ---------------------------------------------------------
 
@@ -632,7 +639,9 @@ TABLE = {
                "stop": ("server.stop", "stop", False), "restart": ("server.restart", "restart", False),
                "host": ("server.host", "host", False), "slots": ("server.slots", "slots", True),
                "restore": ("server.restore", "restore", True), "import": ("server.import", "import", True),
-               "export": ("server.export", "export", False), "*": SERVER_USAGE},
+               "export": ("server.export", "export", False), "pack": ("server.pack", "pack", True),
+               "unpack": ("server.unpack", "unpack", True), "unpack-data": ("server.unpack_data", "unpack_data", True),
+               "*": SERVER_USAGE},
     "logs": {"": ("logs", "logs", False)},
     "notify": {"": ("notify", "notify", True)},
     "diag": {"verify-fresh": ("diag.verify_fresh", "verify_fresh", False, True),
@@ -644,6 +653,7 @@ TABLE = {
     "welcome": {"": ("welcome", "welcome", False)},
     # Plumbing between the host copy and the container copy.
     **{w: {"": (w, w, True)} for w in ("stop-game", "start-game", "restart-warning")},
+    "rm-staged": {"": ("rm-staged", "rm-staged", False)},
     **{w: {"": ("help", "help", False)} for w in ("help", "-h", "--help")},
 }
 
@@ -937,6 +947,10 @@ def inner(r):
         import_world(a)
     if op == "export":
         export_world(a)
+    if op == "pack":
+        pack_loadout(a)
+    if op == "unpack_data":
+        unpack_loadout_data(a)
     if op == "arm":
         (c / "HOST_DISARMED").unlink(missing_ok=True)
         (c / "HOST_ARMED").touch()
@@ -1051,6 +1065,12 @@ def inner(r):
     if op == "restart-warning":
         run_helper("restart-warning.sh", "run", " ".join(a) or "restart requested", capture=False)
         finish("accepted", "restart warning completed")
+    if op == "rm-staged":
+        # Only this run's own copies in /tmp: a packed server holds the mod-list key.
+        for t in a:
+            if re.fullmatch(r"/tmp/sn2-(pack|unpack|restore)-[0-9a-f]{32}(\.tar\.gz)?", t):
+                shutil.rmtree(t, ignore_errors=True) if Path(t).is_dir() else Path(t).unlink(missing_ok=True)
+        finish("ok", "staged copies removed")
     if op == "start-game":
         do_start_game()
         finish("accepted", "game start allowed; the supervisor launches it within 10s")
@@ -1411,6 +1431,71 @@ def export_world(a):
     finish("ok", f"{name} written to {out}", "", {"save": name, "file": str(out), "files": len(files)})
 
 
+# .env settings that belong to one machine, not to the server: left out of a packed server.
+LOADOUT_ENV_LOCAL = {b"COMPOSE_PROJECT_NAME", b"SN2_CONTAINER_NAME", b"SN2_IMAGE"}
+
+# What makes a server this server, besides the game: paths in the data folder. The Steam sign-in is
+# left out on purpose: it is a live credential, and signing in once on the new machine is safer.
+LOADOUT_PATHS = ("control/plugins.yaml", "control/settings.yaml", "control/admins.txt", "control/SAVE_SELECT",
+                 "sn2headless.json", "console.json", "card.yaml", "map-background.json", "mods-pins.json",
+                 "client-mods", "ue4ss-client", "ue4ss-local", "paks-local", "mod-signing")
+
+
+def loadout_member(name):
+    """The allowlisted path a packed data member falls under, or '' for anything else."""
+    rel = name.split("/", 1)[1] if name.startswith("data/") else ""
+    for p in LOADOUT_PATHS:
+        if rel == p or rel.startswith(p + "/"):
+            return rel
+    return ""
+
+
+def pack_loadout(a):
+    """The world (from a quiet staged copy) and the allowlisted settings, as one .tar.gz only its owner reads."""
+    if len(a) != 1:
+        usage_error("usage: moonpool server pack <file.tar.gz>")
+    rc, _ = run_helper("save-stage.sh", "--now", capture=False)
+    staging = Path(E.get("SN2_STAGING_DIR") or cfg()["STAGING_DIR"])
+    stamped = sorted(d for d in staging.glob("20*") if (d / "SaveGames").is_dir()) if rc == 0 and staging.is_dir() else []
+    if not stamped or not list_saves(stamped[-1] / "SaveGames"):
+        refuse("refused: could not take a quiet copy of the saves (moonpool logs services)")
+    data = Path(cfg()["DATA_DIR"])
+    out = Path(a[0])
+    part = out.with_name(out.name + ".part")
+    packed = []
+    with open(os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as raw,             tarfile.open(fileobj=raw, mode="w:gz") as tar:
+        tar.add(stamped[-1] / "SaveGames", "world/SaveGames", filter=lambda t: None if t.issym() or t.islnk() else t)
+        for p in LOADOUT_PATHS:
+            if (data / p).exists() and not (data / p).is_symlink():
+                tar.add(data / p, f"data/{p}", filter=lambda t: None if t.issym() or t.islnk() else t)
+                packed.append(p)
+    os.replace(part, out)
+    finish("ok", f"packed the world and {len(packed)} settings to {out}", "",
+           {"file": str(out), "staged": stamped[-1].name, "settings": packed})
+
+
+def unpack_loadout_data(a):
+    """Settings from an unpacked loadout's data folder, put back on the allowlist only, links skipped."""
+    if len(a) != 1 or not Path(a[0]).is_dir():
+        usage_error("usage: moonpool server unpack-data <folder>")
+    src, data, placed = Path(a[0]), Path(cfg()["DATA_DIR"]), []
+    for f in sorted(src.rglob("*")):
+        rel = f.relative_to(src).as_posix()
+        if f.is_symlink() or not f.is_file() or not loadout_member("data/" + rel):
+            continue
+        dest = data / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(dest.name + ".unpacking")
+        shutil.copyfile(f, tmp)
+        if rel.startswith("mod-signing/"):
+            os.chmod(tmp, 0o600)
+        os.replace(tmp, dest)
+        placed.append(rel)
+    if not placed:
+        refuse("refused: the loadout holds no settings this server uses")
+    finish("ok", f"put back {len(placed)} settings files", "", {"files": placed})
+
+
 def restore(a):
     if not (a and Path(a[0]).is_file()):
         usage_error("restore needs a backup .tar.gz that exists")
@@ -1621,6 +1706,21 @@ def forward_quiet(*words):
     return rc == 0
 
 
+def send_as_service(src, dest):
+    """A file or folder into the container, written by the service's own user: docker cp keeps this host's
+    owner and modes, and the container has no capability left to change them."""
+    base, cwd = compose_base()
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as t:
+        t.add(src, Path(dest).name)
+    script = f"mkdir -p '{Path(dest).parent}' && tar -xf - -C '{Path(dest).parent}'"
+    r = subprocess.run([*base, "exec", "-T", SERVICE, "sh", "-c", script], cwd=cwd, input=buf.getvalue(),
+                       capture_output=True)
+    if r.returncode != 0:
+        finish("internal_error", f"could not copy {src.name} into the container (exit {r.returncode})", "",
+               {"output": (r.stdout + r.stderr).decode("utf-8", "replace")[-2000:]})
+
+
 def run_compose(*args):
     rc, out = compose(*args, capture=R["json"])
     if rc != 0:
@@ -1683,6 +1783,83 @@ def outer(r):
         run_compose("cp", f"{SERVICE}:{staged}", str(out))
         finish("ok", f"{name} exported to {out}: put the files in a player's Subnautica2\\Saved\\SaveGames folder", "",
                {"save": name, "file": str(out)})
+    if op == "pack":
+        if n > 1:
+            usage_error("usage: moonpool server pack [file.tar.gz]")
+        out = Path(a[0] if n else time.strftime("moonpool-loadout-%Y%m%d-%H%M.tar.gz"))
+        env = Path(E.get("SN2_ENV_FILE") or "./.env")
+        staged = f"/tmp/sn2-pack-{R['request_id']}.tar.gz"
+        rc, text = compose(*exec_args(), "--json", "server", "pack", staged, capture=True)
+        if rc != 0:
+            sys.stdout.write(text)
+            sys.exit(rc)
+        x = Path(tempfile.mkdtemp())
+        try:
+            run_compose("cp", f"{SERVICE}:{staged}", str(x / "inner.tar.gz"))
+            forward_quiet("rm-staged", staged)
+            part = out.with_name(out.name + ".part")
+            with open(os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as raw,                     tarfile.open(fileobj=raw, mode="w:gz") as dst, tarfile.open(x / "inner.tar.gz", "r:gz") as src:
+                for m in src:
+                    dst.addfile(m, src.extractfile(m) if m.isfile() else None)
+                if env.is_file():
+                    # Settings that name this machine's containers, volumes and image stay behind: on another
+                    # PC they would point at whatever there happens to carry those names.
+                    kept = b"".join(line for line in env.read_bytes().splitlines(keepends=True)
+                                    if not line.split(b"=", 1)[0].strip() in LOADOUT_ENV_LOCAL)
+                    info = tarfile.TarInfo(".env")
+                    info.size, info.mode, info.mtime = len(kept), 0o600, int(time.time())
+                    dst.addfile(info, io.BytesIO(kept))
+            os.replace(part, out)
+        finally:
+            shutil.rmtree(x, ignore_errors=True)
+        finish("ok", f"packed this server to {out}" + ("" if env.is_file() else f" (no {env} found beside it)") +
+               ". It holds your secrets and the mod-list key: keep it like a password", "",
+               {"file": str(out), "env": env.is_file()})
+    if op == "unpack":
+        if n != 1 or not Path(a[0]).is_file():
+            usage_error("usage: moonpool server unpack <file.tar.gz>  (a file on this host)")
+        env = Path(E.get("SN2_ENV_FILE") or "./.env")
+        x = Path(tempfile.mkdtemp())
+        try:
+            extract_backup(a[0], x)
+            said = []
+            example = Path(E.get("SN2_ENV_EXAMPLE") or "./.env.example")
+            fresh = env.is_file() and example.is_file() and env.read_bytes() == example.read_bytes()
+            if (x / ".env").is_file():
+                if not env.exists() or fresh:
+                    shutil.copyfile(x / ".env", env)
+                    os.chmod(env, 0o600)
+                    said.append(f"{env} put in place")
+                elif env.read_bytes() != (x / ".env").read_bytes():
+                    keep = env.with_name(".env.loadout")
+                    shutil.copyfile(x / ".env", keep)
+                    os.chmod(keep, 0o600)
+                    said.append(f"{env} kept; the packed one is {keep}: compare them, then recreate (docker compose up -d)")
+            if not container_running():
+                finish("ok", "; ".join(said + ["next: start the server (docker compose up -d), sign in to Steam, let the "
+                                                 "game download, then run this again for the settings and the world"]),
+                       "", {"env": bool(said), "world": False})
+            if (x / "data").is_dir():
+                staged = f"/tmp/sn2-unpack-{R['request_id']}"
+                send_as_service(x / "data", staged)
+                rc, text = compose(*exec_args(), "--json", "server", "unpack-data", staged, capture=True)
+                forward_quiet("rm-staged", staged)
+                if rc != 0:
+                    sys.stdout.write(text)
+                    sys.exit(rc)
+                said.append("settings put back")
+            if not (x / "world").is_dir():
+                finish("ok", "; ".join(said) or "nothing to put back", "", {"world": False})
+            world = x / "world.tar.gz"
+            with tarfile.open(world, "w:gz") as t:
+                t.add(x / "world", "world")
+            staged = f"/tmp/sn2-restore-{R['request_id']}.tar.gz"
+            send_as_service(world, staged)
+            if said and not R["json"]:
+                print("; ".join(said) + "; now the world:", flush=True)
+        finally:
+            shutil.rmtree(x, ignore_errors=True)
+        forward(["server", "restore", staged])
     if op == "mods_pin":
         if n != 2:
             usage_error("usage: moonpool mods pin <name> <archive.zip>")
