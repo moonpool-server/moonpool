@@ -80,6 +80,20 @@ fake_mod() {
   [[ $output == *"all passed"* ]]
 }
 
+@test "status on a fresh install: before the mod runs it shows the service's latest line and the next step" {
+  export DATA_DIR="$BATS_TEST_TMPDIR" LOG_DIR="$BATS_TEST_TMPDIR/logs"; mkdir -p "$LOG_DIR"
+  printf '%s
+' '[13:06:31] starting the Windows Steam client; sign in on the viewer page'     '[13:06:37] Steam signed in: false (no loginusers.vdf)'     '[13:06:38] starting the Windows Steam client; sign in on the viewer page' >"$LOG_DIR/services.log"
+  run "$CTL" status
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'the service last said: [13:06:37] Steam signed in: false (no loginusers.vdf)'* ]]
+  [[ "$output" == *'next: sign in to Steam in the viewer'* ]]
+  printf '%s
+' '[13:22:40] installing 16.6 GB' >>"$LOG_DIR/services.log"
+  run "$CTL" status
+  [[ "$output" == *'the service last said: [13:22:40] installing 16.6 GB'* && "$output" != *'next: sign in'* ]]
+}
+
 @test "status says how many friend requests wait for the host, by name, and nothing when none do" {
   export SN2_RUN_DIR="$BATS_TEST_TMPDIR/run"; mkdir -p "$SN2_RUN_DIR"
   run "$CTL" status

@@ -1028,7 +1028,14 @@ def inner(r):
                                                                 "friend_requests": fr})
         print(f"== join page: {join or 'no public address; port ' + (E.get('SN2_MODS_PORT') or '8081') + ' on this machine serves it, reachable as MODS_BIND allows'}")
         print("== readiness (written by the mod every poll)")
-        print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n") if (c / "readiness.json").is_file() else "no readiness report yet: the mod has not run")
+        if (c / "readiness.json").is_file():
+            print((c / "readiness.json").read_text(encoding="utf-8").rstrip("\n"))
+        else:  # before the mod runs, the service's own latest word is the useful one
+            said = [ln for ln in read_text_tail(Path(cfg()["LOG_DIR"]) / "services.log").splitlines()
+                    if ln.strip() and "starting the Windows Steam client" not in ln]
+            print("no readiness report yet: the mod has not run" + (f"; the service last said: {said[-1]}" if said else ""))
+            if said and "Steam signed in: false" in said[-1]:
+                print("next: sign in to Steam in the viewer (moonpool diag viewer gives its address and password)")
         k = fr.get("count") if isinstance(fr, dict) else 0
         if isinstance(k, int) and k > 0:
             print(f"{k} friend request{'s' * (k > 1)} waiting: accept {'them' if k > 1 else 'it'} in the viewer"
@@ -1080,6 +1087,16 @@ def inner(r):
     if not R["json"]:
         print(USAGE, end="", file=sys.stderr)
     usage_error(f"unknown command: {R['word']}")
+
+
+def read_text_tail(path, limit=16384):
+    """The end of a log, or "" when it can't be read."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(max(0, f.seek(0, 2) - limit))
+            return f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
 
 
 def num(v):
