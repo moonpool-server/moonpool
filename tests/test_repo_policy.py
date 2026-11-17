@@ -53,7 +53,7 @@ def test_refuses_donation_links() -> None:
 
 def test_no_layout_set_can_be_committed() -> None:
     ini = b"[FUObjectItem]\nObject = 0x8\n"
-    for name in ("MemberVariableLayout.ini", "mod/SN2SlotFreeHost/VTableLayout.ini",
+    for name in ("MemberVariableLayout.ini", "mod/MoonpoolHost/VTableLayout.ini",
                  "ue4ss/layouts/abcd1234/MemberVariableLayout.ini",
                  "ue4ss/layouts/abcd1234/VTableLayout.ini",
                  "ue4ss/layouts/abcd1234/UE4SS-settings.ini",

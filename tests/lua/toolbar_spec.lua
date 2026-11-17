@@ -1,5 +1,5 @@
--- Tests for mod/SN2SlotFreeHost/Scripts/toolbar.lua.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+-- Tests for mod/MoonpoolHost/Scripts/toolbar.lua.
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local toolbar = require('toolbar')
 local failures = 0
 local function check(cond, what)

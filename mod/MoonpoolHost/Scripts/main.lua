@@ -1,5 +1,5 @@
--- SN2SlotFreeHost: Slot Expansion and Session Host Automation for Subnautica 2
-print("[SN2SlotFreeHost] Initializing Dedicated Server Slot-Free Mod...")
+-- MoonpoolHost: Slot Expansion and Session Host Automation for Subnautica 2
+print("[MoonpoolHost] Initializing Dedicated Server Slot-Free Mod...")
 
 -- All Lua runs on the game thread: UE4SS's async thread shares one Lua state with the game
 -- thread's hooks, which corrupts it and crashes UE4SS.dll. A loop still ends by returning true.
@@ -18,7 +18,7 @@ end
 local PLAYER_SLOTS = tonumber(os.getenv("SN2_PLAYER_SLOTS") or "")
 if not require("idle").session_limit(PLAYER_SLOTS) then
     if os.getenv("SN2_PLAYER_SLOTS") then
-        print("[SN2SlotFreeHost] SN2_PLAYER_SLOTS=" .. tostring(os.getenv("SN2_PLAYER_SLOTS")) .. " is not 1 to 63; using 4")
+        print("[MoonpoolHost] SN2_PLAYER_SLOTS=" .. tostring(os.getenv("SN2_PLAYER_SLOTS")) .. " is not 1 to 63; using 4")
     end
     PLAYER_SLOTS = 4
 end
@@ -117,7 +117,7 @@ _G.SN2_CHECK_HOST_BODY = function(path)
     local ps
     pcall(function() ps = pawn.PlayerState end)
     local okh, okc, okr, okp = hide_host_pawn(pawn, ps)
-    print("[SN2SlotFreeHost] status: host body visible again; hidden " .. (okh and "ok" or "ERR")
+    print("[MoonpoolHost] status: host body visible again; hidden " .. (okh and "ok" or "ERR")
         .. ", collision off " .. (okc and "ok" or "ERR")
         .. ", replication off body " .. (okr and "ok" or "ERR") .. " state " .. (okp and "ok" or "ERR"))
 end
@@ -167,14 +167,14 @@ RegisterHook("/Script/Engine.Actor:ReceiveBeginPlay", function(Context)
             pcall(function()
                 Actor.MaxPlayers = MaxSlots
                 Actor.MaxPartySize = MaxSlots
-                print(string.format("[SN2SlotFreeHost] Hooked %s -> MaxPlayers set to %d", ClassName, MaxSlots))
+                print(string.format("[MoonpoolHost] Hooked %s -> MaxPlayers set to %d", ClassName, MaxSlots))
             end)
         elseif string.find(ClassName, "GameMode") or string.find(ClassName, "SN2WorldGameMode") then
             pcall(function()
                 if Actor.GameSession and Actor.GameSession:IsValid() then
                     Actor.GameSession.MaxPlayers = MaxSlots
                     Actor.GameSession.MaxPartySize = MaxSlots
-                    print(string.format("[SN2SlotFreeHost] Hooked GameMode -> GameSession.MaxPlayers set to %d", MaxSlots))
+                    print(string.format("[MoonpoolHost] Hooked GameMode -> GameSession.MaxPlayers set to %d", MaxSlots))
                 end
             end)
         end
@@ -196,9 +196,9 @@ end
 local function try(label, fn)
     local ok, err = pcall(fn)
     if ok then
-        print(string.format("[SN2SlotFreeHost] %s: returned without a Lua error", label))
+        print(string.format("[MoonpoolHost] %s: returned without a Lua error", label))
     else
-        print(string.format("[SN2SlotFreeHost] %s: FAILED: %s", label, tostring(err)))
+        print(string.format("[MoonpoolHost] %s: FAILED: %s", label, tostring(err)))
     end
     return ok
 end
@@ -218,7 +218,7 @@ LoopAsync(2000, function()
     if attempted then return true end
     if not armed() then
         if not reported then
-            print("[SN2SlotFreeHost] Idle: HOST_ARMED not present, Host call not made.")
+            print("[MoonpoolHost] Idle: HOST_ARMED not present, Host call not made.")
             reported = true
         end
         return false
@@ -230,7 +230,7 @@ LoopAsync(2000, function()
     local ready = valid(LobbyGameMode) or (valid(Subsystem) and valid(PC))
     if not ready and arm_waited < ARM_WAIT_SECS then
         if not arm_wait_reported then
-            print(string.format("[SN2SlotFreeHost] ARMED: waiting up to %ds for the lobby before the Host call", ARM_WAIT_SECS))
+            print(string.format("[MoonpoolHost] ARMED: waiting up to %ds for the lobby before the Host call", ARM_WAIT_SECS))
             arm_wait_reported = true
         end
         arm_waited = arm_waited + 2
@@ -238,7 +238,7 @@ LoopAsync(2000, function()
     end
     if ready and settled < ARM_SETTLE_SECS then
         if settled == 0 then
-            print(string.format("[SN2SlotFreeHost] lobby found; settling %ds before the Host call", ARM_SETTLE_SECS))
+            print(string.format("[MoonpoolHost] lobby found; settling %ds before the Host call", ARM_SETTLE_SECS))
         end
         settled = settled + 2
         return false
@@ -246,38 +246,38 @@ LoopAsync(2000, function()
 
     if REQUIRE_GATE and not (_G.SN2_CHEAT_GATE and _G.SN2_RELAY_GATE) then
         if gate_waited % 60 == 0 then
-            print(string.format("[SN2SlotFreeHost] HOLD: the cheat gate is not in place after %ds (ServerCheat %s, relay %s); no Host call until it is",
+            print(string.format("[MoonpoolHost] HOLD: the cheat gate is not in place after %ds (ServerCheat %s, relay %s); no Host call until it is",
                 gate_waited, tostring(_G.SN2_CHEAT_GATE == true), tostring(_G.SN2_RELAY_GATE == true)))
         end
         gate_waited = gate_waited + 2
         return false
     end
     attempted = true
-    print(string.format("[SN2SlotFreeHost] ARMED: making one Host call (lobby waited %ds)", arm_waited))
-    print(string.format("[SN2SlotFreeHost] found: Subsystem=%s PlayerController=%s LobbyGameMode=%s",
+    print(string.format("[MoonpoolHost] ARMED: making one Host call (lobby waited %ds)", arm_waited))
+    print(string.format("[MoonpoolHost] found: Subsystem=%s PlayerController=%s LobbyGameMode=%s",
         tostring(valid(Subsystem)), tostring(valid(PC)), tostring(valid(LobbyGameMode))))
     if Subsystem and Subsystem:IsValid() then
         try("set MaxSessionPlayerCount", function()
             Subsystem.MaxSessionPlayerCount = MaxSlots
-            print(string.format("[SN2SlotFreeHost] MaxSessionPlayerCount now %s", tostring(Subsystem.MaxSessionPlayerCount)))
+            print(string.format("[MoonpoolHost] MaxSessionPlayerCount now %s", tostring(Subsystem.MaxSessionPlayerCount)))
         end)
     end
     if LobbyGameMode and LobbyGameMode:IsValid() then
         -- What the lobby's Host button runs: GameModeAlias, ServerName, SaveSlot, SaveCheckpoint, VoiceChatMode
         host_ok = try("BP_ClientLobbyGameMode:HostSession", function()
-            print("[SN2SlotFreeHost] Host call: ServerName=" .. world_name() .. " SaveSlot=" .. save_slot())
+            print("[MoonpoolHost] Host call: ServerName=" .. world_name() .. " SaveSlot=" .. save_slot())
             LobbyGameMode:HostSession("", world_name(), save_slot(), "", 0)
         end)
     elseif Subsystem and Subsystem:IsValid() and PC and PC:IsValid() then
         host_ok = try("UWEOnlineSessionSubsystem:HostSessionAsync", function()
-            print("[SN2SlotFreeHost] Host call: ServerName=" .. world_name() .. " SaveSlot=" .. save_slot())
+            print("[MoonpoolHost] Host call: ServerName=" .. world_name() .. " SaveSlot=" .. save_slot())
             Subsystem:HostSessionAsync(PC, true, "", world_name(), save_slot(), "", 0)
         end)
     else
-        print("[SN2SlotFreeHost] Host call NOT made: no lobby game mode and no subsystem+PlayerController")
+        print("[MoonpoolHost] Host call NOT made: no lobby game mode and no subsystem+PlayerController")
     end
     -- Once the world game mode exists: the world GameSession limit, the prune and the lifepod goals.
-    local PM = "[SN2SlotFreeHost] postmap: "
+    local PM = "[MoonpoolHost] postmap: "
     local waited = 0
     LoopAsync(2000, function()
         waited = waited + 2
@@ -329,11 +329,11 @@ LoopAsync(2000, function()
         checks = checks + 1
         if Subsystem and Subsystem:IsValid() then
             pcall(function()
-                print(string.format("[SN2SlotFreeHost] after %ds: MaxSessionPlayerCount=%s", checks * 5,
+                print(string.format("[MoonpoolHost] after %ds: MaxSessionPlayerCount=%s", checks * 5,
                     tostring(Subsystem.MaxSessionPlayerCount)))
                 if host_ok and not hosted and Subsystem.MaxSessionPlayerCount == MaxSlots then
                     hosted = true; _G.SN2_HOSTED = true
-                    print(string.format("[SN2SlotFreeHost] hosted: Host call ok, session limit read back %d", MaxSlots))
+                    print(string.format("[MoonpoolHost] hosted: Host call ok, session limit read back %d", MaxSlots))
                 end
             end)
         end
@@ -344,7 +344,7 @@ end)
 
 local rok, rerr = pcall(require, "recipe")
 if not rok then
-    print("[SN2SlotFreeHost] recipe additions not loaded, and the cheat gate with them, so this server will not host: " .. tostring(rerr))
+    print("[MoonpoolHost] recipe additions not loaded, and the cheat gate with them, so this server will not host: " .. tostring(rerr))
 end
 
-print("[SN2SlotFreeHost] Mod loaded successfully.")
+print("[MoonpoolHost] Mod loaded successfully.")

@@ -1,4 +1,4 @@
--- Control-queue validation for SN2SlotFreeHost; pure Lua, no game calls.
+-- Control-queue validation for MoonpoolHost; pure Lua, no game calls.
 local M = {}
 
 M.VERSION = 1

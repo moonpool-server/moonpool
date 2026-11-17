@@ -66,7 +66,7 @@ Nothing to install: rename any PDA signal to a command.
 - A word after `give` counts as a player only when it starts exactly one player's name and the item's name follows it. Otherwise it's part of the item: `!give titanium ingot` gives the ingot even with a player called Titan on. `@` always means a player.
 - A named command with a missing part answers with how it's typed: `use: give [player] <item> [count]`.
 
-Words, commands and replies come from `console.json` (shipped: `mod/SN2SlotFreeHost/console.json`). To change them, put a file with only your changed keys in the data volume and recreate the host:
+Words, commands and replies come from `console.json` (shipped: `mod/MoonpoolHost/console.json`). To change them, put a file with only your changed keys in the data volume and recreate the host:
 
 | Key type | In your file |
 |---|---|

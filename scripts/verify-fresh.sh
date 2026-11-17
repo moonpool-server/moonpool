@@ -106,11 +106,11 @@ else record layout 0 unknown "${layout_bad# }"; fi
 # 5. UE4SS must get past its scan into mod startup and load ours.
 loc=$(grep -anE 'Locating Kismet(String|System)Library' "$UE4SS_LOG" 2>/dev/null | tail -n1 | cut -d: -f1)
 mods=$(grep -aniE 'start(ing|ed).*(lua )?mods|mods.*start(ing|ed)' "$UE4SS_LOG" 2>/dev/null | tail -n1)
-loaded=$(grep -aniE 'SN2SlotFreeHost.*loaded|loaded.*SN2SlotFreeHost' "$UE4SS_LOG" 2>/dev/null | tail -n1)
+loaded=$(grep -aniE 'MoonpoolHost.*loaded|loaded.*MoonpoolHost' "$UE4SS_LOG" 2>/dev/null | tail -n1)
 mn=${mods%%:*}; ln=${loaded%%:*}
 if [ -n "$loc" ] && [ -n "$mods" ] && [ -n "$loaded" ] && [ "$mn" -gt "$loc" ] && [ "$ln" -ge "$mn" ]; then
   proof=${loaded#*:}; record ue4ss 1 "$(line_time "$proof")" "$proof"
-else record ue4ss 0 unknown "missing ordered scan -> mods starting -> SN2SlotFreeHost loaded evidence in $UE4SS_LOG"; fi
+else record ue4ss 0 unknown "missing ordered scan -> mods starting -> MoonpoolHost loaded evidence in $UE4SS_LOG"; fi
 
 # 6. All session evidence must exist; the mod's own lines are in UE4SS.log.
 session_bad=""; proof=""
@@ -118,9 +118,9 @@ specs=(
   "$SERVICES_LOG|AUTO_HOST: armed.*session limit $SESSION_LIMIT\)"
   "$ENGINE_LOG:$GAME_LOG:$UE4SS_LOG|OnCreateSessionComplete.*bWasSuccessful: 1"
   "$ENGINE_LOG:$GAME_LOG:$UE4SS_LOG|Load map complete.*/Game/Maps/Main/L_Main"
-  "$UE4SS_LOG|\[SN2SlotFreeHost\] postmap: world GameSession.MaxPlayers [0-9]+ -> $SESSION_LIMIT([^0-9]|$)"
-  "$UE4SS_LOG|\[SN2SlotFreeHost\] postmap: prune host PlayerState: ok"
-  "$UE4SS_LOG|\[SN2SlotFreeHost\] hosted: Host call ok, session limit read back $SESSION_LIMIT([^0-9]|$)"
+  "$UE4SS_LOG|\[MoonpoolHost\] postmap: world GameSession.MaxPlayers [0-9]+ -> $SESSION_LIMIT([^0-9]|$)"
+  "$UE4SS_LOG|\[MoonpoolHost\] postmap: prune host PlayerState: ok"
+  "$UE4SS_LOG|\[MoonpoolHost\] hosted: Host call ok, session limit read back $SESSION_LIMIT([^0-9]|$)"
 )
 for spec in "${specs[@]}"; do
   p=${spec#*|}; x=""
@@ -141,7 +141,7 @@ if [ -n "$l" ] && [ "$epoch" -gt 0 ] && [ $((now - epoch)) -ge 0 ] && [ $((now -
 else record watcher 0 "${ts:-unknown}" "no RUNNING heartbeat within 5 minutes in $JOIN_LOG"; fi
 
 # 8. The world hosted is the configured save. The mod's prints share one line, so the last slot token counts.
-hosted=$(last_line 'SN2SlotFreeHost\] Host call: ServerName=.* SaveSlot=' "$UE4SS_LOG" | grep -oE 'Host call: ServerName=.* SaveSlot=[A-Za-z0-9_]+' | sed -E 's/.*SaveSlot=//' | tail -n1)
+hosted=$(last_line 'MoonpoolHost\] Host call: ServerName=.* SaveSlot=' "$UE4SS_LOG" | grep -oE 'Host call: ServerName=.* SaveSlot=[A-Za-z0-9_]+' | sed -E 's/.*SaveSlot=//' | tail -n1)
 SAVE_SLOT="${SAVE_NAME:-${hosted:-Slot1}}"
 l=$(last_line "LoadMap: /Game/Maps/Main/L_Main.*SaveSlotName=$SAVE_SLOT([^A-Za-z0-9_]|$)" "$ENGINE_LOG")
 if [ -n "$l" ]; then record save 1 "$(line_time "$l")" "$l"

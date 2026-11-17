@@ -1,6 +1,6 @@
--- Stub-clock tests for mod/SN2SlotFreeHost/Scripts/admin_pace.lua. Plain Lua 5.4:
+-- Stub-clock tests for mod/MoonpoolHost/Scripts/admin_pace.lua. Plain Lua 5.4:
 --   lua5.4 tests/lua/admin_pace_spec.lua   (from the repository root)
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local pace = require('admin_pace')
 
 local failures = 0
