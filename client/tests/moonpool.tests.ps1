@@ -598,7 +598,7 @@ try {
   New-Zip (Join-Path $w6.Server 'Foo.zip') @('Foo\Scripts\main.lua', 'Foo\Scripts\lib.lua') '10'
   Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '10')) 'signed'
   $r = Invoke-Join $w6 -Extra $at
-  Check ($r.Code -ne 0 -and $r.Out -match 'signature is invalid' -and (Text (Join-Path $w6.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v9b') 'bad signature: nothing changed'
+  Check ($r.Code -ne 0 -and $r.Out -match 'signature is invalid' -and $r.Out -match 'reading it again' -and (Text (Join-Path $w6.Mods 'Foo\Scripts\main.lua')) -eq 'Foo\Scripts\main.lua v9b') 'bad signature: read again, then nothing changed'
   $oldKey = $config.public_key.modulus
   $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider 3072
   $config.public_key.modulus = [Convert]::ToBase64String($rsa.ExportParameters($false).Modulus)
