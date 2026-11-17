@@ -1706,6 +1706,21 @@ def forward_quiet(*words):
     return rc == 0
 
 
+def send_as_service(src, dest):
+    """A file or folder into the container, written by the service's own user: docker cp keeps this host's
+    owner and modes, and the container has no capability left to change them."""
+    base, cwd = compose_base()
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as t:
+        t.add(src, Path(dest).name)
+    script = f"mkdir -p '{Path(dest).parent}' && tar -xf - -C '{Path(dest).parent}'"
+    r = subprocess.run([*base, "exec", "-T", SERVICE, "sh", "-c", script], cwd=cwd, input=buf.getvalue(),
+                       capture_output=True)
+    if r.returncode != 0:
+        finish("internal_error", f"could not copy {src.name} into the container (exit {r.returncode})", "",
+               {"output": (r.stdout + r.stderr).decode("utf-8", "replace")[-2000:]})
+
+
 def run_compose(*args):
     rc, out = compose(*args, capture=R["json"])
     if rc != 0:
@@ -1826,7 +1841,7 @@ def outer(r):
                        "", {"env": bool(said), "world": False})
             if (x / "data").is_dir():
                 staged = f"/tmp/sn2-unpack-{R['request_id']}"
-                run_compose("cp", str(x / "data"), f"{SERVICE}:{staged}")
+                send_as_service(x / "data", staged)
                 rc, text = compose(*exec_args(), "--json", "server", "unpack-data", staged, capture=True)
                 forward_quiet("rm-staged", staged)
                 if rc != 0:
@@ -1839,7 +1854,7 @@ def outer(r):
             with tarfile.open(world, "w:gz") as t:
                 t.add(x / "world", "world")
             staged = f"/tmp/sn2-restore-{R['request_id']}.tar.gz"
-            run_compose("cp", str(world), f"{SERVICE}:{staged}")
+            send_as_service(world, staged)
             if said and not R["json"]:
                 print("; ".join(said) + "; now the world:", flush=True)
         finally:

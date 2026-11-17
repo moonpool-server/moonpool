@@ -137,5 +137,11 @@ if [ -n "$(ls -A "$UE4SS_LOCAL" 2>/dev/null)" ]; then
   cp -rf "$UE4SS_LOCAL"/. "$UE4SS_DIR"/
   log "install-ue4ss: applied local files from $UE4SS_LOCAL"
 fi
+# Layout files with DebugBuild left to auto-detect stop the loader at "Locating KismetStringLibrary"
+# (reproduced on build 26496980): with layouts in place, the build configuration is stated, not guessed.
+if [ -f "$UE4SS_DIR/MemberVariableLayout.ini" ] && ! grep -qE '^DebugBuild *= *(true|false)' "$settings"; then
+  set_ini DebugBuild false
+  log "install-ue4ss: layout files in place, so DebugBuild = false (auto-detect stops the loader with them)"
+fi
 log "install-ue4ss: UE4SS $UE4SS_VERSION (channel $UE4SS_CHANNEL, sha256 $UE4SS_RELEASE_SHA256) and SN2SlotFreeHost staged in $UE4SS_DIR"
 /opt/sn2/bin/install-msvc-runtime.sh
