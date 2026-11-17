@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests for the moonpool side of the file-drop control queue. A fake "mod" in
-# the background answers requests the way SN2SlotFreeHost does, so these run
+# the background answers requests the way MoonpoolHost does, so these run
 # without the game.
 # Each @test runs in its own subshell, so an export in one cannot leak into another:
 # shellcheck disable=SC2030,SC2031
@@ -162,7 +162,7 @@ fake_mod() {
   run "$CTL" --json players
   wait
   [ "$status" -eq 70 ]; [[ $(jq -r .message <<<"$output") == *"missing protocol version"* ]]
-  [ "$(jq -r .next_action <<<"$output")" = "Deploy matching copies of bin/moonpool and the SN2SlotFreeHost Lua files, then retry." ]
+  [ "$(jq -r .next_action <<<"$output")" = "Deploy matching copies of bin/moonpool and the MoonpoolHost Lua files, then retry." ]
   fake_mod raw '{"v":2,"accepts":[2],"id":"0123456789abcdef0123456789abcdef","ok":true,"data":{},"meta":{"game_build_id":"x","mod_version":"2"}}'
   run "$CTL" --json players
   wait
@@ -809,7 +809,7 @@ policy_env() {
   [ "$status" -eq 0 ]
 }
 
-@test "SN2SlotFreeHost loads with the recipe additions under stubbed UE4SS" {
+@test "MoonpoolHost loads with the recipe additions under stubbed UE4SS" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/host_mod_spec.lua
   echo "$output"
@@ -817,7 +817,7 @@ policy_env() {
   [[ "$output" != *FAIL* ]]
 }
 
-@test "SN2SlotFreeHost on a fake game: one Host call, limits read back, prune, goals once, slots" {
+@test "MoonpoolHost on a fake game: one Host call, limits read back, prune, goals once, slots" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/host_behaviour_spec.lua
   echo "$output"

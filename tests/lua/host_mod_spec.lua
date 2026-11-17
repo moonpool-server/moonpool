@@ -1,8 +1,8 @@
--- Loads SN2SlotFreeHost's main.lua with UE4SS stubbed out: it loads, the recipe
+-- Loads MoonpoolHost's main.lua with UE4SS stubbed out: it loads, the recipe
 -- additions load with it, the save picker and WORLD_NAME behave. What the mod
 -- DOES on a fake game is tests/lua/host_behaviour_spec.lua.
 -- Run: lua5.4 tests/lua/host_mod_spec.lua
-local dir = 'mod/SN2SlotFreeHost/Scripts/'
+local dir = 'mod/MoonpoolHost/Scripts/'
 package.path = dir .. '?.lua;' .. package.path
 
 local prints = {}

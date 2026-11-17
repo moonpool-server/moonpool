@@ -4,7 +4,7 @@ local allowed = {
 }
 local failures = 0
 for file, names in pairs(allowed) do
-  local path = 'mod/SN2SlotFreeHost/Scripts/' .. file
+  local path = 'mod/MoonpoolHost/Scripts/' .. file
   local f = assert(io.open(path, 'r')); local source = f:read('*a'); f:close()
   for method in source:gmatch(':%s*([%a_][%w_]*)%s*%(') do
     if not names[method] then failures=failures+1; print('not ok '..file..' calls '..method) end

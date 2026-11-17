@@ -62,9 +62,9 @@ stage_fails() { [ "$status" -eq 1 ] && [[ "$output" == *"FAIL $1"* ]]; }
 @test "fresh-host fails save stage when another slot was loaded" { run "${VERIFY[@]/SAVE_NAME=Slot1/SAVE_NAME=Slot2}"; stage_fails save; }
 @test "fresh-host save stage with SAVE_NAME empty reads the slot the Host call named" {
   # The mod's prints land on one physical line with the next entry glued on, as in the real log.
-  printf '%s' '[2026-11-01 08:29:00.0000000] [Lua] [SN2SlotFreeHost] Host call: ServerName=All Blue SaveSlot=Slot1[2026-11-01 08:29:00.4000000] [Lua] [SN2SlotFreeHost] BP_ClientLobbyGameMode:HostSession: returned without a Lua error' >>"$U/UE4SS.log"
+  printf '%s' '[2026-11-01 08:29:00.0000000] [Lua] [MoonpoolHost] Host call: ServerName=All Blue SaveSlot=Slot1[2026-11-01 08:29:00.4000000] [Lua] [MoonpoolHost] BP_ClientLobbyGameMode:HostSession: returned without a Lua error' >>"$U/UE4SS.log"
   run "${VERIFY[@]/SAVE_NAME=Slot1/SAVE_NAME=}"; [[ "$output" == *"PASS save"* ]]
-  printf '%s' '[2026-11-01 08:30:00.0000000] [Lua] [SN2SlotFreeHost] Host call: ServerName=All Blue SaveSlot=Slot2[2026-11-01 08:30:00.4000000] [Lua] [SN2SlotFreeHost] BP_ClientLobbyGameMode:HostSession: returned without a Lua error' >>"$U/UE4SS.log"
+  printf '%s' '[2026-11-01 08:30:00.0000000] [Lua] [MoonpoolHost] Host call: ServerName=All Blue SaveSlot=Slot2[2026-11-01 08:30:00.4000000] [Lua] [MoonpoolHost] BP_ClientLobbyGameMode:HostSession: returned without a Lua error' >>"$U/UE4SS.log"
   run "${VERIFY[@]/SAVE_NAME=Slot1/SAVE_NAME=}"; stage_fails save
 }
 @test "fresh-host card stage needs a 2xx edit when a webhook is set" {

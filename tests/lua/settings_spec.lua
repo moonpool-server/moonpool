@@ -1,8 +1,8 @@
--- Tests for mod/SN2SlotFreeHost/Scripts/settings.lua: settings.yaml parsing,
+-- Tests for mod/MoonpoolHost/Scripts/settings.lua: settings.yaml parsing,
 -- refusal of every key without a verified command, and the status block the
 -- card reads. Plain Lua 5.4, no framework: run as
 --   lua5.4 tests/lua/settings_spec.lua   (from the repository root)
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local settings = require('settings')
 
 local failures, ran = 0, 0

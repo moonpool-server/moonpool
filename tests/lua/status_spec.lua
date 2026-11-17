@@ -1,5 +1,5 @@
 -- status.lua keeps player paths, never objects: a freed PlayerState is never read again.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local failures = 0
 local function eq(a, b, n)
   if a == b then print('ok ' .. n) return end

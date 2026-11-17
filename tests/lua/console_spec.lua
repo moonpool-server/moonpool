@@ -1,6 +1,6 @@
--- Tests for mod/SN2SlotFreeHost/Scripts/console.lua with the shipped console.json and a fake game.
+-- Tests for mod/MoonpoolHost/Scripts/console.lua with the shipped console.json and a fake game.
 --   lua5.4 tests/lua/console_spec.lua   (from the repository root)
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local console = require('console')
 local json = require('json')
 
@@ -9,14 +9,14 @@ local function check(cond, what)
   if cond then print('ok ' .. what) else failures = failures + 1; print('not ok ' .. what) end
 end
 
-local f = assert(io.open('mod/SN2SlotFreeHost/console.json', 'rb'))
+local f = assert(io.open('mod/MoonpoolHost/console.json', 'rb'))
 local catalog = json.decode(f:read('a'))
 f:close()
 
 -- Every message key the code asks for exists in the catalog, so no reply is ever a bare key.
 local missing = {}
 for _, file in ipairs({ 'console.lua', 'recipe.lua' }) do
-  local src = assert(io.open('mod/SN2SlotFreeHost/Scripts/' .. file, 'rb')):read('a')
+  local src = assert(io.open('mod/MoonpoolHost/Scripts/' .. file, 'rb')):read('a')
   for key in src:gmatch("msg%(%w+, '([%w_]+)'") do
     if not catalog.messages[key] then missing[#missing + 1] = file .. ':' .. key end
   end
