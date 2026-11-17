@@ -120,6 +120,7 @@ List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothi
 | `!give john titanium 10` | gives them to John; `everyone` gives to all |
 | `!heal`, `!heal john`, `!heal all` | heals you, a player, or everyone |
 | `!who` | who's on, with their ping |
+| `!undo` | removes the last thing you spawned |
 
 - Any word that isn't one of the fixed orders goes to the [admin console](docs/admin.md#the-admin-console-mp), so anything the game's console can do works too. That part needs [console commands](docs/admin.md#console-commands) turned on.
 - The answer appears in the signal's name and as a notification.
