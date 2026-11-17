@@ -170,7 +170,7 @@ Tested by hand with real players over the internet. CI runs Moonpool's own tests
 | public | `25400633` | Hosts, players join |
 | experimental | `26283380` | Hosts, players join with mods, world moved between hosts (short sessions) |
 | experimental | `26496980` | Hosts with UE4SS 1190 and two layout files ([Updates](docs/operating.md#updates)); players join with mods |
-| experimental | `26496980` | Fresh install on a second PC following this README, then the live world, history and settings moved over with `server pack`/`unpack` (2026-11-17). The snags that broke the move are fixed; still open: a full disk mid-download leaves Steam's update paused without saying why, a fresh install's backup line says FAILED before any world exists, and `diag screenshot` fails on a fresh install |
+| experimental | `26496980` | Fresh install on a second PC following this README, then the live world, history and settings moved over with `server pack`/`unpack` (2026-11-17). The snags it found are fixed: #153, #154, #159, #160, #161 |
 
 A game update can stop hosting; the host reports it and the [guide](docs/operating.md#updates) says what to do. Tried another build? Open an issue.
 
