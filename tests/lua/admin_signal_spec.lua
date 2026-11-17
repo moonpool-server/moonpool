@@ -126,7 +126,7 @@ eq(r.text, 'unknown command; use !help', 'without a console word an unknown word
 now = now + 3
 r = admin.run(c, ALICE, '!help', game())
 eq(calls[#calls][2].line, 'help', '!help with the console adds the console help')
-eq(r.text:sub(1, 32), 'kick time weather slots ping cmd', 'the fixed orders come first')
+eq(r.text:sub(1, 9), 'kick john', 'the fixed orders come first')
 
 local A, B = string.rep('a', 32), string.rep('B', 32)
 local set = admin.admin_set(A, table.concat({ '# note', B .. '\tJohnny', string.rep('c', 31), 'not-an-id',

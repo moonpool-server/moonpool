@@ -301,11 +301,9 @@ function M.handle(st, req, game)
 
   local first = lower(tokens[1].text)
   local verb = st.verbs[first]
-  if verb == 'help' then
-    local short = {}
-    for name, c in pairs(st.cat.commands or {}) do short[#short + 1] = (c.aliases or {})[1] or name end
-    table.sort(short)
-    say(M.msg(st, 'help', { shortcuts = table.concat(short, ' ') }))
+  if verb == 'help' then  -- one line per command, an example first
+    local help = st.cat.messages and st.cat.messages.help
+    say(type(help) == 'table' and help or M.msg(st, 'help'))
     return out
   end
   if verb == 'undo' then  -- the caller takes the thing out of the world and says so

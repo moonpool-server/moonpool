@@ -157,7 +157,7 @@ check(r.runs[1] and r.runs[1].line == 'Give DA_Titanium_ItemType 1', 'on_ambiguo
 
 -- Help.
 r = run('')
-check(#r.runs == 0 and r.lines[1]:find('find', 1, true), 'an empty line shows help')
+check(#r.runs == 0 and r.lines[1]:find('give', 1, true), 'an empty line shows help')
 
 -- A message relayed between players' games: a cheat channel passes only from an admin, never a denied command.
 local execute = catalog.cheat_channel .. '.Execute'
@@ -262,6 +262,13 @@ check(#typed('DestroyTarget').runs == 1, 'removing the one thing an admin looks 
 local ran = run('give johnny copper 5')
 check(ran.ran == true and #ran.runs == 1, 'a line that only ran says so, so the host can skip the card')
 check(not run('who').ran and not run('give').ran, 'an answer or a usage reply is not a plain run')
+
+local help = run('help')
+check(#help.lines >= 8 and help.lines[1]:find('give john titanium 10', 1, true),
+  'help is one line per command, each with an example')
+for _, line in ipairs(help.lines) do
+  check(not line:find('[<|]'), 'help shows examples, not syntax notation: ' .. line)
+end
 
 if failures > 0 then os.exit(1) end
 print('console: ok')

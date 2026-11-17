@@ -125,7 +125,7 @@ function M.run(state, sender, text, g)
     if not state.console_word then return reply(true, 'cmd kick ping slots time weather') end
     -- The fixed orders, then the console's own help: the rest of the words an admin can use.
     local ok, data = g.call('mp', { sender = sender, line = 'help' })
-    local lines = { 'kick time weather slots ping cmd' }
+    local lines = { 'kick john · time 12:00 · weather DA_Storm · slots 8 · ping · cmd LINE: server orders' }
     for _, l in ipairs(ok and data.lines or {}) do lines[#lines + 1] = l end
     return line_reply(true, lines)
   end

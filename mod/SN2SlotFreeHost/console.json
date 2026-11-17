@@ -197,7 +197,7 @@
     "runmacro"
   ],
   "messages": {
-    "help": "give [player] <item> [count] | heal [player|all] | who | find <text> | list <kind> [text] | cheats | undo | tag <tag> | untag <tag> | normal | any console line",
+    "help": ["give titanium 10 · give john titanium 10 · give all glass: items; a vague name asks which", "heal · heal john · heal all: health, oxygen, food and water to full", "who: who is on, with ping", "find titan: items, players and tags with that name", "list items cop · list commands: browse one kind", "undo: removes the last thing you spawned", "cheats: which cheats are on · normal: turns them all off", "tag Cheat.Fly · untag Cheat.Fly: a world cheat on or off", "anything else runs as a game console line: HealMe, Spawn ..."],
     "find_row": "{kind}: {name} = {id}",
     "find_none": "Nothing matches {query}",
     "ls_row": "{name} = {id}",
