@@ -170,7 +170,7 @@ Tested by hand with real players over the internet. CI runs Moonpool's own tests
 | public | `25400633` | Hosts, players join |
 | experimental | `26283380` | Hosts, players join with mods, world moved between hosts (short sessions) |
 | experimental | `26496980` | Hosts with UE4SS 1190 and two layout files ([Updates](docs/operating.md#updates)); players join with mods |
-| experimental | `26496980` | Fresh install on a second PC following this README, then the live world, history and settings moved over with `server pack`/`unpack` (2026-11-17). The snags it found are fixed: #153, #154, #159, #160, #161 |
+| experimental | `26496980` | Fresh install on a second PC following this README, then the live world, history and settings moved over with `server pack`/`unpack` (2026-11-17). The snags it found are fixed: [#153](https://github.com/moonpool-server/moonpool/pull/153), [#154](https://github.com/moonpool-server/moonpool/pull/154), [#159](https://github.com/moonpool-server/moonpool/pull/159), [#160](https://github.com/moonpool-server/moonpool/pull/160), [#161](https://github.com/moonpool-server/moonpool/pull/161) |
 
 A game update can stop hosting; the host reports it and the [guide](docs/operating.md#updates) says what to do. Tried another build? Open an issue.
 
@@ -191,7 +191,7 @@ Details: [docs/legal.md](docs/legal.md).
 | [docs/admin.md](docs/admin.md) | in-game admin and the admin panel |
 | [docs/map.md](docs/map.md) | the map and map pictures |
 | [SECURITY.md](SECURITY.md) | what's trusted, what listens, what leaves the server |
-| [.env.example](.env.example) | every setting |
+| [.env.example](.env.example) | the settings a host normally changes; diagnostic switches are in [operating.md](docs/operating.md#diagnostic-switches) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | changes and checks (`pre-commit run --all-files`); never commit game files, Steam sessions or logs |
 
 Built on [Wine](https://www.winehq.org/) (and [wine-tkg](https://github.com/Kron4ek/Wine-Builds)), [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS), [s6-overlay](https://github.com/just-containers/s6-overlay), [noVNC](https://github.com/novnc/noVNC), [offen's docker-volume-backup](https://github.com/offen/docker-volume-backup), [Leaflet](https://leafletjs.com/), [lighttpd](https://www.lighttpd.net/), [cloudflared](https://github.com/cloudflare/cloudflared), [Pillow](https://python-pillow.github.io/) and [fzy-lua](https://github.com/swarn/fzy-lua). Licences: [NOTICE](NOTICE).

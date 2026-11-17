@@ -19,7 +19,7 @@ gh attestation verify moonpool.ps1 --repo moonpool-server/moonpool --signer-work
 - Each release lists `moonpool-SHA256SUMS.txt`; compare `Get-FileHash moonpool-setup.cmd` against it.
 - Setup runs PowerShell with `-ExecutionPolicy Bypass`, a PowerShell script setting that doesn't touch Defender. **Never turn Defender or SmartScreen off for it.**
 
-- **The setup file itself isn't signed.** `moonpool-setup.cmd` checks the launcher's signature before running it, but nothing checks the setup file: whoever could replace it on the release page could replace that check too. Its defences are the GitHub build attestation and the release's `moonpool-SHA256SUMS.txt` above; check either before running a setup file you didn't download from this repository's release page. Windows code signing would close this and isn't in place.
+- **The setup file itself isn't signed.** `moonpool-setup.cmd` checks the launcher's signature before running it, but nothing checks the setup file: whoever could replace it on the release page could replace that check too. The independent check is the GitHub build attestation above. `moonpool-SHA256SUMS.txt` is on the same release page, so it catches a damaged download, not a replaced release. Windows code signing would close this and isn't in place.
 
 ## What to expect from it
 
@@ -95,8 +95,7 @@ flowchart LR
 ## Known vulnerabilities in the image
 
 - The game image is Debian trixie plus Wine, which pulls in a few hundred libraries.
-- Grype, in the `Docker build` CI job, lists many High and Critical entries. At the last revision of this section, every finding was in a Debian package with no Debian fix (won't-fix or not fixed yet).
-- That can change with any Debian advisory; the latest `Docker build` run's step summary has the current list.
+- Grype, in the `Docker build` CI job, lists High and Critical entries in that image. The latest `Docker build` run's step summary lists each one and whether a fix exists; the job fails on a Critical entry that has one.
 
 - CI fails on a Critical finding that has a fix, and prints every High and Critical finding, fixed or not, in the step summary.
 - Before a release the maintainer is expected to read that list and remove what Moonpool doesn't need. CI doesn't check this.
