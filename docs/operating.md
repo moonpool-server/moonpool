@@ -321,7 +321,7 @@ Not in `.env.example`; the defaults work. Set one in `.env` only to rule somethi
 |---|---|---|
 | `GAME_APP_ID` | `1962700` | Steam app id of Subnautica 2 |
 | `NULLRHI_ARGS` | `-nullrhi -unattended -log` | Engine arguments; `-nullrhi` is added back if missing (no GPU) |
-| `WINE_SYNC` | `auto` | With an image built with `--build-arg WINE_RUNTIME=tkg` (wine-tkg-staging-fsync 10.10): `auto` and `fsync` use fsync, `esync` uses esync, `off` uses neither. The default WineHQ image has neither, so only `auto` and `off` apply. The game's launch log says which is in use |
+| `WINE_SYNC` | `auto` | The default image runs wine-tkg-staging-fsync 10.10: `auto` and `fsync` use fsync, `esync` uses esync, `off` uses neither. An image built with `--build-arg WINE_RUNTIME=winehq` has neither, so only `auto` and `off` apply there. The game's launch log says which is in use |
 | `UE4SS_AT_START` | `true` | UE4SS loads at process start through its `dwmapi.dll` proxy |
 | `UE4SS_TAG` | `experimental` | The upstream release tag the pinned loader is fetched from |
 | `NATIVE_MSVC` | `1` | Microsoft's C++ runtime for the game process only |
