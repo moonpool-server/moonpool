@@ -2653,3 +2653,20 @@ exit 0
   [ "$(cat .env)" = STEAM_BRANCH=mine ]
   [ "$(cat .env.loadout)" = STEAM_BRANCH=experimental ]
 }
+
+@test "every command the host forwards into the container is one the container knows" {
+  run mp '
+import re
+src = open(m.__file__, encoding="utf-8").read()
+calls = re.findall(r"forward_quiet\(((?:\"[^\"]*\"(?:, )?)+)", src)
+assert calls, "found no forwarded commands"
+for c in calls:
+    words = re.findall(r"\"([^\"]*)\"", c)
+    r = m.route(words + ["x"])
+    assert r["op"] not in ("unknown", "usage") or r["usage"] == "", (words, r)
+    print(" ".join(words), "->", r["op"])
+'
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [[ $output == *"diag screenshot -> screenshot"* ]]
+}
