@@ -403,6 +403,17 @@ fetch_pinned() {
 }
 
 game_pid() { pgrep -f "$GAME_EXE_NAME" 2>/dev/null | head -n1; }
+# The game has run MOD_START_GRACE_S (600) and the host mod has written no readiness report since
+# it started: a loader that failed at start leaves the game up but never hosted. $1: the game's pid.
+mod_never_started() {
+  local ran started seen
+  ran=$(ps -o etimes= -p "$1" 2>/dev/null | tr -d ' ')
+  case $ran in '' | *[!0-9]*) return 1 ;; esac
+  [ "$ran" -ge "${MOD_START_GRACE_S:-600}" ] || return 1
+  started=$(($(date +%s) - ran))
+  seen=$(stat -c %Y "$CONTROL_DIR/readiness.json" 2>/dev/null || echo 0)
+  [ "$seen" -lt "$started" ]
+}
 # Once shutdown begins, another TERM or INT cannot interrupt the warning and the forced save.
 term_stop() {
   trap '' TERM INT
