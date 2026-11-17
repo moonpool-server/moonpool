@@ -201,6 +201,16 @@ The order matters: `.env` names the game branch, and a world loads only on its o
 ## Updates
 
 - Steam can update the game whenever it runs. If the world has saves, Steam starts only after they're copied; `UPDATE_WITHOUT_BACKUP=true` skips that.
+- **"Steam stopped the game download (… Corrupt update files)"** in `bin/moonpool logs services`: usually a disk that filled mid-download. Steam waits and won't retry by itself. Free space, then take a copy of the world first (on the experimental branch the saves live inside the game folder) and clear Steam's half-staged download and its record of the game, so it downloads again:
+
+  ```sh
+  bin/moonpool server pack
+  docker compose stop sn2
+  docker compose run --rm --no-deps --entrypoint sh sn2 -c 'cd "/home/container/wine/drive_c/Program Files (x86)/Steam/steamapps" && rm -rf downloading/1962700 appmanifest_1962700.acf'
+  docker compose start sn2
+  ```
+
+  Seen and fixed on a fresh install with no world yet; there the whole game folder was removed too. On a server with a world, check after the download that `bin/moonpool server saves` still lists it, or `server unpack` the copy.
 - `RESTART_CRON` restarts the game only and never updates it. When the card shows a build players can't join on, run `bin/moonpool server restart`: it warns players, counts down and recreates the container (`--now` skips the countdown).
 - `AUTO_UPDATE=false` only stops Moonpool asking Steam to validate the game. Steam can still update it.
 
