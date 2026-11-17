@@ -125,3 +125,34 @@ FAILED='LogOnlineSession: Warning: EOS: [FOnlineSessionEOS::ReassertLobbyOwnersh
   [ ! -e "$DATA_DIR/moonpool.calls" ]
   grep -q 'with players on: not re-hosting' "$DATA_DIR/logs/join_watch.log"
 }
+
+# mod_never_started with ps stubbed to report how long the game has run ($1 seconds).
+mod_check() {
+  local t="$BATS_TEST_TMPDIR/tools"
+  mkdir -p "$t" "$BATS_TEST_TMPDIR/control"
+  printf '#!/bin/sh\necho "  %s"\n' "$1" >"$t/ps"; chmod +x "$t/ps"
+  PATH="$t:$PATH" CONTROL_DIR="$BATS_TEST_TMPDIR/control" bash -c \
+    '. "$1/scripts/common.sh"; CONTROL_DIR=$2; mod_never_started 4242' bash "$BATS_TEST_DIRNAME/.." "$BATS_TEST_TMPDIR/control"
+}
+
+@test "host mod check: no readiness report 10 minutes after launch counts as never started" {
+  run mod_check 700
+  [ "$status" -eq 0 ]
+}
+
+@test "host mod check: a report written after the launch, or a young game, does not" {
+  mkdir -p "$BATS_TEST_TMPDIR/control"
+  touch "$BATS_TEST_TMPDIR/control/readiness.json"
+  run mod_check 700
+  [ "$status" -ne 0 ]
+  rm "$BATS_TEST_TMPDIR/control/readiness.json"
+  run mod_check 120
+  [ "$status" -ne 0 ]
+}
+
+@test "host mod check: a report from before this launch does not count" {
+  mkdir -p "$BATS_TEST_TMPDIR/control"
+  touch -d '@1' "$BATS_TEST_TMPDIR/control/readiness.json"
+  run mod_check 700
+  [ "$status" -eq 0 ]
+}
