@@ -990,9 +990,15 @@ function Get-Manifest($Config) {
     if ($Config) {
       $sigUrl = $ManifestUrl + '.sig'
       $sigFile = Join-Path $work 'mods.json.sig'
-      Save-Url $sigUrl $sigFile 64KB
-      if (-not (Test-ManifestSignature $manifestFile $sigFile $Config.public_key)) {
-        Fail 'the server mod list signature is invalid; nothing changed, game not started'
+      # The list and its signature are two requests; a server publishing between them gives a
+      # mismatched pair, so the pair is fetched again before the signature counts as invalid.
+      for ($try = 1; $true; $try++) {
+        Save-Url $sigUrl $sigFile 64KB
+        if (Test-ManifestSignature $manifestFile $sigFile $Config.public_key) { break }
+        if ($try -ge 3) { Fail 'the server mod list signature is invalid; nothing changed, game not started' }
+        Say 'the mod list changed while it was read; reading it again'
+        Start-Sleep -Seconds 2
+        Save-Url $ManifestUrl $manifestFile 4MB
       }
     } elseif (-not $ManifestUrl.StartsWith('file:')) {
       Fail 'this mod list came with no server key; open the server from its join page'
