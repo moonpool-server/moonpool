@@ -676,13 +676,19 @@ def publish(args):
             "names": [m["name"] for m in mods]}
 
 
-def pin(args):
-    """Record a hand-downloaded archive (Nexus, or a GitHub asset re-pinned on purpose)."""
+def named_entry(args):
+    """plugins.yaml's path, its entries, and the one named args.name."""
     path = Path(args.plugins)
     plugins = read_plugins(path)
     entry = next((p for p in plugins if isinstance(p, dict) and str(p.get("name")) == args.name), None)
     if entry is None:
         raise ValueError(f"no entry named {args.name!r} in plugins.yaml")
+    return path, plugins, entry
+
+
+def pin(args):
+    """Record a hand-downloaded archive (Nexus, or a GitHub asset re-pinned on purpose)."""
+    path, plugins, entry = named_entry(args)
     install = entry.get("install")
     if not isinstance(install, dict):
         raise ValueError(f"{args.name}: has no install: block to pin")
@@ -718,11 +724,7 @@ def pin(args):
 
 
 def set_enabled(args, value):
-    path = Path(args.plugins)
-    plugins = read_plugins(path)
-    entry = next((p for p in plugins if isinstance(p, dict) and str(p.get("name")) == args.name), None)
-    if entry is None:
-        raise ValueError(f"no entry named {args.name!r} in plugins.yaml")
+    path, plugins, entry = named_entry(args)
     entry["enabled"] = value
     write_plugins(path, plugins)
     return {"name": args.name, "enabled": value}
