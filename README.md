@@ -196,6 +196,4 @@ Built on [Wine](https://www.winehq.org/) (and [wine-tkg](https://github.com/Kron
 
 Commands: `bin/moonpool help`. MIT licensed: this code only, not Subnautica 2 or Steam.
 
-To Unknown Worlds: an official dedicated server would make most of this repo unnecessary, and we'd happily retire it.
-
 Contact: [issues](https://github.com/moonpool-server/moonpool/issues) for questions, [private reporting](https://github.com/moonpool-server/moonpool/security/advisories/new) for security problems. Rights holders wanting a takedown can open an issue asking for a private contact.
