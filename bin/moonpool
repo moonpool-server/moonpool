@@ -1436,16 +1436,20 @@ LOADOUT_ENV_LOCAL = {b"COMPOSE_PROJECT_NAME", b"SN2_CONTAINER_NAME", b"SN2_IMAGE
 
 # What makes a server this server, besides the game: paths in the data folder. The Steam sign-in is
 # left out on purpose: it is a live credential, and signing in once on the new machine is safer.
+# History rides along so the moved server is the same server: hours and peaks (metrics.csv), who has been
+# aboard (join_watch.log), the explored map (map-chart-*.json, map-tiles) and the Discord card's message
+# ids, so the card is edited in place, not posted again. A trailing * is a name prefix.
 LOADOUT_PATHS = ("control/plugins.yaml", "control/settings.yaml", "control/admins.txt", "control/SAVE_SELECT",
                  "sn2headless.json", "console.json", "card.yaml", "map-background.json", "mods-pins.json",
-                 "client-mods", "ue4ss-client", "ue4ss-local", "paks-local", "mod-signing")
+                 "client-mods", "ue4ss-client", "ue4ss-local", "ue4ss-layouts", "paks-local", "mod-signing",
+                 "metrics.csv", "logs/join_watch.log", "map-chart-*", "map-tiles", "discord")
 
 
 def loadout_member(name):
     """The allowlisted path a packed data member falls under, or '' for anything else."""
     rel = name.split("/", 1)[1] if name.startswith("data/") else ""
     for p in LOADOUT_PATHS:
-        if rel == p or rel.startswith(p + "/"):
+        if rel == p or rel.startswith(p + "/") or (p.endswith("*") and "/" not in rel and rel.startswith(p[:-1])):
             return rel
     return ""
 
@@ -1466,9 +1470,11 @@ def pack_loadout(a):
     with open(os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as raw,             tarfile.open(fileobj=raw, mode="w:gz") as tar:
         tar.add(stamped[-1] / "SaveGames", "world/SaveGames", filter=lambda t: None if t.issym() or t.islnk() else t)
         for p in LOADOUT_PATHS:
-            if (data / p).exists() and not (data / p).is_symlink():
-                tar.add(data / p, f"data/{p}", filter=lambda t: None if t.issym() or t.islnk() else t)
-                packed.append(p)
+            for f in sorted(data.glob(p)) if p.endswith("*") else [data / p]:
+                if f.exists() and not f.is_symlink():
+                    rel = f.relative_to(data).as_posix()
+                    tar.add(f, f"data/{rel}", filter=lambda t: None if t.issym() or t.islnk() else t)
+                    packed.append(rel)
     os.replace(part, out)
     finish("ok", f"packed the world and {len(packed)} settings to {out}", "",
            {"file": str(out), "staged": stamped[-1].name, "settings": packed})

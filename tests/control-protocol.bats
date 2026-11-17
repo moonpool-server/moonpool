@@ -1854,15 +1854,18 @@ stub_discord() {
   # The steps sit once under every world, so a board of two doesn't repeat them.
   [ "$(jq -r '.components | length' <<<"$body")" -eq 2 ]
   how=$(jq -r '.components[-1].content' <<<"$body")
-  [[ $how == *"How to join"* && $how == *"Press **Join**"* && $how == *"Join Game"* ]]
-  [[ $how == *"Xbox / PC Game Pass"* && $how == *"background audio"* ]]
+  # Short, with the full steps one click away on the join page.
+  [[ $how == *"How to join"* && $how == *"[join page](https://play.example/join)"* ]]
+  [[ $how == *"Xbox / Game Pass"* && $how == *"background audio"* ]]
   [[ $how == *"not affiliated with Unknown Worlds, KRAFTON or Valve"* ]]
+  [ "$(printf '%s
+' "$how" | wc -l)" -le 5 ]
   # Without the switch nobody is accepted automatically; with it, only invited players unless anyone may ask.
-  [[ $how == *"the host accepts it by hand"* ]]
+  [[ $how == *"the host accepts them by hand"* ]]
   body=$(AUTO_ACCEPT_FRIENDS=1 SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
-  [[ $(jq -r '.components[-1].content' <<<"$body") == *"an admin has to invite you first"* ]]
+  [[ $(jq -r '.components[-1].content' <<<"$body") == *"an admin invites you first"* ]]
   body=$(ALLOWLIST_ONLY=false AUTO_ACCEPT_FRIENDS=1 SN2_NOW=1700000000 python3 "$DN" --dry-run status | grep '^{')
-  [[ $(jq -r '.components[-1].content' <<<"$body") == *"it accepts within a minute"* ]]
+  [[ $(jq -r '.components[-1].content' <<<"$body") == *"accepted within a minute"* ]]
 }
 
 @test "one card respects hidden names and never publishes player positions" {
@@ -2577,6 +2580,9 @@ loadout_env() {
   echo KEY >"$DATA_DIR/mod-signing/private.pem"
   echo COOKIE >"$DATA_DIR/steam-session/cookies"
   echo lua >"$DATA_DIR/client-mods/Panel/main.lua"
+  echo 'utc,cpu_cores,mem_mib,players' >"$DATA_DIR/metrics.csv"
+  echo '{}' >"$DATA_DIR/map-chart-experimental-Slot1.json"
+  mkdir -p "$DATA_DIR/discord"; echo 123 >"$DATA_DIR/discord/card.id"
   ln -s "$DATA_DIR/steam-session/cookies" "$DATA_DIR/client-mods/Panel/link"
 }
 
@@ -2590,6 +2596,9 @@ loadout_env() {
   [[ $list == *data/control/plugins.yaml* ]]
   [[ $list == *data/mod-signing/private.pem* ]]
   [[ $list == *data/client-mods/Panel/main.lua* ]]
+  [[ $list == *data/metrics.csv* ]]
+  [[ $list == *data/map-chart-experimental-Slot1.json* ]]
+  [[ $list == *data/discord/card.id* ]]
   [[ $list != *steam-session* ]]
   [[ $list != *Panel/link* ]]
 }
@@ -2602,6 +2611,7 @@ loadout_env() {
   echo NEWKEY >"$src/mod-signing/private.pem"
   echo EVIL >"$src/steam-session/cookies"
   echo EVIL >"$src/run/stopped"
+  echo '{"explored":1}' >"$src/map-chart-experimental-Slot1.json"
   ln -s /etc/passwd "$src/control/settings.yaml"
   run "$CTL" server unpack-data "$src"
   [ "$status" -eq 0 ]
@@ -2611,6 +2621,7 @@ loadout_env() {
   [ "$(cat "$DATA_DIR/steam-session/cookies")" = COOKIE ]
   [ ! -e "$DATA_DIR/run/stopped" ]
   [ ! -e "$SN2_CONTROL_DIR/settings.yaml" ]
+  [ "$(cat "$DATA_DIR/map-chart-experimental-Slot1.json")" = '{"explored":1}' ]
 }
 
 @test "unpack before the first start puts .env in place over the example, keeps a changed one, and says what is next" {
