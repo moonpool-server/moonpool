@@ -45,13 +45,13 @@ Nothing to install: rename any PDA signal to a command.
 
 ## The admin console (`!mp`)
 
-`!mp` takes any console line, plus shortcuts and name lookups. The `mp` can be left out unless the line starts with one of the fixed orders above (`!help`, `!time`...). A shortcut takes the player first, as on most game servers:
+`!mp` takes any console line, plus named commands (`give`, `heal`, `who`...) that look names up. The `mp` can be left out unless the line starts with one of the fixed orders above (`!help`, `!time`...). A named command takes the player first, as on most game servers:
 
 | Signal | Does |
 |---|---|
 | `!give copper wire 10` | gives you the item with that name, 10 of it |
 | `!give john copper 5` | gives it to the player whose name starts with john |
-| `!give everyone copper` | gives it to every player (`all` and `*` work too) |
+| `!give everyone copper` | gives it to every player (`all` works too) |
 | `!give 10 titanium ingot` | the name's words and the number in any order, no quotes needed |
 | `!give cop` | an unclear name asks: `cop? 1 Copper  2 Copper Ingot  3 Copper Wire` |
 | `!2` | ...and a bare number answers it |
@@ -64,9 +64,9 @@ Nothing to install: rename any PDA signal to a command.
 | `!SomeConsoleCommand 3` | any other line goes to the game as typed |
 
 - A word after `give` counts as a player only when it starts exactly one player's name and the item's name follows it. Otherwise it's part of the item: `!give titanium ingot` gives the ingot even with a player called Titan on. `@` always means a player.
-- A shortcut with a missing part answers with how it's typed: `use: give [player] <item> [count]`.
+- A named command with a missing part answers with how it's typed: `use: give [player] <item> [count]`.
 
-Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFreeHost/console.json`). To change them, put a file with only your changed keys in the data volume and recreate the host:
+Words, commands and replies come from `console.json` (shipped: `mod/SN2SlotFreeHost/console.json`). To change them, put a file with only your changed keys in the data volume and recreate the host:
 
 | Key type | In your file |
 |---|---|
@@ -89,8 +89,8 @@ Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFree
 
 | Word | Does | Watch out |
 |---|---|---|
-| `off` (or `normal`) | `DayOnly 0`, then `RemoveGlobalTag` for each tag in `tags`. On the current build every cheat, god mode and invisibility included, is a world tag, so this clears it for everyone | can't undo `FastSwim` (only on the admin's PC; run it again) or `QuickNav`'s fog and speed (the game's `NormalNav`) |
-| `god`, `fastbuild` | toggle | ignore a number: `FastBuild 0` turns it on |
+| `normal` | `DayOnly 0`, then `RemoveGlobalTag` for each tag in `tags`. On the current build every cheat, god mode and invisibility included, is a world tag, so this clears it for everyone | can't undo `FastSwim` (only on the admin's PC; run it again) or `QuickNav`'s fog and speed (the game's `NormalNav`) |
+| `god`, `fastbuild` (the game's own) | toggle | ignore a number: `FastBuild 0` turns it on |
 | `tag`, `untag` | add or remove a world tag with the `Global` commands | the game's own `AddTag` and `RemoveTag` act on one player and leave the world's cheat on |
 | `undo` | removes the nearest thing within `undo.within_m` metres of the admin, of the class their last spawn placed, and says how far away it was | goes by class and distance, so it may remove a copy someone else placed. The last `undo.keep` per admin are kept until restart |
 
@@ -102,9 +102,9 @@ The game's macros are text files in `Content/Macros` on each admin's PC, one con
 |---|---|---|
 | Base Pack, Equipment Pack, Starting Items | gives or equips items (Starting Items' `OxygenTankSmall` isn't found) | nothing to undo |
 | QuickNav | no fog, speed 10, fast swim on this PC; day, frozen at noon, for the world | the game's `NormalNav` |
-| Superman | `god`, `fastbuild 1`, `unlockall`, `invisible` (toggles: a cheat already on turns off), fast swim | `off`; `FastSwim` again for swimming |
-| SculptDebug | habitat builder, then the toggles `god`, `freebuild`, `unlimitedpower` | `off` |
-| SculptDebugNoSupports | SculptDebug, then `BaseToggleSupportCheck` | `off`, and `BaseToggleSupportCheck` once more; the host can't tell whether it's on |
+| Superman | `god`, `fastbuild 1`, `unlockall`, `invisible` (toggles: a cheat already on turns off), fast swim | `normal`; `FastSwim` again for swimming |
+| SculptDebug | habitat builder, then the toggles `god`, `freebuild`, `unlimitedpower` | `normal` |
+| SculptDebugNoSupports | SculptDebug, then `BaseToggleSupportCheck` | `normal`, and `BaseToggleSupportCheck` once more; the host can't tell whether it's on |
 | damagedebug | four `giveability` lines | nothing: the game can't find them |
 
 ## Limits
@@ -129,7 +129,7 @@ The game runs a cheat line from any client without checking who sent it. It has 
 - `deny` reads the first word of a one-command line, so it lists `ExecuteForAll` and `RunMacro`. A macro picked in the panel still works: its lines arrive one at a time and each is checked.
 
 - A line starting with `signal_word` (`mp`) is a console line: `mp give copper 10` equals `!give copper 10` in a signal. An answer (`who`, `find`, a usage reply, a refusal) shows as a notification on the sender's screen only, for `reply_seconds` (8). A line that only runs, such as `give glass 10`, shows no card: the game's own result is the answer (`reply_on_run: true` brings the card back). Signal orders always answer in the signal's name.
-- A typed shortcut needs no `mp`: `give 10 glass`, `heal all` and `!give john copper 5` get the same name lookup. A line that already names exact ids, as the panel's own picks do (`Give DA_Glass_ItemType 10`), runs as it is.
+- A typed named command needs no `mp`: `give 10 glass`, `heal all` and `!give john copper 5` get the same name lookup. A line that already names exact ids, as the panel's own picks do (`Give DA_Glass_ItemType 10`), runs as it is.
 - A line for a player whose character isn't in the world yet is skipped.
 
 Not yet tested with a second player:
