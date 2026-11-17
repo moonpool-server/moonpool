@@ -323,6 +323,10 @@ Not in `.env.example`; the defaults work. Set one in `.env` only to rule somethi
 | Setting | Default | What it does |
 |---|---|---|
 | `GAME_APP_ID` | `1962700` | Steam app id of Subnautica 2 |
+| `HOST_WAIT_SECONDS` | `300` | How long the host mod waits for the game's lobby before it gives up on hosting |
+| `HOST_SETTLE_SECONDS` | `30` | The wait after the lobby appears before the Host call (earlier, it fails with no network ID) |
+| `WORLD_WAIT_SECONDS` | `180` | How long it waits for the world to load before skipping the post-load steps (slot limit, host prune, story goals) |
+| `LIFEPOD_HOLD_MAX_SECONDS` | `180` | The longest a launch cinematic holds new joins (`LIFEPOD_JOIN_HOLD`) |
 | `NULLRHI_ARGS` | `-nullrhi -unattended -log` | Engine arguments; `-nullrhi` is added back if missing (no GPU) |
 | `WINE_SYNC` | `auto` | The default image runs wine-tkg-staging-fsync 10.10: `auto` and `fsync` use fsync, `esync` uses esync, `off` uses neither. An image built with `--build-arg WINE_RUNTIME=winehq` has neither, so only `auto` and `off` apply there. The game's launch log says which is in use |
 | `UE4SS_AT_START` | `true` | UE4SS loads at process start through its `dwmapi.dll` proxy |

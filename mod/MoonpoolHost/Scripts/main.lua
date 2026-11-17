@@ -278,12 +278,14 @@ LoopAsync(2000, function()
     end
     -- Once the world game mode exists: the world GameSession limit, the prune and the lifepod goals.
     local PM = "[MoonpoolHost] postmap: "
-    local waited = 0
+    local waited, world_wait = 0, tonumber(os.getenv("SN2_WORLD_WAIT_SECS") or "") or 180
     LoopAsync(2000, function()
         waited = waited + 2
         local wgm = FindFirstOf("BP_SN2WorldGameMode_C")
         if not (wgm and wgm:IsValid()) then
-            if waited >= 180 then print(PM .. "world game mode not seen in 180 s; post-map steps NOT run") return true end
+            if waited >= world_wait then
+                print(PM .. "world game mode not seen in " .. world_wait .. " s; post-map steps NOT run") return true
+            end
             return false
         end
         ExecuteWithDelay(5000, function() ExecuteInGameThread(function()
