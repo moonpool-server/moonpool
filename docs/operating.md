@@ -173,9 +173,15 @@ Everything that makes the server yours fits in one file. The game, Steam and Win
 bin/moonpool server pack                     # moonpool-loadout-<date>.tar.gz
 bin/moonpool server stop
 
-# new PC: a fresh install (README "Start it"), signed in to Steam, game downloaded, then
-bin/moonpool server unpack moonpool-loadout-<date>.tar.gz
+# new PC: clone and check out the release as in README "Start it", then, before starting it
+cp .env.example .env
+bin/moonpool server unpack moonpool-loadout-<date>.tar.gz   # puts .env in place: branch, tunnel, admins
+docker compose up -d --build
+# sign in to Steam in the viewer, wait until the game has downloaded (bin/moonpool status), then again
+bin/moonpool server unpack moonpool-loadout-<date>.tar.gz   # settings, mod key and the world
 ```
+
+The order matters: `.env` names the game branch, and a world loads only on its own branch, so it has to be in place before Steam downloads the game.
 
 | In the file | Not in it |
 |---|---|
@@ -186,7 +192,8 @@ bin/moonpool server unpack moonpool-loadout-<date>.tar.gz
 | mod overrides: `client-mods/`, `ue4ss-client/`, `ue4ss-local/`, `paks-local/` | |
 
 - **The file holds your secrets** (`.env`, the signing key). Keep it like a password. It is written readable by its owner only on Linux; on Windows that folder's permissions decide who can read it.
-- `unpack` keeps an existing `.env` and puts the packed one beside it as `.env.loadout`; compare the two, then `docker compose up -d`. It puts settings back only on the list above, skips links, then brings the world in through `server restore`, which keeps a dated copy of the saves it replaces.
+- `.env` comes without `COMPOSE_PROJECT_NAME`, `SN2_CONTAINER_NAME` and `SN2_IMAGE`: they name the old PC's volumes, container and image, and on a PC with an older copy they would quietly start that copy instead.
+- `unpack` replaces a `.env` that is still the example; any other `.env` is kept and the packed one goes beside it as `.env.loadout`; compare the two, then `docker compose up -d`. It puts settings back only on the list above, skips links, then brings the world in through `server restore`, which keeps a dated copy of the saves it replaces.
 - Sign in on the new PC only after the old one has stopped: one Steam account, signed in twice, logs the first out. Never run both: they also share one tunnel. `docker update --restart=no` on the old PC's containers keeps a reboot from starting them.
 - Free space: a fresh install takes about 35 GB inside Docker's disk. Old volumes count; `docker system df -v` shows them.
 - Use the same release on both PCs; `git describe --tags` says which.

@@ -2612,3 +2612,25 @@ loadout_env() {
   [ ! -e "$DATA_DIR/run/stopped" ]
   [ ! -e "$SN2_CONTROL_DIR/settings.yaml" ]
 }
+
+@test "unpack before the first start puts .env in place over the example, keeps a changed one, and says what is next" {
+  unset SN2_IN_CONTAINER
+  d="$BATS_TEST_TMPDIR/new"; mkdir -p "$d/pack" "$BATS_TEST_TMPDIR/nodocker"
+  # Docker is installed and the server not started yet: compose answers, nothing runs.
+  printf '#!/bin/sh
+exit 0
+' >"$BATS_TEST_TMPDIR/nodocker/docker"; chmod +x "$BATS_TEST_TMPDIR/nodocker/docker"
+  printf 'STEAM_BRANCH=experimental\n' >"$d/pack/.env"
+  tar -czf "$d/loadout.tar.gz" -C "$d/pack" .env
+  printf 'STEAM_BRANCH=public\n' >"$d/.env.example"; cp "$d/.env.example" "$d/.env"
+  cd "$d"
+  PATH="$BATS_TEST_TMPDIR/nodocker:$PATH" run "$CTL" server unpack loadout.tar.gz
+  [ "$status" -eq 0 ]
+  [ "$(cat .env)" = STEAM_BRANCH=experimental ]
+  [[ $output == *"next: start the server"* ]]
+  printf 'STEAM_BRANCH=mine\n' >.env
+  PATH="$BATS_TEST_TMPDIR/nodocker:$PATH" run "$CTL" server unpack loadout.tar.gz
+  [ "$status" -eq 0 ]
+  [ "$(cat .env)" = STEAM_BRANCH=mine ]
+  [ "$(cat .env.loadout)" = STEAM_BRANCH=experimental ]
+}

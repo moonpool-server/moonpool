@@ -4,6 +4,7 @@
 On the Docker host it drives the container with docker compose; inside it (SN2_IN_CONTAINER=1)
 it talks to the SN2SlotFreeHost mod through the file-drop queue in the control folder.
 """
+import io
 import json
 import os
 import re
@@ -1430,6 +1431,9 @@ def export_world(a):
     finish("ok", f"{name} written to {out}", "", {"save": name, "file": str(out), "files": len(files)})
 
 
+# .env settings that belong to one machine, not to the server: left out of a packed server.
+LOADOUT_ENV_LOCAL = {b"COMPOSE_PROJECT_NAME", b"SN2_CONTAINER_NAME", b"SN2_IMAGE"}
+
 # What makes a server this server, besides the game: paths in the data folder. The Steam sign-in is
 # left out on purpose: it is a live credential, and signing in once on the new machine is safer.
 LOADOUT_PATHS = ("control/plugins.yaml", "control/settings.yaml", "control/admins.txt", "control/SAVE_SELECT",
@@ -1783,7 +1787,13 @@ def outer(r):
                 for m in src:
                     dst.addfile(m, src.extractfile(m) if m.isfile() else None)
                 if env.is_file():
-                    dst.add(env, ".env")
+                    # Settings that name this machine's containers, volumes and image stay behind: on another
+                    # PC they would point at whatever there happens to carry those names.
+                    kept = b"".join(line for line in env.read_bytes().splitlines(keepends=True)
+                                    if not line.split(b"=", 1)[0].strip() in LOADOUT_ENV_LOCAL)
+                    info = tarfile.TarInfo(".env")
+                    info.size, info.mode, info.mtime = len(kept), 0o600, int(time.time())
+                    dst.addfile(info, io.BytesIO(kept))
             os.replace(part, out)
         finally:
             shutil.rmtree(x, ignore_errors=True)
@@ -1798,8 +1808,10 @@ def outer(r):
         try:
             extract_backup(a[0], x)
             said = []
+            example = Path(E.get("SN2_ENV_EXAMPLE") or "./.env.example")
+            fresh = env.is_file() and example.is_file() and env.read_bytes() == example.read_bytes()
             if (x / ".env").is_file():
-                if not env.exists():
+                if not env.exists() or fresh:
                     shutil.copyfile(x / ".env", env)
                     os.chmod(env, 0o600)
                     said.append(f"{env} put in place")
@@ -1808,6 +1820,10 @@ def outer(r):
                     shutil.copyfile(x / ".env", keep)
                     os.chmod(keep, 0o600)
                     said.append(f"{env} kept; the packed one is {keep}: compare them, then recreate (docker compose up -d)")
+            if not container_running():
+                finish("ok", "; ".join(said + ["next: start the server (docker compose up -d), sign in to Steam, let the "
+                                                 "game download, then run this again for the settings and the world"]),
+                       "", {"env": bool(said), "world": False})
             if (x / "data").is_dir():
                 staged = f"/tmp/sn2-unpack-{R['request_id']}"
                 run_compose("cp", str(x / "data"), f"{SERVICE}:{staged}")
