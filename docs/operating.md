@@ -280,6 +280,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 |---|---|
 | Not sure the host is right | `bin/moonpool diag verify-fresh` checks each stage from Steam to the hosted save |
 | No session | `bin/moonpool status`, then `bin/moonpool logs game` |
+| Container up, game not running, `bin/moonpool status` says `stopped by moonpool server stop` | the stop holds across `docker compose up -d` and restarts; `bin/moonpool server start` lifts it |
 | No session, and `logs join_watch` says `host mod never started` | the UE4SS loader failed as the game started (its `UE4SS.log` ends in `Fatal Error`). The server stops the game once, 10 minutes after launch, so it starts again; if the next start fails too it leaves it and says so. Seen once on build 26496980, then fine on the next start |
 | Join Game is missing | check in the viewer that Steam is signed in and on the right branch |
 | A player connects and drops | compare branch and build, then `bin/moonpool logs join_watch` |
