@@ -200,6 +200,7 @@ PY
 }
 
 @test "Discord card lists known player ping and omits unknown ping" {
+  export SHOW_PLAYER_NAMES=true  # names shown; the default numbers players
   printf '{"ts":1700000000,"players":[{"name":"Host","ping_ms":1},{"name":"Alice","ping_ms":23},{"name":"Bob"}]}' \
     >"$CONTROL_DIR/status.json"
   body=$(SN2_NOW=1700000000 HOST_NAME=Host \

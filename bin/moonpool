@@ -1021,7 +1021,7 @@ def inner(r):
         join = f"{url}/join" if url else None
         f = Path(run_dir()) / "friend-requests.json"  # the watcher's minute check; None: not checked lately
         fr = read_json(f) if f.is_file() and time.time() - f.stat().st_mtime < 180 else None
-        if isinstance(fr, dict) and E.get("SHOW_PLAYER_NAMES", "true") != "true":
+        if isinstance(fr, dict) and E.get("SHOW_PLAYER_NAMES", "false") != "true":
             fr["names"] = []
         if R["json"]:
             finish("ok", "readiness, as the mod wrote it", "", {"readiness": read_json(c / "readiness.json"), "join_url": join,
