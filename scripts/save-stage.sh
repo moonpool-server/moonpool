@@ -19,7 +19,13 @@ status() {
   [ "$a" = "$b" ] || s6-svc -r /run/service/sn2-x11vnc 2>/dev/null || true
 }
 
-[ -d "$SAVE_DIR" ] || { status "FAILED: save folder missing ($SAVE_DIR)"; exit 1; }
+if [ ! -d "$SAVE_DIR" ]; then
+  # A fresh install has no save folder until the game first saves; once copies exist, a missing one is a fault.
+  if [ -z "$(find "$STAGING_DIR" -mindepth 1 -maxdepth 1 -name '20*' 2>/dev/null | head -1)" ]; then
+    status "nothing to stage: no world saved yet"; exit 0
+  fi
+  status "FAILED: save folder missing ($SAVE_DIR)"; exit 1
+fi
 mkdir -p "$STAGING_DIR" || { status "FAILED: cannot create $STAGING_DIR"; exit 1; }
 # One staging at a time: the join watcher, the autosave hook and moonpool can all start one.
 # fd 7, because moonpool hands its own lock to helpers on fd 9.
