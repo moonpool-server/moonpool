@@ -54,10 +54,17 @@ docker compose up -d --build
 1. Open `http://127.0.0.1:8080/vnc.html` and sign in to Steam once. `bin/moonpool diag viewer` shows the password. From another machine: `ssh -L 8080:127.0.0.1:8080 you@server`.
 2. Wait for the game to download and the world to load (`docker compose logs -f sn2`). Accept any licence prompt yourself in the viewer.
 3. `bin/moonpool status` says when it's hosting. Never run `docker compose down -v`: it deletes the world and the Steam sign-in.
-4. Invite each friend: `bin/moonpool players invite <steamid64 or profile link>`. They send the hosting account a friend request; accept it in the viewer, or set `AUTO_ACCEPT_FRIENDS=1`.
-5. Friends press Join Game, or open `http://<server>:8081/join`.
+4. Let friends in, one of three ways (players join through the hosting account's Steam friends list):
 
-Anyone already friends with the hosting account can join too. `ALLOWLIST_ONLY=false` lets in anyone who finds it.
+   | Who gets in | Set | You do |
+   |---|---|---|
+   | people you accept | nothing (the default) | accept their friend request in the viewer |
+   | people you invite | `AUTO_ACCEPT_FRIENDS=1` | `bin/moonpool players invite <steamid64 or profile link>`; their request is accepted within a minute |
+   | anyone who finds the host | `AUTO_ACCEPT_FRIENDS=1`, `ALLOWLIST_ONLY=false` | nothing; `PLAYER_SLOTS` and the ban list still apply |
+
+   Anyone already friends with the hosting account can join in every mode; `bin/moonpool ban add` removes one.
+
+5. Friends press Join Game, or open `http://<server>:8081/join`.
 
 ## Gameplay defaults
 
