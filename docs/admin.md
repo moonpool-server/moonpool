@@ -92,7 +92,7 @@ Words, shortcuts and replies come from `console.json` (shipped: `mod/SN2SlotFree
 | `off` (or `normal`) | `DayOnly 0`, then `RemoveGlobalTag` for each tag in `tags`. On the current build every cheat, god mode and invisibility included, is a world tag, so this clears it for everyone | can't undo `FastSwim` (only on the admin's PC; run it again) or `QuickNav`'s fog and speed (the game's `NormalNav`) |
 | `god`, `fastbuild` | toggle | ignore a number: `FastBuild 0` turns it on |
 | `tag`, `untag` | add or remove a world tag with the `Global` commands | the game's own `AddTag` and `RemoveTag` act on one player and leave the world's cheat on |
-| `undo` (or `u`) | removes the nearest thing within `undo.within_m` metres of the admin, of the class their last spawn placed, and says how far away it was | goes by class and distance, so it may remove a copy someone else placed. The last `undo.keep` per admin are kept until restart |
+| `undo` | removes the nearest thing within `undo.within_m` metres of the admin, of the class their last spawn placed, and says how far away it was | goes by class and distance, so it may remove a copy someone else placed. The last `undo.keep` per admin are kept until restart |
 
 ## Macros
 
@@ -151,7 +151,7 @@ Not yet tested with a second player:
 | Enter | runs the row, with the count if one was typed (the list's own command, such as `Item <id> 10`); the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
 | Esc | steps back one level | |
 
-- Unpublished items, and items the game names `[DEPRECATED]`, `[PLACEHOLDER]` or `[TEST]`, are hidden unless `search.show_unpublished` is set.
+- Unpublished items, and items the game names `[DEPRECATED…]`, `[PLACEHOLDER…]`, `[PH]` or `[TEST…]`, are hidden unless `search.show_unpublished` is set.
 - The command line is Unreal's own text field in the game line's font, so the cursor, arrows, Home, End, selection and paste work as in any text field. `textbox.on = false` keeps the game's label instead.
 - The History tab is the game's own list, sorted A to Z, of lines the game ran itself; lines sent from the panel are in Up/Down instead, kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
 - While the panel is open, other mods' key binds stay quiet (the shared UE4SS helper the server ships), so typing does not set off their keys.
