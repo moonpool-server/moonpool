@@ -152,7 +152,7 @@ The rest is in [SECURITY.md](SECURITY.md).
 | Hosting | hosts by itself and comes back after a restart; several worlds on one machine; scheduled restarts with a countdown for players (`RESTART_CRON`) |
 | Players | invites, auto-accepted friend requests, kick, bans, announcements (`notify`); Xbox and Game Pass joining (experimental) |
 | Admin | in game through PDA signals or the F2 panel, and `bin/moonpool` from the shell ([docs/admin.md](docs/admin.md)) |
-| Worlds | backups every 30 minutes with a one-command restore; import and export; moving the server to another PC |
+| Worlds | backups every 30 minutes with a one-command restore; import and export; the whole server in one file (`server pack`), to move it to another PC |
 | Discord | a card with who's on, time, weather and recent scans, and Join and Map buttons; a board of several worlds; alerts that can mention a role |
 | Map | where everyone was a few minutes ago, over a map picture you choose ([docs/map.md](docs/map.md)) |
 | Address | a quick tunnel, Tailscale Funnel or your own domain ([guide](docs/operating.md#public-address)) |
@@ -170,6 +170,7 @@ Tested by hand with real players over the internet. CI runs Moonpool's own tests
 | public | `25400633` | Hosts, players join |
 | experimental | `26283380` | Hosts, players join with mods, world moved between hosts (short sessions) |
 | experimental | `26496980` | Hosts with UE4SS 1190 and two layout files ([Updates](docs/operating.md#updates)); players join with mods |
+| experimental | `26496980` | Fresh install on a second PC following this README, then the live world, history and settings moved over with `server pack`/`unpack` (2026-11-17). The snags that broke the move are fixed; still open: a full disk mid-download leaves Steam's update paused without saying why, a fresh install's backup line says FAILED before any world exists, and `diag screenshot` fails on a fresh install |
 
 A game update can stop hosting; the host reports it and the [guide](docs/operating.md#updates) says what to do. Tried another build? Open an issue.
 
@@ -192,6 +193,8 @@ Details: [docs/legal.md](docs/legal.md).
 | [SECURITY.md](SECURITY.md) | what's trusted, what listens, what leaves the server |
 | [.env.example](.env.example) | every setting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | changes and checks (`pre-commit run --all-files`); never commit game files, Steam sessions or logs |
+
+Built on [Wine](https://www.winehq.org/) (and [wine-tkg](https://github.com/Kron4ek/Wine-Builds)), [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS), [s6-overlay](https://github.com/just-containers/s6-overlay), [noVNC](https://github.com/novnc/noVNC), [offen's docker-volume-backup](https://github.com/offen/docker-volume-backup), [Leaflet](https://leafletjs.com/), [lighttpd](https://www.lighttpd.net/), [cloudflared](https://github.com/cloudflare/cloudflared), [Pillow](https://python-pillow.github.io/) and [fzy-lua](https://github.com/swarn/fzy-lua). Licences: [NOTICE](NOTICE).
 
 Commands: `bin/moonpool help`. MIT licensed: this code only, not Subnautica 2 or Steam.
 
