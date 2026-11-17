@@ -71,6 +71,7 @@ fi
 # Every minute: metrics, status card, viewer line. Every 5 minutes: a heartbeat.
 heartbeat() {
   local s n=0 was='' now cur pid cpu mem cnt build oldbuild title lobby known restart_warning_pid='' restart_rc
+  local mod_restart_at=0 mod_stuck_said=''
   oldbuild=$(cat "$RUN_DIR/last-buildid" 2>/dev/null)
   python3 "$NOTIFY" status >/dev/null 2>&1 || true
   while sleep 30; do
@@ -102,6 +103,19 @@ heartbeat() {
         echo "[$(stamp)] in-game admin: countdown ended without restart (status $restart_rc)" >>"$OUT"
       fi
       restart_warning_pid=''
+    fi
+    # The game is up, armed to host, and the host mod never reported in: stop it once so the
+    # supervisor starts it again. Nobody can be in a session that never hosted. At most once per
+    # MOD_RESTART_GAP_S (1800), so a loader that always fails is logged, not looped.
+    if [ -n "$pid" ] && [ -f "$HOST_ARMED_FILE" ] && [ ! -f "$STOP_FLAG" ] && mod_never_started "$pid"; then
+      if [ $(($(date +%s) - mod_restart_at)) -ge "${MOD_RESTART_GAP_S:-1800}" ]; then
+        mod_restart_at=$(date +%s)
+        kill "$pid" 2>/dev/null
+        echo "[$(stamp)] host mod never started (no readiness report ${MOD_START_GRACE_S:-600}s after launch): game stopped for the supervisor to start again" >>"$OUT"
+      elif [ "$mod_stuck_said" != "$mod_restart_at" ]; then
+        mod_stuck_said=$mod_restart_at
+        echo "[$(stamp)] host mod still not started after a restart: left running; see UE4SS.log" >>"$OUT"
+      fi
     fi
     # IDLE_STOP_HOURS: the mod asks and the game stops; `moonpool server start` or RESTART_CRON clears it.
     if [ -f "$CONTROL_DIR/idle-stop-request.json" ]; then
