@@ -2,7 +2,7 @@
 """moonpool: admin commands for a Subnautica 2 headless host.
 
 On the Docker host it drives the container with docker compose; inside it (SN2_IN_CONTAINER=1)
-it talks to the SN2SlotFreeHost mod through the file-drop queue in the control folder.
+it talks to the MoonpoolHost mod through the file-drop queue in the control folder.
 """
 import io
 import json
@@ -422,7 +422,7 @@ def queue_call(cmd, args):
         time.sleep(0.25)
     else:
         dest.unlink(missing_ok=True)
-        finish("timeout", f"no answer from the mod within {timeout}s (is the game running with SN2SlotFreeHost loaded? see: moonpool status)")
+        finish("timeout", f"no answer from the mod within {timeout}s (is the game running with MoonpoolHost loaded? see: moonpool status)")
     if out.is_symlink() or not out.is_file():
         out.unlink(missing_ok=True)
         finish("protocol_error", "the mod answer is not a regular file")
@@ -442,7 +442,7 @@ def queue_call(cmd, args):
         R["human_done"] = True
     if verdict != "valid":
         return ("protocol_error", f"the mod's answer is incompatible or malformed: {verdict}",
-                "Deploy matching copies of bin/moonpool and the SN2SlotFreeHost Lua files, then retry.",
+                "Deploy matching copies of bin/moonpool and the MoonpoolHost Lua files, then retry.",
                 {"protocol_error": verdict, "reply": text[:2000]})
     command = R["command"]
     if reply["ok"]:

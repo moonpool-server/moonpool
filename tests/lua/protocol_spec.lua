@@ -1,4 +1,4 @@
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local p = require('protocol')
 local ran, failed = 0, 0
 local function eq(got, want, name)

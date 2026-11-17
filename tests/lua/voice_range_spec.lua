@@ -1,5 +1,5 @@
 -- Pure-Lua coverage for private voice-range signals and their lifecycle.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local voice = require('voice_range')
 local failures = 0
 local function eq(got, want, what)

@@ -1,8 +1,8 @@
--- Stub-clock tests for mod/SN2SlotFreeHost/Scripts/idle.lua (the empty-server
+-- Stub-clock tests for mod/MoonpoolHost/Scripts/idle.lua (the empty-server
 -- policy) and its slots range check. Plain Lua 5.4, no framework: run as
 --   lua5.4 tests/lua/idle_spec.lua   (from the repository root)
 -- Exits 1 on the first failure; bats runs it in tests/control-protocol.bats.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local idle = require('idle')
 
 local failures, ran = 0, 0

@@ -1,4 +1,4 @@
--- Minimal JSON encode/decode for SN2SlotFreeHost (UE4SS ships no JSON library).
+-- Minimal JSON encode/decode for MoonpoolHost (UE4SS ships no JSON library).
 -- Handles objects, arrays, strings (with \uXXXX for the BMP), numbers, true,
 -- false and null. Original code, MIT licensed with the rest of this project.
 local M = {}

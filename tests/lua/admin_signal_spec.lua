@@ -1,5 +1,5 @@
 -- Pure-Lua coverage for beacon admin parsing, access, mapping and replies.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local admin = require('admin_signal')
 local failures = 0
 local function eq(got, want, what)
