@@ -96,4 +96,14 @@ function M.hidden(kind, part, rules)
   return hide and not keep
 end
 
+-- base with over's values laid on top, table by table: a player's own settings change only the keys
+-- they name. A list (a table with [1]) is replaced whole.
+function M.merge(base, over)
+  if type(over) ~= 'table' then return base end
+  for k, v in pairs(over) do
+    if type(v) == 'table' and type(base[k]) == 'table' and v[1] == nil then M.merge(base[k], v) else base[k] = v end
+  end
+  return base
+end
+
 return M

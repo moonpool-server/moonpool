@@ -83,6 +83,9 @@ return {
   -- The lines run from the panel, kept newest first (at most keep) in file, under %LOCALAPPDATA%: the
   -- launcher's folder, which an uninstall removes. The game's list titled title (its part title_part)
   -- is its command history, shown in that order.
+  -- A player's own changes to any setting here, if that file exists: a Lua file that returns a table
+  -- with only the keys to change, e.g. return { key = 'F3', layout = { top = 0.1 } }.
+  own_settings = '\\Moonpool\\console-settings.lua',
   history = { file = '\\Moonpool\\console-recent.txt', keep = 50, title_part = 'Title', title = 'Command History' },
   -- textbox: Unreal's own text box in place of the game's command line label (replaces: that
   -- label's part name). on = false keeps the game's label.

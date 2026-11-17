@@ -156,6 +156,7 @@ Not yet tested with a second player:
 - The History tab is the game's own list, sorted A to Z, of lines the game ran itself; lines sent from the panel are in Up/Down instead, kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
 - While the panel is open, other mods' key binds stay quiet (the shared UE4SS helper the server ships), so typing does not set off their keys.
 - `Scripts/config.lua` holds every setting: key, console word, position, which parts stay, and the game names the mod relies on.
+- Each player can change any of them for themselves in `%LOCALAPPDATA%\Moonpool\console-settings.lua`, a file that returns only the keys to change, for example `return { key = 'F3', layout = { top = 0.1 } }`. It is read with no Lua libraries, so it can hold values only.
 
 ## Console commands
 
