@@ -30,6 +30,7 @@ server.document-root = "$DATA_DIR/public"
 server.bind = "0.0.0.0"
 server.port = ${SN2_MODS_PORT:-8081}
 server.modules = ( "mod_redirect" )
+server.follow-symlink = "disable"
 url.redirect = ( "^/$" => "/join.html", "^/join$" => "/join.html", "^/map$" => "/map.html" )
 mimetype.assign = ( ".html" => "text/html; charset=utf-8", ".json" => "application/json", ".sig" => "application/octet-stream", ".zip" => "application/zip", ".png" => "image/png",
   ".css" => "text/css; charset=utf-8", ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg", ".webp" => "image/webp", ".gif" => "image/gif" )

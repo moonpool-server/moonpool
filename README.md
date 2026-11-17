@@ -124,7 +124,7 @@ List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothi
 
 - Any word that isn't one of the fixed orders goes to the [admin console](docs/admin.md#the-admin-console-mp), so anything the game's console can do works too. That part needs [console commands](docs/admin.md#console-commands) turned on.
 - The answer appears in the signal's name and as a notification.
-- Orders from anyone not in `ADMINS` are dropped.
+- Orders from anyone not in `ADMINS` are dropped. One gap: if the host can't take a sender's cheat rights away at the moment a line arrives, the game runs that line and the sender is removed afterwards ([details](docs/admin.md#the-games-cheat-panel-and-who-it-obeys)). It hasn't happened on our server.
 - Admins who want a keyboard can add the optional admin panel: F2 opens the game's own cheat panel with search.
 
 ![The admin panel open in game: Item, Spawn, Equip and Macro tabs, and the item list filtered to the three matches for "copper"](docs/images/admin-panel.png)
