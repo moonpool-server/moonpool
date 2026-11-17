@@ -33,7 +33,7 @@ GAME_APP_ID="${GAME_APP_ID:-${STEAM_APPID:-1962700}}"
 GAME_PORT="${GAME_PORT:-7777}"
 # PRESET supplies defaults only. A non-empty explicitly supplied setting wins;
 # an empty value is the panel-friendly way to request the preset default.
-PRESET="${PRESET:-friends}"
+PRESET="${PRESET:-stock}"
 case "$PRESET" in
   friends|stock) ;;
   *) printf 'unknown PRESET %q (expected friends or stock)\n' "$PRESET" >&2; exit 64 ;;
