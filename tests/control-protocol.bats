@@ -2291,6 +2291,11 @@ golden() { # ERROR CODE EXIT NEXT_ACTION, through a kick as the host
   golden host_controller_not_found refused 77 "Wait until moonpool status shows a hosted session, then retry."
 }
 
+@test "error map: a save asked for before the world has loaded says wait, not a code" {
+  golden save_communication_not_found refused 77 "Wait a minute after the server hosts, then save again."
+  [[ $(field message) == *"hasn't finished loading"* ]]
+}
+
 @test "error map: players online says ask them to leave or use --force" {
   golden players_online refused 77 "Ask the players to leave, or run again with --force (owner only)."
 }

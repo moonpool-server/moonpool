@@ -363,6 +363,8 @@ def present_error(err):
     table = {"unknown_player": (f"no connected player has that name ({err})", NEXT_PLAYERS),
              "unknown_target": (f"no connected player has that name ({err})", NEXT_PLAYERS),
              "host_controller_not_found": (f"no session is hosted yet, so the host has no controller to run it ({err})", NEXT_HOSTED),
+             "save_communication_not_found": (f"the world hasn't finished loading, so the game can't save yet ({err})",
+                                              "Wait a minute after the server hosts, then save again."),
              "players_online": (f"players are in the world ({err})", NEXT_PLAYERS_ONLINE),
              "disabled_by_config": (f"the command is disabled in the mod's config ({err})", NEXT_ENABLE),
              "player_has_no_body": (f"the player has no body in the world yet ({err})", NEXT_BODY),
