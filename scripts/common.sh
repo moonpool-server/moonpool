@@ -470,7 +470,9 @@ game_install_state() {
     return 0
   fi
   flags=$(vdf_get "$manifest" StateFlags)
-  last=$(grep -E "AppID $GAME_APP_ID (update started|scheduler finished)" "$clog" 2>/dev/null | tail -n1)
+  last=$(grep -E "AppID $GAME_APP_ID (update started|update canceled|scheduler finished)" "$clog" 2>/dev/null | tail -n1)
+  # Steam gave up on the download (a disk that filled mid-download leaves corrupt files) and waits.
+  if [[ $last == *"update canceled"* ]]; then echo "paused: ${last##*update canceled : }"; return 0; fi
   if [ "$flags" = 4 ] && [[ $last != *"update started"* ]]; then echo installed; return 0; fi
   staged=$(vdf_get "$manifest" BytesStaged); tostage=$(vdf_get "$manifest" BytesToStage)
   if [ "${tostage:-0}" -gt 0 ] 2>/dev/null && [ "$staged" = "$tostage" ] && [ -n "$flags" ] \

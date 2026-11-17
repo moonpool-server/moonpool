@@ -1207,6 +1207,14 @@ poll() {
   run state_of; [ "$output" = "installed" ]
 }
 
+@test "install state: an update Steam cancelled is reported as paused, with Steam's reason" {
+  install_env; write_installing
+  printf '[2026-11-17 14:01:55] AppID 1962700 update canceled : Staged file validation failed (0 missing, 1 corrupt, 0 unreadable) (Corrupt update files)
+' >>"$CLOG"
+  run state_of
+  [ "$output" = "paused: Staged file validation failed (0 missing, 1 corrupt, 0 unreadable) (Corrupt update files)" ]
+}
+
 @test "install state: StateFlags 4 while Steam's log says an update started is installing" {
   install_env; write_installing; write_installed
   printf '[2026-10-31 23:00:00] AppID 1962700 update started : download 0/2000000000, stage 0/2000000000\n' >>"$CLOG"
