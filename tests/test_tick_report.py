@@ -26,9 +26,9 @@ def logs(tmp):
     (tmp / "game.log").write_text(game)
     # The archived copy repeats one line with a prefix, as the s6 log does: it counts once.
     (tmp / "game.log.prev").write_text("[2026-11-12T15:20:10Z] " + tick("15.20.10", 0.2))
-    mod = ("[2026-11-12 15:21:00.1] [Lua] [SN2SlotFreeHost] console as dirtbikr59: HealMe (game reply lines follow)"
-           "[2026-11-12 15:21:04.1] [Lua] [SN2SlotFreeHost] console as dirtbikr59 failed: no controller"
-           "[2026-11-12 15:25:00.1] [Lua] [SN2SlotFreeHost] forced save requested on the host controller")
+    mod = ("[2026-11-12 15:21:00.1] [Lua] [MoonpoolHost] console as dirtbikr59: HealMe (game reply lines follow)"
+           "[2026-11-12 15:21:04.1] [Lua] [MoonpoolHost] console as dirtbikr59 failed: no controller"
+           "[2026-11-12 15:25:00.1] [Lua] [MoonpoolHost] forced save requested on the host controller")
     (tmp / "UE4SS.log").write_text(mod)
     (tmp / "metrics.csv").write_text("utc,cpu_cores,mem_mib,players\n2026-11-12T15:20:30Z,2,6000,1\n"
                                      "2026-11-12T15:25:30Z,2,6000,2\n2026-11-12T15:40:00Z,2,6000,4\n")

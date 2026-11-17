@@ -1,4 +1,4 @@
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local notify = require('notify')
 local failures = 0
 local function eq(a,b,n) if a~=b then failures=failures+1; print('not ok '..n) else print('ok '..n) end end

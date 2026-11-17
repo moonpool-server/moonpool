@@ -1,7 +1,7 @@
--- Fake tag timeline for mod/SN2SlotFreeHost/Scripts/cinematic_hold.lua, built
+-- Fake tag timeline for mod/MoonpoolHost/Scripts/cinematic_hold.lua, built
 -- from a host log (join, possession, launch, then tag clearing). Plain Lua 5.4:
 --   lua5.4 tests/lua/cinematic_hold_spec.lua   (from the repository root)
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local hold = require('cinematic_hold')
 
 local failures, ran = 0, 0

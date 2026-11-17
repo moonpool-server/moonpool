@@ -103,21 +103,24 @@ set_ini bUseUObjectArrayCache false
 
 # Our mod: original Lua and the operator's config.
 mods="$UE4SS_DIR/Mods"
+rm -rf "$mods/MoonpoolHost"
+# The host mod's old name: a folder left in place would load beside this one, every hook twice.
 rm -rf "$mods/SN2SlotFreeHost"
-mkdir -p "$mods/SN2SlotFreeHost"
-cp -r "$MOD_SRC/SN2SlotFreeHost/Scripts" "$mods/SN2SlotFreeHost/"
+[ ! -f "$mods/mods.txt" ] || sed -i '/^SN2SlotFreeHost/d' "$mods/mods.txt"
+mkdir -p "$mods/MoonpoolHost"
+cp -r "$MOD_SRC/MoonpoolHost/Scripts" "$mods/MoonpoolHost/"
 # The in-game console's words and replies, and the host's own changes to them from the data volume.
-cp -f "$MOD_SRC/SN2SlotFreeHost/console.json" "$mods/SN2SlotFreeHost/console.json"
-if [ -f "$DATA_DIR/console.json" ]; then cp -f "$DATA_DIR/console.json" "$mods/SN2SlotFreeHost/console.local.json"; fi
-: >"$mods/SN2SlotFreeHost/enabled.txt"
+cp -f "$MOD_SRC/MoonpoolHost/console.json" "$mods/MoonpoolHost/console.json"
+if [ -f "$DATA_DIR/console.json" ]; then cp -f "$DATA_DIR/console.json" "$mods/MoonpoolHost/console.local.json"; fi
+: >"$mods/MoonpoolHost/enabled.txt"
 cfg="$DATA_DIR/sn2headless.json"
 if [ ! -f "$cfg" ]; then
   # First start only; edit $cfg afterwards. Paths and limits come from the launcher's environment.
-  cp "$MOD_SRC/SN2SlotFreeHost/config.example.json" "$cfg"
+  cp "$MOD_SRC/MoonpoolHost/config.example.json" "$cfg"
 fi
-cp -f "$cfg" "$mods/SN2SlotFreeHost/config.json"
-if [ -f "$mods/mods.txt" ] && ! grep -q '^SN2SlotFreeHost' "$mods/mods.txt"; then
-  printf 'SN2SlotFreeHost : 1\n' >>"$mods/mods.txt"
+cp -f "$cfg" "$mods/MoonpoolHost/config.json"
+if [ -f "$mods/mods.txt" ] && ! grep -q '^MoonpoolHost' "$mods/mods.txt"; then
+  printf 'MoonpoolHost : 1\n' >>"$mods/mods.txt"
 fi
 
 if ! ue4ss_needs_layout_set; then
@@ -143,5 +146,5 @@ if [ -f "$UE4SS_DIR/MemberVariableLayout.ini" ] && ! grep -qE '^DebugBuild *= *(
   set_ini DebugBuild false
   log "install-ue4ss: layout files in place, so DebugBuild = false (auto-detect stops the loader with them)"
 fi
-log "install-ue4ss: UE4SS $UE4SS_VERSION (channel $UE4SS_CHANNEL, sha256 $UE4SS_RELEASE_SHA256) and SN2SlotFreeHost staged in $UE4SS_DIR"
+log "install-ue4ss: UE4SS $UE4SS_VERSION (channel $UE4SS_CHANNEL, sha256 $UE4SS_RELEASE_SHA256) and MoonpoolHost staged in $UE4SS_DIR"
 /opt/sn2/bin/install-msvc-runtime.sh

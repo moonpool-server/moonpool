@@ -1,4 +1,4 @@
--- recipe.lua: what the container adds to SN2SlotFreeHost: the moonpool control queue, status.json,
+-- recipe.lua: what the container adds to MoonpoolHost: the moonpool control queue, status.json,
 -- the idle freeze and the player commands. Hosting itself stays in main.lua. Original code, MIT.
 local json = require('json')
 local protocol = require('protocol')
@@ -55,8 +55,8 @@ local function load_config()
   cfg.host = merge({}, DEFAULTS.host)
   -- config.json sits next to Scripts/ in the mod folder; UE4SS runs with the
   -- game's Win64 folder as working directory.
-  local raw = read_file('ue4ss-exp\\Mods\\SN2SlotFreeHost\\config.json')
-    or read_file('ue4ss\\Mods\\SN2SlotFreeHost\\config.json')
+  local raw = read_file('ue4ss-exp\\Mods\\MoonpoolHost\\config.json')
+    or read_file('ue4ss\\Mods\\MoonpoolHost\\config.json')
   if raw then
     local ok, parsed = pcall(json.decode, raw)
     if ok and type(parsed) == 'table' then
@@ -579,7 +579,7 @@ local console = require('console')
 local function load_catalog()
   local cat = {}
   for _, dir in ipairs({ 'ue4ss-exp', 'ue4ss' }) do
-    local base = dir .. '\\Mods\\SN2SlotFreeHost\\'
+    local base = dir .. '\\Mods\\MoonpoolHost\\'
     local raw = read_file(base .. 'console.json')
     if raw then
       local ok, c = pcall(json.decode, raw)

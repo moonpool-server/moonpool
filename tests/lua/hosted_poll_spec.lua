@@ -1,5 +1,5 @@
 -- This fake counts the game-object scan boundary without loading UE4SS.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local poll = require('hosted_poll')
 local failures, scans, holds, replays, now = 0, 0, 0, 0, 0
 local live = { ['/Game/PS1'] = true }

@@ -1,6 +1,6 @@
--- Fake game for mod/SN2SlotFreeHost/Scripts/friend_code.lua. Plain Lua 5.4:
+-- Fake game for mod/MoonpoolHost/Scripts/friend_code.lua. Plain Lua 5.4:
 --   lua5.4 tests/lua/friend_code_spec.lua   (from the repository root)
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local fc = require('friend_code')
 
 local failures = 0

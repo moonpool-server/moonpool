@@ -1,7 +1,7 @@
--- Stub-clock tests for mod/SN2SlotFreeHost/Scripts/save_policy.lua. Plain Lua 5.4:
+-- Stub-clock tests for mod/MoonpoolHost/Scripts/save_policy.lua. Plain Lua 5.4:
 --   lua5.4 tests/lua/save_policy_spec.lua   (from the repository root)
 -- Counts every failure and exits 1 at the end if any; bats runs it in tests/control-protocol.bats.
-package.path = 'mod/SN2SlotFreeHost/Scripts/?.lua;' .. package.path
+package.path = 'mod/MoonpoolHost/Scripts/?.lua;' .. package.path
 local sp = require('save_policy')
 
 local failures = 0
