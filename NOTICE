@@ -55,12 +55,13 @@ Pillow
 Wine and Wine Staging
   Project: https://www.winehq.org/ and https://gitlab.winehq.org/wine/wine-staging
   License: GNU Lesser General Public License v2.1 or later
-  Installed into the image from WineHQ's Debian packages by the Dockerfile.
+  Installed into the image from WineHQ's Debian packages by the Dockerfile; in the default
+  (wine-tkg) image their Wine program is removed and only the system libraries they bring stay.
   Source is available from the projects above and from WineHQ's source
   packages for the installed version.
 
 ------------------------------------------------------------------------------
-wine-tkg (only in an image built with --build-arg WINE_RUNTIME=tkg)
+wine-tkg (the default image; not in one built with --build-arg WINE_RUNTIME=winehq)
   Project: https://github.com/Frogging-Family/wine-tkg-git (patch set and build
   system), built by https://github.com/Kron4ek/Wine-Builds (build scripts: MIT
   License) from the source in https://github.com/Kron4ek/wine-tkg
