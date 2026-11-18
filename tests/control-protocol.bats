@@ -2705,3 +2705,9 @@ for c in calls:
   [ "$status" -eq 0 ]
   [[ $output == *"diag screenshot -> screenshot"* ]]
 }
+
+@test "Lua JSON keeps null, empty tables, sorted keys, escapes, surrogate pairs and its nesting limit" {
+  run lua5.4 tests/lua/json_spec.lua
+  [ "$status" -eq 0 ]
+  [[ $output == *"35 tests, 0 failures"* ]]
+}

@@ -1,5 +1,5 @@
 -- Minimal JSON encode/decode for MoonpoolHost (UE4SS ships no JSON library).
--- Handles objects, arrays, strings (with \uXXXX for the BMP), numbers, true,
+-- Handles objects, arrays, strings (\uXXXX escapes, surrogate pairs joined), numbers, true,
 -- false and null. Original code, MIT licensed with the rest of this project.
 local M = {}
 
@@ -75,7 +75,17 @@ local function decode_string(s, i)
       elseif e == 'u' then
         local hex = s:sub(j + 2, j + 5)
         if not hex:match('^%x%x%x%x$') then decode_error(s, j, 'bad \\u escape') end
-        out[#out + 1] = utf8.char(tonumber(hex, 16)); j = j + 6
+        local code = tonumber(hex, 16); j = j + 6
+        -- Outside the BMP a character comes as a surrogate pair (Python's json.dumps writes emoji
+        -- this way); the pair is one character. A surrogate on its own is not text.
+        if code >= 0xDC00 and code <= 0xDFFF then decode_error(s, j - 6, 'lone low surrogate') end
+        if code >= 0xD800 and code <= 0xDBFF then
+          local low = s:match('^\\u(%x%x%x%x)', j)
+          low = low and tonumber(low, 16)
+          if not low or low < 0xDC00 or low > 0xDFFF then decode_error(s, j - 6, 'lone high surrogate') end
+          code = 0x10000 + (code - 0xD800) * 0x400 + (low - 0xDC00); j = j + 6
+        end
+        out[#out + 1] = utf8.char(code)
       else decode_error(s, j, 'bad escape') end
     elseif c:byte() < 0x20 then decode_error(s, j, 'control character in string')
     else out[#out + 1] = c; j = j + 1 end
