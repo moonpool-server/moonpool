@@ -111,6 +111,8 @@ The join page then offers **Play with mods**. Players install the launcher once,
 ![The launcher asking which of the demo's mods to install, with the site each comes from](docs/images/launcher-install.png)
 
 > Mods run with the player's Windows rights, and Moonpool doesn't review them. Accept mods only from a host you trust.
+>
+> The setup file has no Windows code signing, and nothing checks the setup file itself. It checks the launcher's signature before running it ([SECURITY.md](SECURITY.md)).
 
 | More on | Where |
 |---|---|
@@ -177,7 +179,7 @@ Tested by hand with real players over the internet. CI runs Moonpool's own tests
 | public | `25400633` | Hosts, players join |
 | experimental | `26283380` | Hosts, players join with mods, world moved between hosts (short sessions) |
 | experimental | `26496980` | Hosts with UE4SS 1190 and two layout files ([Updates](docs/operating.md#updates)); players join with mods |
-| experimental | `26496980` | Fresh install on a second PC following this README, then the live world, history and settings moved over with `server pack`/`unpack` (2026-11-17). The snags it found are fixed: [#153](https://github.com/moonpool-server/moonpool/pull/153), [#154](https://github.com/moonpool-server/moonpool/pull/154), [#159](https://github.com/moonpool-server/moonpool/pull/159), [#160](https://github.com/moonpool-server/moonpool/pull/160), [#161](https://github.com/moonpool-server/moonpool/pull/161) |
+| experimental | `26496980` | Fresh install on a second PC from this README, then a live world moved over with `server pack`/`unpack` |
 
 A game update can stop hosting; the host reports it and the [guide](docs/operating.md#updates) says what to do. Tried another build? Open an issue.
 

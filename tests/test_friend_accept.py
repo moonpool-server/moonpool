@@ -25,6 +25,9 @@ try:
     from cryptography.hazmat.primitives.ciphers import Cipher, modes
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 except ImportError:  # the pre-commit hook supplies it; a bare python may not
+    if __name__ != "__main__":
+        import pytest
+        pytest.skip("needs the cryptography package", allow_module_level=True)
     print("skip: the cryptography package is not installed; run:\n"
           "  uv run --no-project --with cryptography python tests/test_friend_accept.py")
     sys.exit(0)

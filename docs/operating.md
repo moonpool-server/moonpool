@@ -227,6 +227,17 @@ A new build hosts only if the mod loader works on it:
 - Players may need their own set too ([mods](mods.md#players-loader-on-experimental-builds)).
 - The older pinned loader takes a set per build in a folder under `ue4ss-layouts`: `MemberVariableLayout.ini`, `VTableLayout.ini`, `UE4SS-settings.ini`, `UE4SS_Signatures`, and the game exe's SHA-256 in `exe.sha256`.
 
+## Wine
+
+The image runs the game under wine-tkg-staging-fsync 10.10 (Kron4ek's build): Wine Staging with fsync, which WineHQ's Wine never had and later wine-tkg builds dropped for ntsync.
+
+| Runtime | Idle server, p95 frame time | One player, p95 |
+|---|---|---|
+| wine-tkg fsync 10.10 (default) | 0.12 s | 0.20 s |
+| WineHQ | 1.55 s | 0.61 s |
+
+Proton's Wine is not used: the Windows Steam client doesn't start under it (`InternalAPI_Init_Internal failed`).
+
 ## Hooks and scheduled jobs
 
 Two files in the data volume, both able to call anything in `bin/moonpool`:
