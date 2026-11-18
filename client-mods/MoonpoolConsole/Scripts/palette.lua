@@ -555,7 +555,7 @@ local function pick_tab(n)
   query = nil  -- searched again on the next read
 end
 
--- A click: on a tab shows it, on a row chooses it (a second click runs it), on an action runs it.
+-- A click only highlights: a tab shows it, a row is chosen, an action is picked. Enter sends.
 -- The target is whichever of them has the mouse over it.
 local function hovered(widget)
   local ok, over = ucall(widget, G.is_hovered)
@@ -568,14 +568,13 @@ local function click()
   end
   for i, r in ipairs(ui.rows) do
     if found[i] and hovered(r.frame) then
-      if i == chosen then return run() end
-      chosen, action = i, 1
+      if i ~= chosen then chosen, action = i, 1 end
       return mark()
     end
   end
   local e = chosen_entry()
   for i, area in ipairs(ui.act_areas) do
-    if e and e.actions[i] and hovered(area) then action = i; return run() end
+    if e and e.actions[i] and hovered(area) then action = i; return mark() end
   end
 end
 

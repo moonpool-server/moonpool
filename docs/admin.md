@@ -173,8 +173,8 @@ Not yet tested with a second player:
 | Key | Does |
 |---|---|
 | typing | searches: a row shows if it has every typed word, in its name, data name or category. A number at the end is the count: `glass 10` |
-| Up, Down, PgUp, PgDn, mouse wheel | move the choice, one row or a page |
-| Enter, or a second click on a row | sends the chosen action at once, or, with nothing matching, the line as typed |
+| Up, Down, PgUp, PgDn, mouse wheel, a click on a row | move the choice, one row or a page; a click only chooses |
+| Enter | sends the chosen action at once, or, with nothing matching, the line as typed |
 | Tab | puts the exact line the action would send in the search field to change first (`Item DA_Gold_ItemType 1` to `... 10`); a server command stops where its argument goes (`mp give `) |
 | Ctrl+Left, Ctrl+Right, or a click | picks the row's action (Give, Spawn, Equip) |
 | Alt+1 to Alt+7, or a click | shows that tab |
