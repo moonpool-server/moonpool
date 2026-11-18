@@ -81,11 +81,14 @@ return {
     { '^(God)$', '%1' }, { '^(Fly)$', '%1' }, { '^(NoClip)$', '%1' }, { '^(Invisible)$', '%1' },
     { '^(FreeBuild)$', '%1' }, { '^(FastSwim)$', '%1' }, { '^(UnlimitedPower)$', '%1' },
   },
-  -- The actions an item row offers, each a line with {id} (the item's data name) and {count}. Equip
-  -- only on items the game calls equippable. A number at the end of the search ("glass 10") is the count.
-  -- The game's Item command answers "was not found" for things that go into the world (vehicles,
-  -- base pieces, posters): those spawn. Their PickupDestination says so, but reading that enum from
-  -- Lua crashed the game in UE4SS when an item's value had no name, so it is not read.
+  -- The actions an item row offers come from the game's own cheat lists: each list's command ("Item {0}
+  -- 1") is the action's line, and an item gets the action only if that list holds it (so a Tadpole,
+  -- which the Item list leaves out, only spawns). label: the action's name; list: which of the game's
+  -- lists (game.lists below). A number at the end of the search ("glass 10") is the count.
+  -- item_actions is used only when the game's lists cannot be read; then Equip is offered where the
+  -- game calls an item equippable.
+  list_actions = { { label = 'Give', list = 'item' }, { label = 'Spawn', list = 'spawn' },
+    { label = 'Equip', list = 'equip' } },
   item_actions = {
     { label = 'Give', line = 'Item {id} {count}' },
     { label = 'Spawn', line = 'Spawn {id} {count}' },
@@ -156,6 +159,7 @@ return {
     error = 'the palette could not be shown or closed: {error}',
     gave_back = '{what} was still held after the palette closed; handed back to the game',
     entries = '{items} items, {game} game commands, {server} server commands, {own} own rows',
+    no_lists = "the game's item lists could not be read; items offer the actions in item_actions",
     no_answers = 'server answers show only as the game card: {error}',
     own_bad = 'own rows not read from {file}: {error}',
     timing = '{what} took {ms} ms',
@@ -169,7 +173,7 @@ return {
     panel = '/Game/Blueprints/UI/Cheat/WBP_CheatInput.WBP_CheatInput_C',
     panel_class = 'WBP_CheatInput_C',
     font_from = 'Input',                -- the label whose font the palette's text uses
-    controller = 'PlayerController',
+    controller = 'SN2PlayerController', -- the player in the world; the menus have a controller of their own
     server_cheat = 'SN2PlayerController:ServerCheat', -- named when sending a line fails
     template_prefix = 'Default__',      -- a class's own template object, never a live one
     last_class = 'CheatManager',        -- the walk up the cheat manager's classes ends here
@@ -227,6 +231,21 @@ return {
     interact = 'InteractComp',
     target = '/Script/UWEInteract.UWEInteractComponent:GetSelectedTargetActor',
     location = '/Script/Engine.Actor:K2_GetActorLocation',
+    -- The cheat panel's own lists: the button that opens each and the panel's handler for its click,
+    -- which fills the list's view model (list_model) with the items it holds (each a list_item with
+    -- its data name in list_id). hide_list is the game's command that closes the open list.
+    -- (list_handler with the button's name and the handler's number in the panel's graph).
+    lists = { item = { button = 'ItemButton', event = 0 }, spawn = { button = 'SpawnButton', event = 4 },
+      equip = { button = 'EquipButton', event = 2 } },
+    list_handler = 'BndEvt__WBP_CheatInput_{button}_K2Node_ComponentBoundEvent_{event}'
+      .. '_CommonButtonBaseClicked__DelegateSignature',
+    list_model = 'SN2CheatListViewModel',
+    list_command = 'ConsoleCommand',
+    list_items = 'Items',
+    list_id = 'Context',
+    hide_list = 'HideModal',
+    list_widget = 'WBP_CheatListSelector_C',  -- the list on screen
+    is_activated = '/Script/CommonUI.CommonActivatableWidget:IsActivated',
     activate = '/Script/CommonUI.CommonActivatableWidget:ActivateWidget',
     deactivate = '/Script/CommonUI.CommonActivatableWidget:DeactivateWidget',
     -- ESlateVisibility: the shell takes clicks only on its own parts (SelfHitTestInvisible).

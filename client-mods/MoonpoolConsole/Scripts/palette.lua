@@ -134,10 +134,56 @@ local function own_rows()
   if err then say('own_bad', { file = file, error = err }) end
   return catalog.own(t)
 end
-local function build(pc)
+-- What each of the game's own cheat lists holds, read through the panel's own handlers: each is run as
+-- a click on its button runs it, its list's view model is read (the command, the items' data names)
+-- and the list is closed with the game's own command. A list that cannot be read is left out.
+local function game_lists(pc, panel)
+  local out = {}
+  local system = StaticFindObject(G.system)
+  for _, want in ipairs(CFG.list_actions) do
+    local def = G.lists[want.list]
+    local entry = { label = want.label, ids = {} }
+    local button
+    pcall(function() button = panel[def.button] end)
+    if def and valid(panel) and valid(button) then
+      local handler = route.fill(G.list_handler, def)
+      local ran = pcall(function() panel[handler](panel, button) end)
+      for _, vm in ipairs(ran and live(G.list_model) or {}) do
+        local command = ''
+        pcall(function() command = vm[G.list_command]:ToString() end)
+        local word = command:match('^(%S+)') or ''
+        if word:lower() == want.list then
+          entry.command = command
+          pcall(function()
+            local items = vm[G.list_items]
+            for i = 1, items:GetArrayNum() do
+              local id
+              pcall(function() id = items[i][G.list_id]:ToString() end)
+              if id then entry.ids[id] = true end
+            end
+          end)
+        end
+      end
+      -- Closed the game's way; a list still active after that is deactivated and hidden, or it would
+      -- stay on screen behind the palette.
+      pcall(function() system:ExecuteConsoleCommand(pc, G.hide_list, pc) end)
+      for _, list in ipairs(live(G.list_widget)) do
+        local ok, open = ucall(list, G.is_activated)
+        if ok and open then ucall(list, G.deactivate) end
+        ucall(list, G.set_visibility, G.collapsed)
+      end
+    end
+    out[#out + 1] = entry
+  end
+  return out
+end
+local function build(pc, panel)
   if entries then return entries end
   local t = os.clock()
-  local items = catalog.items(item_facts(), CFG.item_actions, CFG.items.show_unpublished, CFG.items.hidden_categories)
+  local from_game = catalog.list_actions(game_lists(pc, panel))
+  if not from_game then say('no_lists') end
+  local items = catalog.items(item_facts(), from_game or CFG.item_actions, CFG.items.show_unpublished,
+    CFG.items.hidden_categories)
   local game = catalog.game_commands(game_commands(pc), CFG.text.game_detail, params)
   local server = catalog.host_commands(host)
   local own = own_rows()
@@ -638,15 +684,21 @@ local function toggle()
   ExecuteInGameThreadWithDelay(CFG.toggle_gap_ms, function() busy = false end)
   local t = os.clock()
   local pc = live(G.controller)[1]
-  local w = pc and make_shell(pc)
+  if not pc then return end
+  -- It opens only once the player has a body in the world: the game crashed making the panel while
+  -- the world was still loading. Closing needs no body.
+  local pawn
+  pcall(function() pawn = pc.Pawn end)
+  if not shown and not valid(pawn) then return end
+  local w = make_shell(pc)
   if not w then return end
   local want = not shown
+  if want then build(pc, w) end  -- before the panel shows: reading the game's lists opens and closes them
   if not ucall(w, G.set_visibility, want and G.shown or G.hidden) then return end
   shown = want
   ucall(w, want and G.activate or G.deactivate)
   input_mode(pc, w, want)
   if want then
-    build(pc)
     set_box('')
     query = nil
     set_text(ui.receipt, looking_at(pc) or '')

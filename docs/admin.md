@@ -163,7 +163,7 @@ Not yet tested with a second player:
 
 | Tab | Rows | What a row sends |
 |---|---|---|
-| Items | the game's items, one row each, the data name under the display name | Give (`Item <id> <count>`), Spawn (`Spawn <id> <count>`), Equip (`Equip <id>`, only where the game calls the item equippable) |
+| Items | the game's items, one row each, the data name under the display name | Give, Spawn and Equip, each only where the game's own Item, Spawn and Equip lists hold the item, with that list's own command (`Item <id> <count>`, `Spawn <id> <count>`, `Equip <id>`). A Tadpole, which the game's Item list leaves out, only spawns |
 | Server | the server's console commands, from its own `console.json` | `mp <command> <arguments>` |
 | Game | the game's console commands, read from the player's cheat manager | the command as written |
 | Macros | the game's macros (`Content/Macros` on the admin's PC) | `RunMacro <name>`, run on the admin's PC, which sends the macro's lines one by one; the server checks each |
@@ -184,7 +184,8 @@ Not yet tested with a second player:
 - After a line is sent, the panel shows it and, for a server command, the server's answer, as the game's notification also does.
 - Undo, from Recent: a spawn by `mp undo`, a tag by its untag, `DayOnly 1` by `DayOnly 0`, `FreezeTime` by `UnfreezeTime`, a toggle (God, Fly, NoClip, …) by running it again. The rules are `opposites` in `config.lua`. A given item has no undo.
 - Unpublished items, items in the game's `Deprecated` folder, and items named `[DEPRECATED…]`, `[PLACEHOLDER…]`, `[PH]` or `[TEST…]` are hidden unless `items.show_unpublished` is set.
-- Known gap: the panel offers Give for things the game only spawns (vehicles, base pieces, posters); the game answers "Item type … was not found", and Spawn works.
+- The first time F2 is pressed in a session, the panel reads those three lists through the game's cheat panel itself (opening and closing them, about 0.3 s). If they can't be read, it offers the actions in `item_actions` and logs that.
+- F2 does nothing until the player has a body in the world: making the panel while the world was still loading crashed the game.
 - The lines run are kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
 
 **Changing it**

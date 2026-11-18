@@ -97,14 +97,23 @@ check(cat.draft(found[1], found[1].actions[1], {}) == 'Item DA_AirBladder_ItemTy
   'the line to edit is the whole line an item action would send')
 check(cat.draft(give, give.actions[1], {}) == 'mp give ', 'a server command is drafted up to the argument still needed')
 
-local placed = cat.items({ DA_Tadpole = { label = 'Tadpole', category = '', published = true, pickup = 3 },
-  DA_Ti = { label = 'Titanium', category = 'Resource', published = true, pickup = 0 } },
-  { { label = 'Give', line = 'Item {id} {count}', not_for_pickup = { 3 } },
-    { label = 'Spawn', line = 'Spawn {id} {count}' } })
+check(cat.list_line('Item {0} 1') == 'Item {id} {count}' and cat.list_line('Equip {0}') == 'Equip {id}',
+  "a game list's command becomes the action's line, its number the count")
+check(cat.list_line('Summon') == nil, 'a command that names no item gives no action')
+local acts = cat.list_actions({ { label = 'Give', command = 'Item {0} 1', ids = { DA_Ti = true } },
+  { label = 'Spawn', command = 'Spawn {0} 1', ids = { DA_Ti = true, DA_Tadpole = true } },
+  { label = 'Equip', command = 'Equip {0}', ids = {} } })
+check(#acts == 2, 'a list that could not be read is left out')
+local placed = cat.items({ DA_Tadpole = { label = 'Tadpole', category = '', published = true },
+  DA_Ti = { label = 'Titanium', category = 'Resource', published = true } }, acts)
 local by = {}
 for _, e in ipairs(placed) do by[e.name] = e end
 check(#by.Tadpole.actions == 1 and by.Tadpole.actions[1].label == 'Spawn' and #by.Titanium.actions == 2,
-  'an item the game puts in the world spawns and is not offered as Give')
+  "each item gets only the actions whose game list holds it: Tadpole spawns, Titanium gives and spawns")
+check(cat.line(by.Titanium, by.Titanium.actions[1], { count = 5 }) == 'Item DA_Ti 5',
+  "the game's own command, with the count")
+check(cat.list_actions({ { label = 'Give', command = 'Item {0} 1', ids = {} } }) == nil,
+  'no list read: nil, so the caller keeps its own actions')
 
 check(give.signature == 'mp give  <item: items>  [count = 1]',
   'a server command shows its arguments, a default in brackets')
