@@ -870,8 +870,7 @@ local function toggle()
     query = nil
     targets, target = read_targets(pc), 1
     -- The game's own hints show their designer text until shown once, so theirs is set on the first
-    -- opening. Set again on a later opening, the widget drew a stray glyph in place of the hint (seen
-    -- in game), so it is set only once.
+    -- opening, and only then: set again, the widget draws a stray glyph in place of the hint.
     for _, gh in ipairs(ui.game_hints or {}) do
       if valid(gh.widget) and not gh.set then
         gh.set = true
