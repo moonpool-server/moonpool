@@ -1218,6 +1218,8 @@ end
 -- Saving (save_policy.lua): with SAVE_EVERY_MINUTES set, the game's own 2-minute autosave is
 -- switched off and the host saves every N minutes and once after each batch of leavers.
 local SAVES = save_policy.new({ every_s = idle.seconds(os.getenv('SN2_SAVE_EVERY_MINUTES') or '0', 60) })
+-- SAVE_NOTICE=true: each save the host asks for shows the players a short game notification.
+local SAVE_NOTICE = os.getenv('SN2_SAVE_NOTICE') == 'true'
 local GAME_LOG = os.getenv('SN2_GAME_LOG_WIN')
 local game_log_pos = nil
 -- autosave_completed lines the game log gained since the last call; complete lines only, and none
@@ -1254,7 +1256,15 @@ local function save_tick(st)
       end
     elseif act == 'save' then
       local ok, _, err = handlers.save()
-      if not ok then log('saves: scheduled save not requested: ' .. tostring(err)) end
+      if not ok then log('saves: scheduled save not requested: ' .. tostring(err))
+      elseif SAVE_NOTICE then
+        local sent, why = pcall(function()
+          local to = notify.targets(status.live_players(to_str), HOST_NAME)
+          notify.send({ find = StaticFindObject, world = function() return to[1] end, log = log, text = FText },
+            to, 'info', 'Saving the world', '', 3)
+        end)
+        if not sent then log('saves: save notice not sent: ' .. tostring(why)) end
+      end
     end
   end
 end
