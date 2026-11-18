@@ -111,11 +111,11 @@ return {
     { label = 'Tabs', key = 'Alt 1-7' },
     { label = 'Page', key = 'PgUp PgDn' }, { label = 'Close', key = 'Esc', action = 'CloseAction', core = true },
     { label = 'Keys', key = 'F1', core = true } },
-  -- Who an item is for: the player (the game's own actions), another player in the game, or everyone.
-  -- For someone else the line is the server's give (give_for: {word}, {who}, {id}, {count}), which
-  -- picks Give or Spawn from the game's own lists. everyone_word is the server's word for all players.
+  -- Who an item is for: the player, another player in the game, or everyone. For someone else the
+  -- chosen action's own line is run as them by the server's console (for_others: {word}, {who},
+  -- {line}), so Spawn spawns at each one's own place. everyone_word is the server's word for all players.
   max_targets = 8,
-  give_for = '{word} @{who} give {id} {count}',
+  for_others = '{word} @{who} {line}',
   everyone_word = 'all',
   -- Words the palette shows.
   text = {
@@ -125,6 +125,7 @@ return {
     me = 'Me',
     everyone = 'Everyone',
     found = '{count} results',
+    found_one = '1 result',
     found_more = '{shown} of {count} results',
     none = 'Nothing matches. Enter sends the line as typed.',
     sent = 'Sent: {line}',

@@ -165,12 +165,13 @@ function M.searchable(entries, kind, query)
   return out
 end
 
--- The line that gives an item to someone else: through the server's console, which picks Give or
--- Spawn from the game's own lists. template: with {word}, {who}, {id} and {count}.
-function M.give_for(template, word, who, id, count)
+-- The line that runs an action for someone else: the action's own line, run by the server's console
+-- as that player (or every player), so Spawn spawns at each one's own place.
+-- template: with {word}, {who} (a name's first word, or the server's word for everyone) and {line}.
+function M.for_others(template, word, who, line)
   local first = tostring(who or ''):match('^(%S+)') or ''
   return (tostring(template):gsub('{(%w+)}', function(k)
-    return ({ word = word, who = first, id = id, count = tostring(count or 1) })[k] or ''
+    return ({ word = word, who = first, line = line })[k] or ''
   end))
 end
 

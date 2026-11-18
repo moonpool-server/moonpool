@@ -131,10 +131,10 @@ check(det.DA_A == 'Resource · DA_A' and det.DA_B == 'Resource · DA_B', 'the da
 local mixed2 = { { kind = 'recent', name = 'give glass' }, { kind = 'item', name = 'Glass' } }
 check(#cat.searchable(mixed2, nil, 'gla') == 1 and #cat.searchable(mixed2, nil, '') == 2
   and #cat.searchable(mixed2, 'recent', 'gla') == 2, 'recent lines show on their tab, or on All with nothing typed')
-check(cat.give_for('{word} @{who} give {id} {count}', 'mp', 'Johnny Pappis', 'DA_Copper_ItemType', 5)
-  == 'mp @Johnny give DA_Copper_ItemType 5', "giving to someone else goes through the server, by the name's first word")
-check(cat.give_for('{word} @{who} give {id} {count}', 'mp', 'all', 'DA_X', nil) == 'mp @all give DA_X 1',
-  'everyone, with the count defaulting to 1')
+check(cat.for_others('{word} @{who} {line}', 'mp', 'Johnny Pappis', 'Spawn DA_CopperWire_ItemType 1')
+  == 'mp @Johnny Spawn DA_CopperWire_ItemType 1', "for someone else, the chosen action's own line, as that player")
+check(cat.for_others('{word} @{who} {line}', 'mp', 'all', 'Equip DA_X') == 'mp @all Equip DA_X',
+  'everyone, by the server word')
 
 if failures > 0 then os.exit(1) end
 print('console catalog: ok')

@@ -179,6 +179,10 @@ local function read_game_list(pc, panel, def)
       end)
     end
   end
+  if CFG.trace then
+    say('key', { what = 'list ' .. def.button .. ': ' .. (found and (found.command .. ', ' .. #found.items .. ' items')
+      or ('nothing new among ' .. #live(G.list_model) .. ' view models')) })
+  end
   local system = StaticFindObject(G.system)
   pcall(function() system:ExecuteConsoleCommand(pc, G.hide_list, pc) end)
   for _, list in ipairs(live(G.list_widget)) do
@@ -519,12 +523,15 @@ local function read_targets(pc)
   out[#out + 1] = { label = CFG.text.everyone, who = CFG.everyone_word }
   return out
 end
--- The line an action sends: for someone else, an item goes through the server's give.
+-- Rows that can be for someone else: the game's items.
+local function for_anyone(e) return e and e.kind == 'item' end
+-- The line an action sends: for someone else, the action's own line run as them by the server.
 local function line_for(e, act, count)
-  if e.kind == 'item' and targets[target] and targets[target].who then
-    return catalog.give_for(CFG.give_for, WORD, targets[target].who, e.id, count)
+  local line = catalog.draft(e, act, { count = count })
+  if for_anyone(e) and targets[target] and targets[target].who then
+    return catalog.for_others(CFG.for_others, WORD, targets[target].who, line)
   end
-  return catalog.draft(e, act, { count = count })
+  return line
 end
 local function chosen_entry() return found[chosen] end
 -- The chosen row's colour, its actions and the line Enter sends; the row is scrolled into view.
@@ -544,7 +551,7 @@ local function mark()
     set_color(t, i == action and C.amber or C.muted)
     ucall(ui.act_areas[i], G.set_brush_color, a and i == action and C.chosen or C.row)
   end
-  local is_item = e and e.kind == 'item'
+  local is_item = for_anyone(e)
   ucall(ui.for_row, G.set_visibility, is_item and G.shown or G.collapsed)
   for i, t in ipairs(ui.targets) do
     local who = is_item and targets[i]
@@ -581,7 +588,7 @@ local function search(text)
   rows = catalog.searchable(rows, CFG.tabs[tab].kind, wanted)
   local list, all = catalog.search(rows, wanted, CFG.max_rows, CFG.tabs[tab].kind, recent_first)
   found, chosen, action = list, 1, 1
-  local found_text = all > #found and CFG.text.found_more or CFG.text.found
+  local found_text = all > #found and CFG.text.found_more or all == 1 and CFG.text.found_one or CFG.text.found
   set_text(ui.count, route.fill(found_text, { shown = #found, count = all }))
   if #found == 0 and text ~= '' then set_text(ui.receipt, CFG.text.none); set_color(ui.receipt, C.muted); ui.none = true
   elseif ui.none then set_text(ui.receipt, ''); ui.none = false end
@@ -674,7 +681,7 @@ local function run()
     return
   end
   local act = e.actions[action] or e.actions[1]
-  if e.kind == 'item' and targets[target] and targets[target].who then
+  if for_anyone(e) and targets[target] and targets[target].who then
     local line = line_for(e, act, count)
     if send(pc, line) then remember(line) end
     return
