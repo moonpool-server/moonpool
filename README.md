@@ -139,6 +139,8 @@ List admins by Epic ID in `ADMINS`, then give orders from inside the game. Nothi
 - Orders from anyone else are dropped and logged. One gap: if the host can't take a sender's cheat rights away at the moment a line arrives, the game runs that line and the sender is removed afterwards ([details](docs/admin.md#the-games-cheat-panel-and-who-it-obeys)). It hasn't happened on our server.
 - Admins who want a keyboard can add the optional admin panel: F2 opens one search over the game's items, the game's and the server's commands and the admin's own, with the actions each offers.
 
+![The admin panel: a search for copper lists Copper, Copper Wire and Copper Ingot; under it the actions Give, Spawn and Equip, who the item is for, and the line Enter sends](docs/images/admin-panel.png)
+
 Details: [docs/admin.md](docs/admin.md).
 
 ## What's exposed

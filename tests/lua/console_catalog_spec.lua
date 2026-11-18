@@ -121,5 +121,20 @@ local sig = cat.game_commands({ give = 'Give' }, '', { Give = { { name = 'ItemNa
   { name = 'Amount', kind = 'number' } } })[1].signature
 check(sig == 'Give  <ItemName: text>  <Amount: number>', "a game command shows its parameters and their kinds")
 
+local shown = cat.items({ DA_A = { label = 'Algae Block', category = 'Resource', published = true },
+  DA_B = { label = 'Algae Block', category = 'Resource', published = true },
+  DA_C = { label = 'Copper', category = 'Resource', published = true } }, actions)
+local det = {}
+for _, e in ipairs(shown) do det[e.id] = e.detail end
+check(det.DA_C == 'Resource', "an item's second line is its category in the game's data")
+check(det.DA_A == 'Resource · DA_A' and det.DA_B == 'Resource · DA_B', 'the data name is added where names are shared')
+local mixed2 = { { kind = 'recent', name = 'give glass' }, { kind = 'item', name = 'Glass' } }
+check(#cat.searchable(mixed2, nil, 'gla') == 1 and #cat.searchable(mixed2, nil, '') == 2
+  and #cat.searchable(mixed2, 'recent', 'gla') == 2, 'recent lines show on their tab, or on All with nothing typed')
+check(cat.for_others('{word} @{who} {line}', 'mp', 'Johnny Pappis', 'Spawn DA_CopperWire_ItemType 1')
+  == 'mp @Johnny Spawn DA_CopperWire_ItemType 1', "for someone else, the chosen action's own line, as that player")
+check(cat.for_others('{word} @{who} {line}', 'mp', 'all', 'Equip DA_X') == 'mp @all Equip DA_X',
+  'everyone, by the server word')
+
 if failures > 0 then os.exit(1) end
 print('console catalog: ok')

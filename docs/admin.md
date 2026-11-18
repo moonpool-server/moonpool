@@ -166,9 +166,9 @@ Not yet tested with a second player:
 | Items | the game's items, one row each, the data name under the display name | Give, Spawn and Equip, each only where the game's own Item, Spawn and Equip lists hold the item, with that list's own command (`Item <id> <count>`, `Spawn <id> <count>`, `Equip <id>`). A Tadpole, which the game's Item list leaves out, only spawns |
 | Server | the server's console commands, from its own `console.json` | `mp <command> <arguments>` |
 | Game | the game's console commands, read from the player's cheat manager | the command as written |
-| Macros | the game's macros (`Content/Macros` on the admin's PC) | `RunMacro <name>`, run on the admin's PC, which sends the macro's lines one by one; the server checks each |
+| Macros | the game's own Macro list, read like the item lists (the settings' `macros` only if it can't be read) | that list's own command, run on the admin's PC, which sends the macro's lines one by one; the server checks each |
 | Mine | the admin's own rows (below) | their own lines |
-| Recent | the lines run from the panel, newest first | the line again, and Undo where one is known |
+| Recent | the lines run from the panel, newest first; on All they show only while nothing is typed | the line again, and Undo where one is known |
 
 | Key | Does |
 |---|---|
@@ -177,11 +177,14 @@ Not yet tested with a second player:
 | Enter | sends the chosen action at once, or, with nothing matching, the line as typed |
 | Tab | puts the exact line the action would send in the search field to change first (`Item DA_Gold_ItemType 1` to `... 10`); a server command stops where its argument goes (`mp give `) |
 | Ctrl+Left, Ctrl+Right, or a click | picks the row's action (Give, Spawn, Equip) |
+| Ctrl+Up, Ctrl+Down, or a click | picks who an item is for: Me, each other player in the game's player list, or Everyone. For anyone but you, the chosen action's own line is run as them by the server's console (`mp @<player> Spawn <id> 1`, `mp @all Item <id> 5`), so a Spawn lands at each player's own place |
+| F1 | shows or hides the other key hints |
 | Alt+1 to Alt+7, or a click | shows that tab |
 | Esc, F2 | closes the panel |
 
 - Equip, as the game runs it, puts the item in the player's hand (a toolbar slot) or in its equipment slot, which is why the game's Equip list holds resources too. Checked on this build: Air Bladder and High Capacity Air Tank equipped, a Standard Air Tank already worn was left, and Repair Tool, Titanium and Copper went into a toolbar slot and the hand.
-- Along the bottom, the keys. Close is the game's own hint (`WBP_InputHintText`, its `CloseAction`), so it shows the key the player has bound; the others are keys the game has no action for, drawn to look the same.
+- Places (the game's Goto list) are not in the panel: the cheat panel's Goto button fills no list the panel can read. `mp @all Goto <place>` typed in the search field sends everyone to one of the game's places.
+- Along the bottom: Send, Edit first, Close and Keys (F1 shows the rest). Close is the game's own hint (`WBP_InputHintText`, its `CloseAction`), so it shows the key the player has bound; the others are keys the game has no action for, drawn to look the same.
 - Under the list: the chosen command's signature (`Give  <ItemName: text>  <Amount: number>`, `mp give  <item: items>  [count = 1]`) and the line Enter sends.
 - After a line is sent, the panel shows it and, for a server command, the server's answer, as the game's notification also does.
 - Undo, from Recent: a spawn by `mp undo`, a tag by its untag, `DayOnly 1` by `DayOnly 0`, `FreezeTime` by `UnfreezeTime`, a toggle (God, Fly, NoClip, …) by running it again. The rules are `opposites` in `config.lua`. A given item has no undo.

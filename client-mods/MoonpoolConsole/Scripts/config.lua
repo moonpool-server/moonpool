@@ -14,6 +14,8 @@ return {
   run_key = 'RETURN',
   edit_key = 'TAB',
   action_keys = { LEFT_ARROW = -1, RIGHT_ARROW = 1 },
+  -- With action_modifier: who an item is for (the player, another player, everyone).
+  target_keys = { UP_ARROW = -1, DOWN_ARROW = 1 },
   action_modifier = 'CONTROL',
   -- Page keys move the choice a page of rows (page_rows) at a time.
   page_keys = { PAGE_UP = -1, PAGE_DOWN = 1 },
@@ -35,30 +37,32 @@ return {
   layout = { left = 0.33, right = 0.67, top = 0.16 },
   -- The results scroll in a list at most list_height tall (screen units before scaling); at most
   -- max_rows of them are kept, the best first. answer_lines: lines of a server answer shown.
-  list_height = 330,
+  list_height = 420,
   max_rows = 60,
   answer_lines = 4,
   -- Colours (R, G, B, A from 0 to 1) and text sizes.
   colors = {
-    surface = { R = 0.012, G = 0.035, B = 0.07, A = 0.94 },
-    field = { R = 0.03, G = 0.09, B = 0.15, A = 1.0 },
-    chosen = { R = 0.55, G = 0.38, B = 0.08, A = 0.55 },
+    surface = { R = 0.012, G = 0.035, B = 0.07, A = 1.0 },
+    field = { R = 0.005, G = 0.02, B = 0.045, A = 1.0 },
+    chosen = { R = 0.02, G = 0.32, B = 0.42, A = 1.0 },
     row = { R = 0, G = 0, B = 0, A = 0 },
     text = { R = 0.92, G = 0.97, B = 1.0, A = 1.0 },
     muted = { R = 0.55, G = 0.68, B = 0.78, A = 1.0 },
+    dim = { R = 0.38, G = 0.48, B = 0.56, A = 1.0 },
     accent = { R = 0.35, G = 0.85, B = 0.95, A = 1.0 },
     amber = { R = 1.0, G = 0.75, B = 0.3, A = 1.0 },
     failed = { R = 1.0, G = 0.45, B = 0.4, A = 1.0 },
     key = { R = 0.05, G = 0.16, B = 0.24, A = 1.0 },
   },
-  sizes = { title = 15, field = 18, row = 15, detail = 11, small = 11 },
+  sizes = { title = 18, field = 22, row = 19, detail = 13, small = 14 },
   padding = 14,
   -- The tabs, in order: a label and the kind of row it shows (nil: all).
   tabs = { { label = 'All' }, { label = 'Items', kind = 'item' }, { label = 'Server', kind = 'server' },
     { label = 'Game', kind = 'command' }, { label = 'Macros', kind = 'macro' },
     { label = 'Mine', kind = 'own' }, { label = 'Recent', kind = 'recent' } },
-  -- The game's macros (text files in its Content/Macros on this PC), run here by the game's RunMacro,
-  -- which sends their lines to the server one by one; the server checks each.
+  -- The game's macros come from its own Macro list (game.lists.macro), run here by that list's own
+  -- command, which sends their lines to the server one by one; the server checks each. This list is
+  -- used only when the game's cannot be read.
   macros = {
     { name = 'Base Pack', detail = 'gives items' }, { name = 'Equipment Pack', detail = 'gives items' },
     { name = 'Starting Items', detail = 'gives items' },
@@ -100,14 +104,29 @@ return {
     unfinished = { '^%[DEPRECATED', '^%[PLACEHOLDER', '^%[PH%]', '^%[TEST' } },
   -- The key hints along the bottom: a word and the key in a box. A hint with an action is the game's
   -- own hint for that action (game.hint_widget), which shows the key the player has bound to it.
-  hints = { { label = 'Send', key = 'Enter' }, { label = 'Edit first', key = 'Tab' },
-    { label = 'Action', key = 'Ctrl+Arrows' }, { label = 'Tabs', key = 'Alt 1-7' },
-    { label = 'Page', key = 'PgUp PgDn' }, { label = 'Close', key = 'Esc', action = 'CloseAction' } },
+  -- core: shown always; the rest only after keys_key (F1).
+  keys_key = 'F1',
+  hints = { { label = 'Send', key = 'Enter', core = true }, { label = 'Edit first', key = 'Tab', core = true },
+    { label = 'Action', key = 'Ctrl+Left Right' }, { label = 'For', key = 'Ctrl+Up Down' },
+    { label = 'Tabs', key = 'Alt 1-7' },
+    { label = 'Page', key = 'PgUp PgDn' }, { label = 'Close', key = 'Esc', action = 'CloseAction', core = true },
+    { label = 'Keys', key = 'F1', core = true } },
+  -- Who an item is for: the player, another player in the game, or everyone. For someone else the
+  -- chosen action's own line is run as them by the server's console (for_others: {word}, {who},
+  -- {line}), so Spawn spawns at each one's own place. everyone_word is the server's word for all players.
+  max_targets = 8,
+  for_others = '{word} @{who} {line}',
+  everyone_word = 'all',
   -- Words the palette shows.
   text = {
     title = 'MOONPOOL',
     preview = 'Enter sends: {line}',
-    found = '{shown} of {count}',
+    for_label = 'For:',
+    me = 'Me',
+    everyone = 'Everyone',
+    found = '{count} results',
+    found_one = '1 result',
+    found_more = '{shown} of {count} results',
     none = 'Nothing matches. Enter sends the line as typed.',
     sent = 'Sent: {line}',
     undo = 'Sent: {line}    Undo: {undo}',
@@ -159,7 +178,8 @@ return {
     no_part = 'the palette is off: {what}',
     error = 'the palette could not be shown or closed: {error}',
     gave_back = '{what} was still held after the palette closed; handed back to the game',
-    entries = '{items} items, {game} game commands, {server} server commands, {own} own rows',
+    entries = '{items} items, {game} game commands, {server} server commands, {own} own rows, '
+      .. '{macros} macros from {from}',
     no_lists = "the game's item lists could not be read; items offer the actions in item_actions",
     no_answers = 'server answers show only as the game card: {error}',
     own_bad = 'own rows not read from {file}: {error}',
@@ -189,6 +209,7 @@ return {
     add_child = '/Script/UMG.PanelWidget:AddChild',
     vertical = '/Script/UMG.VerticalBox',
     horizontal = '/Script/UMG.HorizontalBox',
+    wrap_box = '/Script/UMG.WrapBox',
     border = '/Script/UMG.Border',
     text_block = '/Script/UMG.TextBlock',
     textbox_class = '/Script/UMG.EditableText',
@@ -200,6 +221,7 @@ return {
     set_border_padding = '/Script/UMG.Border:SetPadding',
     set_slot_padding_v = '/Script/UMG.VerticalBoxSlot:SetPadding',
     set_slot_padding_h = '/Script/UMG.HorizontalBoxSlot:SetPadding',
+    set_slot_padding_w = '/Script/UMG.WrapBoxSlot:SetPadding',
     textbox_get = '/Script/UMG.EditableText:GetText',
     textbox_set = '/Script/UMG.EditableText:SetText',
     textbox_font = '/Script/UMG.EditableText:SetFont',
@@ -224,6 +246,8 @@ return {
     set_z = '/Script/UMG.CanvasPanelSlot:SetZOrder',
     item_class = 'UWEItemType',
     item_label = 'Name',
+    item_category = 'Category',          -- an item's category tag, its name in tag_name
+    tag_name = 'TagName',
     is_published = '/Script/UWEAssetRegistry.UWEPrimaryDataAssetBase:IsPublished',
     is_equippable = '/Script/UWEInventory.UWEItemType:IsEquippable',
     -- The server's answer arrives as the game's notification, on this player's own component.
@@ -237,13 +261,17 @@ return {
     -- its data name in list_id). hide_list is the game's command that closes the open list.
     -- (list_handler with the button's name and the handler's number in the panel's graph).
     lists = { item = { button = 'ItemButton', event = 0 }, spawn = { button = 'SpawnButton', event = 4 },
-      equip = { button = 'EquipButton', event = 2 } },
+      equip = { button = 'EquipButton', event = 2 }, macro = { button = 'MacroButton', event = 1 } },
     list_handler = 'BndEvt__WBP_CheatInput_{button}_K2Node_ComponentBoundEvent_{event}'
       .. '_CommonButtonBaseClicked__DelegateSignature',
     list_model = 'SN2CheatListViewModel',
     list_command = 'ConsoleCommand',
     list_items = 'Items',
     list_id = 'Context',
+    list_title = 'Title',
+    game_state = 'GameStateBase',        -- the game's player list (player_array), each a name
+    player_array = 'PlayerArray',
+    player_name = 'PlayerNamePrivate',
     hide_list = 'HideModal',
     list_widget = 'WBP_CheatListSelector_C',  -- the list on screen
     is_activated = '/Script/CommonUI.CommonActivatableWidget:IsActivated',
@@ -258,8 +286,8 @@ return {
     -- A tab, row or action takes the mouse (Visible): borders and other containers start out letting
     -- it through to what is under them, and are then never hovered.
     clickable = 0,
-    hidden = 1,
-    collapsed = 2,
+    hidden = 2,      -- not drawn, but keeps its space
+    collapsed = 1,   -- not drawn and takes no space
     layer = 1000,                       -- above the game's own screens
   },
 }
