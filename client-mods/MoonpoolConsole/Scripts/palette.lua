@@ -245,7 +245,7 @@ local function margin(l, t, r, b) return { Left = l, Top = t, Right = r or l, Bo
 
 -- The shell: the game's cheat panel, made once (or one an earlier load of this script left taken
 -- over), every part of it hidden, the palette added to its canvas.
-local function build_ui(w)
+local function build_ui(w, pc)
   local tree, root
   pcall(function() tree = w[G.tree]; root = tree[G.root] end)
   local canvas_cls = StaticFindObject(G.canvas)
@@ -375,22 +375,42 @@ local function build_ui(w)
   ucall(u.answer_area, G.set_content, u.answer)
   ucall(u.answer_area, G.set_visibility, G.collapsed)
   add(col, u.answer_area, margin(0, 4, 0, 0))
-  -- The keys, as the game shows its own: a word, then the key in a box ("Send ( Enter )").
+  -- The keys along the bottom. One that is a game action (h.action) is the game's own hint, which
+  -- draws the player's own key for it ("Close ( Esc )"); the rest, keys the game has no action for,
+  -- are a word and the key in a box made to look like it.
   local hints = make(tree, G.horizontal)
+  local hint_cls, lib = StaticFindObject(G.hint_widget), StaticFindObject(G.widgets)
+  u.game_hints = {}
   for _, h in ipairs(CFG.hints) do
-    local word = text_block(tree, CFG.sizes.small, C.text)
-    set_text(word, h.label .. ' (')
-    add(hints, word, margin(0, 3, 4, 0), true)
-    local cap = text_block(tree, CFG.sizes.small, C.accent)
-    set_text(cap, h.key)
-    local frame = make(tree, G.border)
-    ucall(frame, G.set_brush_color, C.key)
-    ucall(frame, G.set_border_padding, margin(5, 1))
-    ucall(frame, G.set_content, cap)
-    add(hints, frame, margin(0, 1, 4, 0), true)
-    local close = text_block(tree, CFG.sizes.small, C.text)
-    set_text(close, ')')
-    add(hints, close, margin(0, 3, 16, 0), true)
+    local game_hint
+    if h.action and valid(hint_cls) then
+      pcall(function() game_hint = lib:Create(pc, hint_cls, pc) end)
+      if valid(game_hint) then
+        -- Its text is set once it is in the panel: added, it starts again from its designer text.
+        add(hints, game_hint, margin(0, 1, 16, 0), true)
+        if ucall(game_hint, G.hint_set_text, FText(route.fill(G.hint_text, h))) then
+          u.game_hints[#u.game_hints + 1] = { widget = game_hint, text = route.fill(G.hint_text, h) }
+        else
+          ucall(game_hint, G.set_visibility, G.collapsed)
+          game_hint = nil
+        end
+      end
+    end
+    if not game_hint then
+      local word = text_block(tree, CFG.sizes.small, C.text)
+      set_text(word, h.label .. ' (')
+      add(hints, word, margin(0, 3, 4, 0), true)
+      local cap = text_block(tree, CFG.sizes.small, C.accent)
+      set_text(cap, h.key)
+      local frame = make(tree, G.border)
+      ucall(frame, G.set_brush_color, C.key)
+      ucall(frame, G.set_border_padding, margin(5, 1))
+      ucall(frame, G.set_content, cap)
+      add(hints, frame, margin(0, 1, 4, 0), true)
+      local close = text_block(tree, CFG.sizes.small, C.text)
+      set_text(close, ')')
+      add(hints, close, margin(0, 3, 16, 0), true)
+    end
   end
   add(col, hints, margin(0, 8, 0, 0))
   return u
@@ -411,7 +431,7 @@ local function make_shell(pc)
   ucall(w, G.deactivate)
   ucall(w, G.set_visibility, G.hidden)
   local t = os.clock()
-  ui = build_ui(w)
+  ui = build_ui(w, pc)
   trace('building the palette', t)
   if not ui then return nil end
   shell, shown = w, false
@@ -701,6 +721,15 @@ local function toggle()
   if want then
     set_box('')
     query = nil
+    -- The game's own hints go back to their designer text when first shown, so theirs is set again.
+    for _, gh in ipairs(ui.game_hints or {}) do
+      if valid(gh.widget) then
+        pcall(function() gh.widget.OriginalText = FText(gh.text) end)
+        pcall(function() gh.widget.Text = FText(gh.text) end)
+        ucall(gh.widget, G.hint_set_text, FText(gh.text))
+        ucall(gh.widget, G.hint_rebuild)  -- it draws its text and key caps when its mappings are rebuilt
+      end
+    end
     set_text(ui.receipt, looking_at(pc) or '')
     set_color(ui.receipt, C.muted)
     focus_box()
