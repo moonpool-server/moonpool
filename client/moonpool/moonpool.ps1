@@ -44,7 +44,7 @@ param(
   # For tests: how long the game may take to appear after the launch, and a smaller unpack limit.
   [int]$StartWait = 180,
   # How long to wait for a server that is still opening its world (no session in its mod list yet).
-  [int]$SessionWait = 90,
+  [int]$SessionWait = 180,
   [long]$UnpackLimit = 0,
   # For tests: replace the running-game check, the launch and the pages opened.
   [scriptblock]$IsGameRunning,
@@ -1798,7 +1798,7 @@ function Invoke-Join {
 
   $session = Get-Prop $manifest 'session' $null
   $hasSession = { param($s) $s -and [string](Get-Prop $s 'lobby_id' '') -match '^[0-9]+$' -and [string](Get-Prop $s 'host_steamid' '') -match '^[0-9]+$' }
-  # A server that has just started publishes its session a minute or so later; started before that, the
+  # A server that has just started publishes its session one to two minutes later; started before that, the
   # game would open at its menu. So the list is read again every few seconds for a while.
   if (-not (& $hasSession $session) -and $SessionWait -gt 0) {
     # Every file is in place by now, so the window may be closed again while it waits: Set-Status ends
