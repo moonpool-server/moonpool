@@ -180,6 +180,7 @@ Not yet tested with a second player:
 | Alt+1 to Alt+7, or a click | shows that tab |
 | Esc, F2 | closes the panel |
 
+- Equip, as the game runs it, puts the item in the player's hand (a toolbar slot) or in its equipment slot, which is why the game's Equip list holds resources too. Checked on this build: Air Bladder and High Capacity Air Tank equipped, a Standard Air Tank already worn was left, and Repair Tool, Titanium and Copper went into a toolbar slot and the hand.
 - Under the list: the chosen command's signature (`Give  <ItemName: text>  <Amount: number>`, `mp give  <item: items>  [count = 1]`) and the line Enter sends.
 - After a line is sent, the panel shows it and, for a server command, the server's answer, as the game's notification also does.
 - Undo, from Recent: a spawn by `mp undo`, a tag by its untag, `DayOnly 1` by `DayOnly 0`, `FreezeTime` by `UnfreezeTime`, a toggle (God, Fly, NoClip, …) by running it again. The rules are `opposites` in `config.lua`. A given item has no undo.
