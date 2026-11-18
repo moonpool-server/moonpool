@@ -66,6 +66,14 @@ jobs:
             echo "CURSEFORGE_UPLOAD_HOST); the zip is on the GitHub release only."
             exit 0
           fi
+          # The token goes only to CurseForge: a host that is not one of its game sites stops the job.
+          if ! printf '%s' "$HOST" | grep -Eq '^[a-z0-9-]+\.curseforge\.com$'; then
+            echo "CURSEFORGE_UPLOAD_HOST must be <game>.curseforge.com; not sending the token to '$HOST'"
+            exit 1
+          fi
+          if ! printf '%s' "$PROJECT" | grep -Eq '^[0-9]+$'; then
+            echo "CURSEFORGE_PROJECT_ID must be the project's number"; exit 1
+          fi
           # The game's versions, for CURSEFORGE_GAME_VERSIONS (comma-separated ids) when CurseForge asks for them.
           curl -fsS -H "X-Api-Token: $TOKEN" "https://$HOST/api/game/versions" | head -c 4000; echo
           ids="[$(printf '%s' "$VERSION_IDS" | tr -cd '0-9,')]"
