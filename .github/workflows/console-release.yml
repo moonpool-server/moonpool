@@ -1,0 +1,77 @@
+---
+name: Moonpool Console release
+
+# The admin panel as a mod of its own: a console-vX.Y.Z tag zips client-mods/MoonpoolConsole for
+# ue4ss/Mods, attaches it to a GitHub release and, when the CurseForge project is set up, uploads it.
+"on":
+  push:
+    tags: ["console-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Zip, release and upload
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the mod's Lua
+        run: |
+          sudo apt-get install -y --no-install-recommends lua5.4 >/dev/null
+          lua5.4 tests/lua/console_client_spec.lua
+          lua5.4 tests/lua/console_catalog_spec.lua
+      - name: Zip the mod as it goes in ue4ss/Mods
+        id: zip
+        run: |
+          version="${GITHUB_REF_NAME#console-v}"
+          out="MoonpoolConsole-$version.zip"
+          stage="$(mktemp -d)"
+          cp -r client-mods/MoonpoolConsole "$stage/"
+          # A server's own command list is written in by that server when it publishes the mod; the
+          # mod on its own has none, and its Server tab stays hidden.
+          rm -f "$stage/MoonpoolConsole/Scripts/host-commands.lua"
+          : > "$stage/MoonpoolConsole/enabled.txt"
+          cp LICENSE "$stage/MoonpoolConsole/LICENSE"
+          (cd "$stage" && zip -qrX "$GITHUB_WORKSPACE/$out" MoonpoolConsole)
+          echo "file=$out" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Record where the zip came from
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.zip.outputs.file }}
+      - name: Attach it to a GitHub release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          name: Moonpool Console ${{ steps.zip.outputs.version }}
+          generate_release_notes: true
+          files: ${{ steps.zip.outputs.file }}
+      - name: Upload it to CurseForge
+        env:
+          TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          PROJECT: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          HOST: ${{ vars.CURSEFORGE_UPLOAD_HOST }}
+          VERSION_IDS: ${{ vars.CURSEFORGE_GAME_VERSIONS }}
+          FILE: ${{ steps.zip.outputs.file }}
+          VERSION: ${{ steps.zip.outputs.version }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$PROJECT" ] || [ -z "$HOST" ]; then
+            echo "CurseForge not set up (secret CURSEFORGE_TOKEN, variables CURSEFORGE_PROJECT_ID and"
+            echo "CURSEFORGE_UPLOAD_HOST); the zip is on the GitHub release only."
+            exit 0
+          fi
+          # The game's versions, for CURSEFORGE_GAME_VERSIONS (comma-separated ids) when CurseForge asks for them.
+          curl -fsS -H "X-Api-Token: $TOKEN" "https://$HOST/api/game/versions" | head -c 4000; echo
+          ids="[$(printf '%s' "$VERSION_IDS" | tr -cd '0-9,')]"
+          metadata=$(jq -nc --arg v "$VERSION" --argjson gv "$ids" \
+            '{changelog: ("Moonpool Console " + $v + ". Changes: see the GitHub release."), changelogType: "markdown",
+              releaseType: "release", gameVersions: $gv}')
+          curl -fsS -H "X-Api-Token: $TOKEN" -F "metadata=$metadata" -F "file=@$FILE" \
+            "https://$HOST/api/projects/$PROJECT/upload-file"
+          echo

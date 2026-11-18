@@ -502,10 +502,14 @@ end
 -- ---- what it shows -----------------------------------------------------------------------------
 
 local query, tab, found, chosen, action = nil, 1, {}, 1, 1
+local empty_tab = {}  -- tabs with nothing in them, not shown
 local targets, target = {}, 1  -- who an item is for: { label, who } each, who nil for the player
 -- The players now in the game, from its own player list (this player first, as "me"), then everyone.
 local function read_targets(pc)
   local out, mine = { { label = CFG.text.me } }, nil
+  -- Others are reached through a Moonpool server's console: without one (no host-commands.lua) the
+  -- player is the only target, and the line is not shown.
+  if type(host) ~= 'table' then return out end
   pcall(function() mine = pc.PlayerState end)
   local state = FindFirstOf(G.game_state)
   local list
@@ -551,7 +555,7 @@ local function mark()
     set_color(t, i == action and C.amber or C.muted)
     ucall(ui.act_areas[i], G.set_brush_color, a and i == action and C.chosen or C.row)
   end
-  local is_item = for_anyone(e)
+  local is_item = for_anyone(e) and #targets > 1
   ucall(ui.for_row, G.set_visibility, is_item and G.shown or G.collapsed)
   for i, t in ipairs(ui.targets) do
     local who = is_item and targets[i]
@@ -740,7 +744,7 @@ end
 
 -- Alt and a number: that tab.
 local function pick_tab(n)
-  if not (shown and CFG.tabs[n]) then return end
+  if not (shown and CFG.tabs[n]) or empty_tab[n] then return end
   tab = n
   query = nil  -- searched again on the next read
 end
@@ -840,7 +844,17 @@ local function toggle()
   local w = make_shell(pc)
   if not w then return end
   local want = not shown
-  if want then build(pc, w) end  -- before the panel shows: reading the game's lists opens and closes them
+  if want then
+    build(pc, w)  -- before the panel shows: reading the game's lists opens and closes them
+    -- A tab with nothing in it is not shown: without a Moonpool server the Server tab has no commands,
+    -- and Mine is empty until a player adds rows.
+    local have = {}
+    for _, e in ipairs(entries or {}) do have[e.kind] = true end
+    for i, def in ipairs(CFG.tabs) do
+      empty_tab[i] = def.kind ~= nil and def.kind ~= 'recent' and not have[def.kind]
+      if ui.tab_areas[i] then ucall(ui.tab_areas[i], G.set_visibility, empty_tab[i] and G.collapsed or G.clickable) end
+    end
+  end
   if not ucall(w, G.set_visibility, want and G.shown or G.hidden) then return end
   shown = want
   ucall(w, want and G.activate or G.deactivate)
