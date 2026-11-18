@@ -7,8 +7,8 @@ local function lower(s) return tostring(s or ''):lower() end
 -- An entry: { key, name, detail, kind, actions = { { label, line = template } }, args = { {name, default} } }.
 -- A template's {names} are filled from the entry (id) and its args when an action runs.
 
--- The game's items: facts maps an item's data id to { label, category, published, equippable, pickup }.
--- An action leaves out items whose pickup (the game's PickupDestination) is in its not_for_pickup.
+-- The game's items: facts maps an item's data id to { label, category, published, equippable }.
+-- An action with ids (from the game's own list, list_actions) is offered only for the items it holds.
 -- Same-named items are told apart by their data id in detail.
 function M.items(facts, actions, show_unpublished, hidden_categories)
   local out = {}
@@ -18,9 +18,8 @@ function M.items(facts, actions, show_unpublished, hidden_categories)
     if (f.published or show_unpublished) and f.label ~= '' and not (hidden and not show_unpublished) then
       local acts = {}
       for _, a in ipairs(actions or {}) do
-        local barred = false
-        for _, v in ipairs(a.not_for_pickup or {}) do barred = barred or f.pickup == v end
-        if (not a.equippable or f.equippable) and not barred then
+        local held = not a.ids or a.ids[id]
+        if (not a.equippable or f.equippable) and held then
           acts[#acts + 1] = { label = a.label, line = a.line }
         end
       end
@@ -30,6 +29,27 @@ function M.items(facts, actions, show_unpublished, hidden_categories)
     end
   end
   return out
+end
+
+-- A game list's own command as an action line: its {0} is the item ({id}) and a number at its end the
+-- count ({count}): "Item {0} 1" -> "Item {id} {count}". Nil when the command names no item.
+function M.list_line(command)
+  command = tostring(command or '')
+  if not command:find('{0}', 1, true) then return nil end
+  local line = command:gsub('{0}', '{id}')
+  return (line:gsub('%s%d+%s*$', ' {count}'))
+end
+
+-- Item actions from the game's own lists ({ label, command, ids = { [id] = true } }): an item gets an
+-- action only if that list holds it, with the list's own command. Lists that could not be read
+-- (no ids) are left out; with none read, nil, and the caller keeps its own actions.
+function M.list_actions(lists)
+  local out = {}
+  for _, l in ipairs(lists or {}) do
+    local line = M.list_line(l.command)
+    if line and next(l.ids or {}) then out[#out + 1] = { label = l.label, line = line, ids = l.ids } end
+  end
+  return #out > 0 and out or nil
 end
 
 -- The game's own commands (lowercase name -> name), sent as typed. params maps a name to its
