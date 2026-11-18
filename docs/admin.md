@@ -23,6 +23,11 @@ Admins are listed by Epic ID, the `eos=` value the UE4SS log prints as each play
 
 Names and Steam IDs don't count, because a client can claim those.
 
+**Moderators** are listed the same way in `control/moderators.txt` (read while running).
+- **What they may send:** only console lines led by the console's word (`mp who`) whose command is in `moderator_commands` in `console.json`. As shipped that's `who`, `find`, `list`, `cheats` and `help`.
+- **What they may not:** game cheat lines and anything else, which the server drops as it does for any player.
+- PDA signal orders stay with admins.
+
 ## Orders through a PDA signal
 
 Nothing to install: rename any PDA signal to a command.
@@ -107,6 +112,14 @@ The game's macros are text files in `Content/Macros` on each admin's PC, one con
 | SculptDebugNoSupports | SculptDebug, then `BaseToggleSupportCheck` | `normal`, and `BaseToggleSupportCheck` once more; the host can't tell whether it's on |
 | damagedebug | four `giveability` lines | nothing: the game can't find them |
 
+## What admins ran
+
+Every admin line the server handles gets one JSON line in `logs/admin-audit.log` in the data volume:
+- **When it's written:** a line typed or picked in game, a console line, a PDA signal order, and a cheat line from a non-admin that the gate refused.
+- **What each line holds:** the time (UTC), the sender's name and EOS id, the line, and what came of it (`ran`, `refused: …`, `dropped: …`) with the server's answer.
+- **Reading it:** `bin/moonpool logs admin-audit`.
+- **Kept:** like the other logs (10 MB plus four older pieces), and it moves with `server pack`.
+
 ## Limits
 
 Each console command can stall the server a second or two, so they're queued:
@@ -142,21 +155,50 @@ Not yet tested with a second player:
 
 - Ships with Moonpool in `client-mods/MoonpoolConsole`. Players get it only if `plugins.yaml` lists it with `install: {type: local}`; a folder of the same name under `client-mods/` in the data volume replaces it.
 - It grants nothing: the server's gate decides, so non-admins get nothing from it.
+- F2 opens one search over everything an admin can run, in a panel of its own built inside the game's cheat panel (whose own parts are hidden, so the game's menu handling still applies):
 
-| Key | With a list open | With no list open |
+| Tab | Rows | What a row sends |
 |---|---|---|
-| F2 | closes everything | opens the game's cheat panel and pick lists as one palette: tabs (Item, Spawn, Equip, Macro, History), the command line, the list |
-| typing | filters the list: a row shows if it has every typed word, in its name or category (`tools`, `resource`). A number at the end is how many: `glass 10` | writes the command line |
-| Up, Down | pick a row | step through the lines run before, newest first |
-| Enter | runs the row, with the count if one was typed (the list's own command, such as `Item <id> 10`); the list stays open | sends the line to the server: a game command as is (`HealMe`), anything else as a console line (`who`, `g copper 10`) |
-| Esc | steps back one level | |
+| Items | the game's items, one row each, the data name under the display name | Give (`Item <id> <count>`), Spawn (`Spawn <id> <count>`), Equip (`Equip <id>`, only where the game calls the item equippable) |
+| Server | the server's console commands, from its own `console.json` | `mp <command> <arguments>` |
+| Game | the game's console commands, read from the player's cheat manager | the command as written |
+| Macros | the game's macros (`Content/Macros` on the admin's PC) | `RunMacro <name>`, run on the admin's PC, which sends the macro's lines one by one; the server checks each |
+| Mine | the admin's own rows (below) | their own lines |
+| Recent | the lines run from the panel, newest first | the line again, and Undo where one is known |
 
-- Unpublished items, and items the game names `[DEPRECATED…]`, `[PLACEHOLDER…]`, `[PH]` or `[TEST…]`, are hidden unless `search.show_unpublished` is set.
-- The command line is Unreal's own text field in the game line's font, so the cursor, arrows, Home, End, selection and paste work as in any text field. `textbox.on = false` keeps the game's label instead.
-- The History tab is the game's own list, sorted A to Z, of lines the game ran itself; lines sent from the panel are in Up/Down instead, kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
-- While the panel is open, other mods' key binds stay quiet (the shared UE4SS helper the server ships), so typing does not set off their keys.
-- `Scripts/config.lua` holds every setting: key, console word, position, which parts stay, and the game names the mod relies on.
-- Each player can change any of them for themselves in `%LOCALAPPDATA%\Moonpool\console-settings.lua`, a file that returns only the keys to change, for example `return { key = 'F3', layout = { top = 0.1 } }`. It is read with no Lua libraries, so it can hold values only.
+| Key | Does |
+|---|---|
+| typing | searches: a row shows if it has every typed word, in its name, data name or category. A number at the end is the count: `glass 10` |
+| Up, Down, PgUp, PgDn, mouse wheel | move the choice, one row or a page |
+| Enter, or a second click on a row | sends the chosen action at once, or, with nothing matching, the line as typed |
+| Tab | puts the exact line the action would send in the search field to change first (`Item DA_Gold_ItemType 1` to `... 10`); a server command stops where its argument goes (`mp give `) |
+| Ctrl+Left, Ctrl+Right, or a click | picks the row's action (Give, Spawn, Equip) |
+| Alt+1 to Alt+7, or a click | shows that tab |
+| Esc, F2 | closes the panel |
+
+- Under the list: the chosen command's signature (`Give  <ItemName: text>  <Amount: number>`, `mp give  <item: items>  [count = 1]`) and the line Enter sends.
+- After a line is sent, the panel shows it and, for a server command, the server's answer, as the game's notification also does.
+- Undo, from Recent: a spawn by `mp undo`, a tag by its untag, `DayOnly 1` by `DayOnly 0`, `FreezeTime` by `UnfreezeTime`, a toggle (God, Fly, NoClip, …) by running it again. The rules are `opposites` in `config.lua`. A given item has no undo.
+- Unpublished items, items in the game's `Deprecated` folder, and items named `[DEPRECATED…]`, `[PLACEHOLDER…]`, `[PH]` or `[TEST…]` are hidden unless `items.show_unpublished` is set.
+- Known gap: the panel offers Give for things the game only spawns (vehicles, base pieces, posters); the game answers "Item type … was not found", and Spawn works.
+- The lines run are kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
+
+**Changing it**
+
+- `Scripts/config.lua` holds every setting: keys, tabs, item actions, undo rules, macros, colours, sizes, words, and the game names the mod relies on.
+- Each player can change any of them in `%LOCALAPPDATA%\Moonpool\console-settings.lua`, a file that returns only the keys to change, for example `return { key = 'F3', layout = { top = 0.1 } }`.
+- Each player can add rows in `%LOCALAPPDATA%\Moonpool\console-commands.lua`, shown under Mine:
+
+```lua
+return {
+  { name = 'Daylight', line = 'DayOnly 1' },
+  { name = 'Night shift', args = { { name = 'hour', default = '22' } },
+    actions = { { label = 'Start', line = 'SetTimeOfDay {hour}' }, { label = 'Stop', line = 'UnfreezeTime' } } },
+}
+```
+
+- Both files are read with no Lua libraries, so they can hold values only.
+- Commands for every admin on a server go in the server's `console.json`: when the server publishes the panel it writes its commands into the mod (`Scripts/host-commands.lua`), so they show under Server with their arguments.
 
 ## Console commands
 

@@ -200,7 +200,7 @@ case $name in
     # which starts again at each launch, nor join_watch.log, which world-stats counts players from.
     {
       printf '%s
-' "$LOG_DIR"/{services,steam,web,discord,cron,hooks,xvfb,x11vnc,novnc,clipboard,backup,save-stage,install-confirm}.log
+' "$LOG_DIR"/{services,steam,web,discord,cron,hooks,xvfb,x11vnc,novnc,clipboard,backup,save-stage,install-confirm,admin-audit}.log
       printf '%s
 ' '{' 'size 10M' 'rotate 4' 'compress' 'delaycompress' 'missingok' 'notifempty' 'copytruncate' '}'
     } >"$RUN_DIR/logrotate.conf"

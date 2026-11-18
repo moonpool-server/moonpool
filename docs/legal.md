@@ -10,7 +10,7 @@ Moonpool's code is MIT licensed. That covers this code only, not Subnautica 2 or
 
 ## What Moonpool ships and does
 
-- The repository ships no game files. Its one image from the game is `docs/images/admin-panel.png`, a tight crop of the game's cheat panel as the admin panel mod shows it. Its code names game objects so it can call them.
+- The repository ships no game files and no images from the game. Its code names game objects so it can call them.
 - Its own commands don't spawn items or move players. The `friends` preset runs the game's `Unlock` command as each joining player so everyone shares the host's base-piece, tool and blueprint unlocks (`PRESET=stock` turns it off). In-game admins can run other console commands only if you enable it.
 - Layout files a host puts in `ue4ss-client/` are measured from the game and served to anyone who can reach its join page ([mods](mods.md#players-loader-on-experimental-builds)).
 

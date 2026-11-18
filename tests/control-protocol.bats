@@ -818,6 +818,20 @@ policy_env() {
   [ "$status" -eq 0 ]
 }
 
+@test "the admin audit log writes one JSON line per admin line" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/audit_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "the console palette finds items and commands and fills the lines they send" {
+  command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
+  run lua5.4 tests/lua/console_catalog_spec.lua
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
+
 @test "hosted poll scans only on player changes or the safety interval" {
   command -v lua5.4 >/dev/null || skip "lua5.4 not installed (the pre-commit image adds it)"
   run lua5.4 tests/lua/hosted_poll_spec.lua
