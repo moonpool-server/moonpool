@@ -7,6 +7,10 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("PIL")  # the chart script draws with Pillow; the pre-commit hook supplies it
+
 ROOT = Path(__file__).resolve().parent.parent
 
 

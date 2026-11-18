@@ -47,14 +47,9 @@ RUN dpkg --add-architecture i386 \
  && apt-get purge -y ipp-usb avahi-daemon \
  && if [ "${WINE_RUNTIME}" = tkg ]; then rm -rf /opt/wine-staging; fi \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
-# WINE_RUNTIME=tkg also unpacks Kron4ek's build of wine-tkg-staging-fsync 10.10, pinned by sha256,
-# and puts it first on PATH: Wine Staging with fsync, which WineHQ's Wine never had and later wine-tkg
-# builds dropped for ntsync. WineHQ's packages stay installed for their system dependencies, the 32-bit
-# ones too; their Wine program itself is gone (above).
-# Proton's Wine was tried first and left out: the Windows Steam client does not start under it
-# ("InternalAPI_Init_Internal failed"), with or without fsync. tkg is the default: on an idle server its p95
-# frame time was 0.12 s against WineHQ's 1.55 s (14 frames over 1 s against none), and with one player
-# 0.20 s against 0.61 s. --build-arg WINE_RUNTIME=winehq builds the WineHQ image instead.
+# WINE_RUNTIME=tkg (default) also unpacks Kron4ek's wine-tkg-staging-fsync 10.10, pinned by sha256, and
+# puts it first on PATH; WineHQ's packages stay for their system dependencies. Why: docs/operating.md, Wine.
+# --build-arg WINE_RUNTIME=winehq builds the WineHQ image instead.
 ARG WINE_TKG_VERSION=10.10
 ARG WINE_TKG_SHA256=1d97bb21a931ac1839e9291bce9f321c80d1cc84183badbc1a86e6c42ebf678a
 RUN mkdir -p /opt/sn2 \

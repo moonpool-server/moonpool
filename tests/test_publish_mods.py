@@ -13,6 +13,10 @@ from unittest import mock
 import zipfile
 
 ROOT = Path(__file__).parents[1]
+if __name__ != "__main__":  # under pytest, without the packages the pre-commit hook supplies: skip
+    import pytest
+    for needed in ("vdf", "yaml", "cryptography"):
+        pytest.importorskip(needed)
 SPEC = importlib.util.spec_from_file_location("publish_mods", ROOT / "scripts/publish-mods.py")
 PUBLISH = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PUBLISH)
