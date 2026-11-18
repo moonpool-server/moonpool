@@ -869,9 +869,12 @@ local function toggle()
     set_box('')
     query = nil
     targets, target = read_targets(pc), 1
-    -- The game's own hints go back to their designer text when first shown, so theirs is set again.
+    -- The game's own hints show their designer text until shown once, so theirs is set on the first
+    -- opening. Set again on a later opening, the widget drew a stray glyph in place of the hint (seen
+    -- in game), so it is set only once.
     for _, gh in ipairs(ui.game_hints or {}) do
-      if valid(gh.widget) then
+      if valid(gh.widget) and not gh.set then
+        gh.set = true
         pcall(function() gh.widget.OriginalText = FText(gh.text) end)
         pcall(function() gh.widget.Text = FText(gh.text) end)
         ucall(gh.widget, G.hint_set_text, FText(gh.text))
