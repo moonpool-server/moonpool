@@ -2,9 +2,26 @@
 
 Issues and pull requests are welcome. One person maintains this in spare time: expect days, not hours.
 
+## What you need to run the tests
+
+| Tool | For |
+|---|---|
+| [uv](https://docs.astral.sh/uv/) | `uvx pre-commit`, and the Python test hooks (they fetch their own packages) |
+| Docker | the bats suite, hadolint and actionlint (each runs in a container) |
+| `luacheck` on PATH | the Lua lint (Ubuntu: `lua-check`) |
+| Python 3 | the repo policy check |
+| Windows PowerShell 5.1 | the launcher tests (Windows only) |
+
 ## Before you open a pull request
 
-- Run `pre-commit run --all-files`: shellcheck, hadolint, luacheck, yamllint, the Python tests and the bats suite. CI also scans history for secrets, builds and scans the image, and runs the launcher tests on Windows.
+- Run `uvx pre-commit run --all-files`: shellcheck, hadolint, luacheck, yamllint, the Python tests and the bats suite. CI also scans history for secrets, builds and scans the image, and runs the launcher tests on Windows.
+- One suite on its own:
+
+  | Suite | Command |
+  |---|---|
+  | one Lua spec | `lua5.4 tests/lua/json_spec.lua` (any file in `tests/lua/`, run from the repo root) |
+  | launcher | `powershell -NoProfile -ExecutionPolicy Bypass -File client/tests/moonpool.tests.ps1`, with no Moonpool launcher of yours running (one launcher per Windows user) |
+  | one Python test | `uv run --no-project --with pytest python -m pytest -q tests/test_tick_report.py` |
 - One change per pull request. A fix and a tidy-up are two.
 - Say how you tested it: a host that came up, a player that joined, a test that failed before and passes now.
 - Never commit game files, Steam sessions, Wine prefixes, logs, saves or anything the game generated. The hooks refuse some by name or extension (saves, paks, game binaries, layout files, Steam login files), not all; check what you add.
