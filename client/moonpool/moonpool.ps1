@@ -292,6 +292,9 @@ function Set-UiServer([string]$Name) {
 # Percent is 0-100; below 0 the bar just moves, for a step with no known length.
 function Set-Status([string]$Text, [int]$Percent = -1) {
   if (-not $script:Ui) { return }
+  # A click made while a step was busy is still queued: it is handled here, before the checks, so a
+  # close during a download stops the run at the next step instead of one step later.
+  [Windows.Forms.Application]::DoEvents()
   if ($script:UiChoose) {
     $script:UiChoose = $false
     $run = Get-HiddenRun
@@ -984,7 +987,7 @@ function Enter-Lock {
 
 # ---- the manifest ------------------------------------------------------------------
 
-function Get-Manifest($Config, [double]$Minutes = 2) {
+function Get-Manifest($Config, [double]$Minutes = 2, [int]$Tries = 3) {
   $work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-manifest-' + [guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $work | Out-Null
   try {
@@ -998,7 +1001,7 @@ function Get-Manifest($Config, [double]$Minutes = 2) {
       for ($try = 1; $true; $try++) {
         Save-Url $sigUrl $sigFile 64KB -Minutes $Minutes
         if (Test-ManifestSignature $manifestFile $sigFile $Config.public_key) { break }
-        if ($try -ge 3) { Fail 'the server mod list signature is invalid; nothing changed, game not started' }
+        if ($try -ge $Tries) { Fail 'the server mod list signature is invalid; nothing changed, game not started' }
         Say 'the mod list changed while it was read; reading it again'
         Start-Sleep -Seconds 2
         Save-Url $ManifestUrl $manifestFile 4MB -Minutes $Minutes
@@ -1809,8 +1812,9 @@ function Invoke-Join {
     while (-not (& $hasSession $session) -and [DateTime]::UtcNow -lt $until) {
       for ($i = 0; $i -lt 10 -and [DateTime]::UtcNow -lt $until; $i++) { if ($script:Ui) { [Windows.Forms.Application]::DoEvents() }; Set-Status '' 100; Start-Sleep -Milliseconds 500 }
       if ([DateTime]::UtcNow -ge $until) { break }
-      # Each request may take 10 s at most, so a slow server can't hold the wait much past its end.
-      try { $session = Get-Prop (Get-Manifest $cfg (10 / 60)) 'session' $null } catch { Write-Log "reading the mod list again: $($_.Exception.Message)" }
+      # One list and one signature, 10 s each at most, so a slow server holds the wait 20 s past its end
+      # at most; a mismatched pair is simply read again on the next round.
+      try { $session = Get-Prop (Get-Manifest $cfg (10 / 60) 1) 'session' $null } catch { Write-Log "reading the mod list again: $($_.Exception.Message)" }
     }
     if (-not (& $hasSession $session)) { Say "the server has no world open after $SessionWait s; starting Subnautica 2 at its menu" }
   }
