@@ -631,6 +631,7 @@ end
 -- ---- sending -----------------------------------------------------------------------------------
 
 -- local_run: through the game's own console on this PC (a macro, which sends its lines itself).
+local last_sent  -- the line most recently sent, to match the server's answer to it
 local function send(pc, line, local_run)
   -- Sent once, never retried: a call that failed after it left would run the line twice.
   local went
@@ -646,6 +647,7 @@ local function send(pc, line, local_run)
     set_color(ui.receipt, C.failed)
     return false
   end
+  last_sent = line
   local undo = catalog.opposite(line, CFG.opposites, WORD)
   set_text(ui.receipt, route.fill(undo and CFG.text.undo or CFG.text.sent, { line = line, undo = undo }))
   set_text(ui.preview, '')  -- the line went: the receipt says what was sent; the preview returns on a move
@@ -780,6 +782,10 @@ end
 -- thread callback, lost its function in UE4SS and crashed the game when the next answer came.
 local function answer(header, text)
   if not (shown and ui) or (header == '' and text == '') then return end
+  -- Only the answer to the line just sent: the server titles its answer with the line it got. Other
+  -- notifications of the game's are left to the game's own card.
+  local function plain(t) return tostring(t or ''):match('^%s*(.-)%s*$'):lower() end
+  if plain(header) ~= plain(last_sent) then return end
   local lines = {}
   for l in (text .. '\n'):gmatch('([^\r\n]*)\r?\n') do
     if l ~= '' and #lines < CFG.answer_lines then lines[#lines + 1] = l end
