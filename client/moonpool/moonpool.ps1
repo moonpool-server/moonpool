@@ -43,6 +43,8 @@ param(
   [switch]$NoShortcuts,
   # For tests: how long the game may take to appear after the launch, and a smaller unpack limit.
   [int]$StartWait = 180,
+  # How long to wait for a server that is still opening its world (no session in its mod list yet).
+  [int]$SessionWait = 90,
   [long]$UnpackLimit = 0,
   # For tests: replace the running-game check, the launch and the pages opened.
   [scriptblock]$IsGameRunning,
@@ -1794,8 +1796,20 @@ function Invoke-Join {
   if ($changed -or $staleKeys.Count -gt 0) { Write-Ledger $ledgerPath $ledger }
 
   $session = Get-Prop $manifest 'session' $null
+  $hasSession = { param($s) $s -and [string](Get-Prop $s 'lobby_id' '') -match '^[0-9]+$' -and [string](Get-Prop $s 'host_steamid' '') -match '^[0-9]+$' }
+  # A server that has just started publishes its session a minute or so later; started before that, the
+  # game would open at its menu. So the list is read again every few seconds for a while.
+  if (-not (& $hasSession $session) -and $SessionWait -gt 0) {
+    Set-Status 'Waiting for the server to open its world' 100
+    $until = [DateTime]::UtcNow.AddSeconds($SessionWait)
+    while (-not (& $hasSession $session) -and [DateTime]::UtcNow -lt $until) {
+      for ($i = 0; $i -lt 10; $i++) { if ($script:Ui) { [Windows.Forms.Application]::DoEvents() }; Start-Sleep -Milliseconds 500 }
+      try { $session = Get-Prop (Get-Manifest $cfg) 'session' $null } catch { Write-Log "reading the mod list again: $($_.Exception.Message)" }
+    }
+    if (-not (& $hasSession $session)) { Say "the server has no world open after $SessionWait s; starting Subnautica 2 at its menu" }
+  }
   $url = "steam://rungameid/$appId"
-  if ($session -and [string](Get-Prop $session 'lobby_id' '') -match '^[0-9]+$' -and [string](Get-Prop $session 'host_steamid' '') -match '^[0-9]+$') {
+  if (& $hasSession $session) {
     $url = "steam://joinlobby/$appId/$($session.lobby_id)/$($session.host_steamid)"
   }
   Write-Host "moonpool: starting the game through $url"
@@ -1837,7 +1851,11 @@ try {
   if ($code -ne 3 -and -not $script:FirstWindowShown -and ($Link -or $Server -or $DisableMoonpoolMods -or $Uninstall) -and -not $Launch -and -not $env:SN2_JOIN_NO_DIALOG) {
     $heading = "Couldn't start with mods"
     if ($Uninstall) { $heading = "Couldn't uninstall Moonpool" } elseif ($DisableMoonpoolMods) { $heading = "Couldn't turn Moonpool's mods off" }
-    Show-Notice $heading ($_.Exception.Message + "`n`nTo send the host what they need, run the 'Subnautica 2 (collect logs for the host)' shortcut in the Start menu: it puts one zip on your Desktop.")
+    $logs = "`n`nTo send the host what they need, run the 'Subnautica 2 (collect logs for the host)' shortcut in the Start menu: it puts one zip on your Desktop."
+    # Code 2 is "already running, nothing changed" (another launcher, or the game itself): nothing is
+    # broken, so there is nothing to send the host.
+    if ($code -eq 2) { $heading = 'Already running'; $logs = '' }
+    Show-Notice $heading ($_.Exception.Message + $logs)
   }
   exit $code
 } finally {

@@ -119,7 +119,7 @@ function Mod($w, [string]$Name, [string]$Zip, [string]$Folder, [string]$Prefix, 
 }
 
 function Write-Manifest($w, $Mods, [string]$ServerId = 'server-a', [bool]$Loader = $true, [string[]]$Allowed = $null,
-                        [string]$Build = '4242', [string]$Branch = 'experimental') {
+                        [string]$Build = '4242', [string]$Branch = 'experimental', [switch]$NoSession) {
   if ($null -eq $Allowed) { $Allowed = @((Sha $w.Exe)) }
   $m = [ordered]@{
     schema = 3; app_id = '1962700'
@@ -128,6 +128,7 @@ function Write-Manifest($w, $Mods, [string]$ServerId = 'server-a', [bool]$Loader
     session = [ordered]@{ lobby_id = '16'; host_steamid = '76561198000000000' }
     mods = @($Mods)
   }
+  if ($NoSession) { $m.Remove('session') }
   if ($Loader) {
     $m.ue4ss = [ordered]@{ channel = 'pinned'; asset = 'ue4ss.zip'; url = 'ue4ss.zip'
                            sha256 = (Sha (Join-Path $w.Server 'ue4ss.zip')); allowed_builds = @($Allowed) }
@@ -577,6 +578,23 @@ try {
   Check ($r.Code -eq 0 -and -not $r.Asked -and $r.Launched) "the same set asks nothing and just joins (got: $($r.Out.Trim()))"
   $r = Invoke-Join $w6 -Extra "-Server $($dirs[0].Name)"
   Check ($r.Code -eq 0 -and -not $r.Asked -and $r.Launched) "the shortcut's form, by saved id, works (got: $($r.Out.Trim()))"
+  Write-Host 'a server still opening its world: the launcher waits for its session, for a while'
+  Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo')) 'signed' -NoSession; Sign-Manifest
+  $r = Invoke-Join $w6 -Extra "$at -SessionWait 3"
+  Check ($r.Code -eq 0 -and $r.Launched -match '^steam://rungameid/' -and $r.Out -match 'no world open after 3 s') "no session in time: the game starts at its menu, and says why (got '$($r.Launched)'): $($r.Out.Trim())"
+  $key = $rsa.ToXmlString($true)
+  $late = Start-Job -ArgumentList $w6.Manifest, $key -ScriptBlock {
+    param($Path, $Key)
+    Start-Sleep -Seconds 3
+    $m = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $m | Add-Member session ([pscustomobject]@{ lobby_id = '16'; host_steamid = '76561198000000000' })
+    Set-Content -LiteralPath $Path -Value ($m | ConvertTo-Json -Depth 10) -Encoding UTF8
+    $k = New-Object Security.Cryptography.RSACryptoServiceProvider; $k.FromXmlString($Key)
+    [IO.File]::WriteAllBytes($Path + '.sig', $k.SignData([IO.File]::ReadAllBytes($Path), [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')))
+  }
+  $r = Invoke-Join $w6 -Extra "$at -SessionWait 60"
+  $late | Wait-Job | Remove-Job
+  Check ($r.Code -eq 0 -and $r.Launched -eq 'steam://joinlobby/1962700/16/76561198000000000') "a session published while it waits is joined (got '$($r.Launched)'): $($r.Out.Trim())"
   New-Zip (Join-Path $w6.Server 'Foo.zip') @('Foo\Scripts\main.lua', 'Foo\Scripts\lib.lua') '9'
   Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo' $true '9')) 'signed'; Sign-Manifest
   $r = Invoke-Join $w6 -Extra $at -Answer '$false'
