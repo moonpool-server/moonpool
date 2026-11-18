@@ -103,6 +103,7 @@
       "aliases": [
         "give"
       ],
+      "from_lists": true,
       "lines": [
         "Give {item} {count}"
       ],
@@ -210,6 +211,7 @@
     "cheats_none": "No cheats are on",
     "cheats_unknown": "The game's world tags can't be read right now",
     "no_match": "No {kind} matches {query}",
+    "not_listed": "{name} is in neither the game's Item list nor its Spawn list",
     "no_player": "No player matches {query}",
     "missing_arg": "use: {usage}",
     "denied": "{word} is on the deny list (console.json)",

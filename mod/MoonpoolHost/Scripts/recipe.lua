@@ -740,8 +740,64 @@ local function remove_nearest(player, what)
 end
 
 -- What the console can see, read from the live game when a line comes in.
+-- The game's own Item and Spawn lists, as its cheat panel builds them: the panel is made for the host's
+-- own player and its list handlers run, as a click on their buttons runs them; each list's command and
+-- the data names it holds are read, and the list is closed. Read once, the first time a command takes
+-- its line from them (console.json from_lists), on the game thread.
+local GAME_LISTS
+local LIST_PANEL = '/Game/Blueprints/UI/Cheat/WBP_CheatInput.WBP_CheatInput_C'
+local LIST_HANDLER = 'BndEvt__WBP_CheatInput_%s_K2Node_ComponentBoundEvent_%d'
+  .. '_CommonButtonBaseClicked__DelegateSignature'
+local LISTS = { { word = 'item', button = 'ItemButton', event = 0 },
+  { word = 'spawn', button = 'SpawnButton', event = 4 } }
+local function game_lists()
+  if GAME_LISTS then return GAME_LISTS end
+  local out = {}
+  local ok, err = pcall(function()
+    local pc = controller_named(HOST_NAME)
+    local cls = StaticFindObject(LIST_PANEL)
+    local lib = StaticFindObject('/Script/UMG.Default__WidgetBlueprintLibrary')
+    local system = StaticFindObject('/Script/Engine.Default__KismetSystemLibrary')
+    if not (pc and pc:IsValid() and cls and cls:IsValid() and lib and lib:IsValid()) then return end
+    local panel = lib:Create(pc, cls, pc)
+    if not (panel and panel:IsValid()) then return end
+    for _, def in ipairs(LISTS) do
+      local button = panel[def.button]
+      if button and button:IsValid() then
+        panel[string.format(LIST_HANDLER, def.button, def.event)](panel, button)
+        for _, vm in ipairs(FindAllOf('SN2CheatListViewModel') or {}) do
+          if vm:IsValid() and not vm:GetFullName():find('Default__', 1, true) then
+            local command = vm.ConsoleCommand:ToString()
+            if (command:match('^(%S+)') or ''):lower() == def.word then
+              local ids, items = {}, vm.Items
+              for i = 1, items:GetArrayNum() do ids[items[i].Context:ToString()] = true end
+              out[#out + 1] = { command = command, ids = ids }
+            end
+          end
+        end
+        pcall(function() system:ExecuteConsoleCommand(pc, 'HideModal', pc) end)
+      end
+    end
+    pcall(function() panel:RemoveFromParent() end)
+  end)
+  if not ok then log('game lists: not read: ' .. tostring(err)) end
+  GAME_LISTS = out  -- once: with none read, give uses its own lines (console.json)
+  if #out > 0 then
+    local counts = {}
+    for _, l in ipairs(out) do
+      local n = 0
+      for _ in pairs(l.ids) do n = n + 1 end
+      counts[#counts + 1] = l.command .. ' ' .. n
+    end
+    log('game lists: ' .. table.concat(counts, ', '))
+  end
+  return out
+end
+
 local function console_game()
-  return { host = HOST_NAME, class_of = function(name)
+  return { host = HOST_NAME, list_line = function(id, count)
+    return console.list_line(game_lists(), id, count)
+  end, class_of = function(name)
     local idx = asset_index()
     return idx and idx.classes[tostring(name):lower()]
   end, list = function(kind)

@@ -270,5 +270,30 @@ for _, line in ipairs(help.lines) do
   check(not line:find('[<|]'), 'help shows examples, not syntax notation: ' .. line)
 end
 
+-- give takes its line from the game's own lists: the Item list gives, the Spawn list spawns.
+local lists = { { command = 'Item {0} 1', ids = { DA_Copper_ItemType = true } },
+  { command = 'Spawn {0} 1', ids = { DA_Copper_ItemType = true, DA_Raft_ItemType = true } } }
+check(console.list_line(lists, 'DA_Copper_ItemType', 5) == 'Item DA_Copper_ItemType 5',
+  'the Item list first, with the count')
+check(console.list_line(lists, 'DA_Raft_ItemType', '1') == 'Spawn DA_Raft_ItemType 1',
+  'only in the Spawn list: spawned')
+check(console.list_line(lists, 'DA_Titanium_ItemType') == false, 'in neither list: false')
+check(console.list_line({}, 'DA_Copper_ItemType') == nil and console.list_line(nil, 'x') == nil, 'no lists: nil')
+check(console.list_line({ { command = 'Item {0} 1', ids = { ['A%1'] = true } } }, 'A%1', 2) == 'Item A%1 2',
+  'an id with % is put in as written')
+local listed = { host = 'SN2 Host', list = game.list,
+  list_line = function(id, count) return console.list_line(lists, id, count) end }
+local function run_listed(text) return console.handle(console.new(catalog), { sender = me, text = text }, listed) end
+r = run_listed('give raft')
+check(r.runs[1] and r.runs[1].line == 'Spawn DA_Raft_ItemType 1',
+  'give raft: the game only spawns it, so it is spawned')
+r = run_listed('give copper 3')
+check(r.runs[1] and r.runs[1].line == 'Item DA_Copper_ItemType 3', 'give copper 3: the Item list gives it')
+r = run_listed('give titanium')
+check(#r.runs == 0 and r.lines[1]:find('neither', 1, true), 'an item in neither list is not sent, and that is said')
+r = run_listed('give johnny raft')
+check(r.runs[1] and r.runs[1].player == 'Johnny Pappis' and r.runs[1].line == 'Spawn DA_Raft_ItemType 1',
+  'for another player, the same')
+
 if failures > 0 then os.exit(1) end
 print('console: ok')
