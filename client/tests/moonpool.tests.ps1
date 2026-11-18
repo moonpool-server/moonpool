@@ -580,8 +580,11 @@ try {
   Check ($r.Code -eq 0 -and -not $r.Asked -and $r.Launched) "the shortcut's form, by saved id, works (got: $($r.Out.Trim()))"
   Write-Host 'a server still opening its world: the launcher waits for its session, for a while'
   Write-Manifest $w6 @((Mod $w6 'Foo' 'Foo.zip' 'Foo' 'Foo')) 'signed' -NoSession; Sign-Manifest
+  $clock = [Diagnostics.Stopwatch]::StartNew()
   $r = Invoke-Join $w6 -Extra "$at -SessionWait 3"
+  $clock.Stop()
   Check ($r.Code -eq 0 -and $r.Launched -match '^steam://rungameid/' -and $r.Out -match 'no world open after 3 s') "no session in time: the game starts at its menu, and says why (got '$($r.Launched)'): $($r.Out.Trim())"
+  Check ($clock.Elapsed.TotalSeconds -lt 15) "a 3 s wait ends near 3 s, not much later (the whole run took $([int]$clock.Elapsed.TotalSeconds) s)"
   $key = $rsa.ToXmlString($true)
   $late = Start-Job -ArgumentList $w6.Manifest, $key -ScriptBlock {
     param($Path, $Key)

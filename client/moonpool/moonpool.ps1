@@ -650,7 +650,7 @@ function Resolve-Url([string]$Base, [string]$Value) {
 # (redirects included; checked after each read, and a read waits at most 60 s), or after three redirects. Redirects are
 # followed here rather than by .NET, so one from https can only lead to https, and one from http
 # only to https or the same host. $Limit names the size limit in the error.
-function Save-Url([string]$Url, [string]$Dest, [long]$MaxBytes, [string]$Limit = '', [int]$Minutes = 2) {
+function Save-Url([string]$Url, [string]$Dest, [long]$MaxBytes, [string]$Limit = '', [double]$Minutes = 2) {
   if (-not $Limit) {
     if ($MaxBytes -ge 1GB) { $Limit = "$([Math]::Round($MaxBytes / 1GB)) GB" }
     elseif ($MaxBytes -ge 1MB) { $Limit = "$([Math]::Round($MaxBytes / 1MB)) MB" }
@@ -661,7 +661,8 @@ function Save-Url([string]$Url, [string]$Dest, [long]$MaxBytes, [string]$Limit =
     $deadline = [DateTime]::UtcNow.AddMinutes($Minutes)
     $at = [Uri]$Url
     $tooBig = "$($at.Host) sent more than $Limit, so the download was stopped"
-    $late = "$($at.Host) took more than $Minutes minutes to send this file, so the download was stopped"
+    $took = if ($Minutes -ge 1 -or $Minutes -eq 0) { "$Minutes minutes" } else { "$([Math]::Round($Minutes * 60)) s" }
+    $late = "$($at.Host) took more than $took to send this file, so the download was stopped"
     try {
       for ($hops = 0; ; $hops++) {
         # Each wait is the smaller of 60 s and the time left, so redirects count against $Minutes too.
@@ -983,24 +984,24 @@ function Enter-Lock {
 
 # ---- the manifest ------------------------------------------------------------------
 
-function Get-Manifest($Config) {
+function Get-Manifest($Config, [double]$Minutes = 2) {
   $work = Join-Path ([IO.Path]::GetTempPath()) ('moonpool-manifest-' + [guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $work | Out-Null
   try {
     $manifestFile = Join-Path $work 'mods.json'
-    Save-Url $ManifestUrl $manifestFile 4MB
+    Save-Url $ManifestUrl $manifestFile 4MB -Minutes $Minutes
     if ($Config) {
       $sigUrl = $ManifestUrl + '.sig'
       $sigFile = Join-Path $work 'mods.json.sig'
       # The list and its signature are two requests; a server publishing between them gives a
       # mismatched pair, so the pair is fetched again before the signature counts as invalid.
       for ($try = 1; $true; $try++) {
-        Save-Url $sigUrl $sigFile 64KB
+        Save-Url $sigUrl $sigFile 64KB -Minutes $Minutes
         if (Test-ManifestSignature $manifestFile $sigFile $Config.public_key) { break }
         if ($try -ge 3) { Fail 'the server mod list signature is invalid; nothing changed, game not started' }
         Say 'the mod list changed while it was read; reading it again'
         Start-Sleep -Seconds 2
-        Save-Url $ManifestUrl $manifestFile 4MB
+        Save-Url $ManifestUrl $manifestFile 4MB -Minutes $Minutes
       }
     } elseif (-not $ManifestUrl.StartsWith('file:')) {
       Fail 'this mod list came with no server key; open the server from its join page'
@@ -1800,11 +1801,16 @@ function Invoke-Join {
   # A server that has just started publishes its session a minute or so later; started before that, the
   # game would open at its menu. So the list is read again every few seconds for a while.
   if (-not (& $hasSession $session) -and $SessionWait -gt 0) {
+    # Every file is in place by now, so the window may be closed again while it waits: Set-Status ends
+    # the run on a close (code 3, the game not started), and Moonpool's mods go off as it exits.
+    $script:UiInstalling = $false
     Set-Status 'Waiting for the server to open its world' 100
     $until = [DateTime]::UtcNow.AddSeconds($SessionWait)
     while (-not (& $hasSession $session) -and [DateTime]::UtcNow -lt $until) {
-      for ($i = 0; $i -lt 10; $i++) { if ($script:Ui) { [Windows.Forms.Application]::DoEvents() }; Start-Sleep -Milliseconds 500 }
-      try { $session = Get-Prop (Get-Manifest $cfg) 'session' $null } catch { Write-Log "reading the mod list again: $($_.Exception.Message)" }
+      for ($i = 0; $i -lt 10 -and [DateTime]::UtcNow -lt $until; $i++) { if ($script:Ui) { [Windows.Forms.Application]::DoEvents() }; Set-Status '' 100; Start-Sleep -Milliseconds 500 }
+      if ([DateTime]::UtcNow -ge $until) { break }
+      # Each request may take 10 s at most, so a slow server can't hold the wait much past its end.
+      try { $session = Get-Prop (Get-Manifest $cfg (10 / 60)) 'session' $null } catch { Write-Log "reading the mod list again: $($_.Exception.Message)" }
     }
     if (-not (& $hasSession $session)) { Say "the server has no world open after $SessionWait s; starting Subnautica 2 at its menu" }
   }
