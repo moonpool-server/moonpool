@@ -414,7 +414,19 @@ function M.handle(st, req, game)
         values[a.name] = typed or a.default
       end
     end
-    for _, l in ipairs(c.lines or {}) do
+    -- A command that takes its line from the game's own lists (console.json from_lists): the first of
+    -- them that holds the item gives the line, with the count; none holding it is said, not sent.
+    local listed
+    if c.from_lists and game.list_line then
+      for _, a in ipairs(c.args or {}) do
+        if a.kind and values[a.name] then
+          listed = game.list_line(values[a.name], values.count)
+          if listed == false then say(M.msg(st, 'not_listed', { name = values[a.name] })); return out end
+        end
+      end
+    end
+    if listed then lines[1] = listed end
+    for _, l in ipairs(not listed and c.lines or {}) do
       lines[#lines + 1] = (l:gsub('{(%w+)}', function(k) return values[k] or '' end))
     end
   else
@@ -455,6 +467,21 @@ function M.handle(st, req, game)
   -- Only the run itself to report: the game's own result (the item arriving) says it.
   out.ran = #out.lines == 1
   return out
+end
+
+-- The line for item id from the game's own lists ({ { command = "Item {0} 1", ids = { [id] = true } }, ...},
+-- in order): the first list that holds it, its {0} the item and its last number the count (when one
+-- is given). false when lists were read and none holds it; nil when there are no lists to go by.
+function M.list_line(lists, id, count)
+  if not lists or #lists == 0 then return nil end
+  for _, l in ipairs(lists) do
+    if l.ids and l.ids[id] and tostring(l.command or ''):find('{0}', 1, true) then
+      local line = l.command:gsub('{0}', function() return id end)
+      if count then line = line:gsub('%s%d+%s*$', ' ' .. count) end
+      return line
+    end
+  end
+  return false
 end
 
 return M
