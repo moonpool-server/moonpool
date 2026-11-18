@@ -138,5 +138,18 @@ for _ in pairs(set) do n = n + 1 end
 eq(n, 2, 'a comment, a short ID, a name and an ID with extra characters are not admins')
 eq(next(admin.admin_set('', nil)), nil, 'no list and no file: nobody is an admin')
 
+local mods = admin.admin_set('', string.rep('c', 32) .. ' helper')
+local helper, stranger = { eos = string.rep('c', 32) }, { eos = string.rep('d', 32) }
+local allowed = { 'who', 'find' }
+eq(admin.moderator_may(mods, helper, 'mp who', 'mp', allowed), true, 'a moderator may run a listed console command')
+eq(admin.moderator_may(mods, helper, 'MP Find titan', 'mp', allowed), true, 'word and command match in any case')
+eq(admin.moderator_may(mods, helper, 'mp give glass 10', 'mp', allowed), false, 'not a command the list names')
+eq(admin.moderator_may(mods, helper, 'Item DA_Glass_ItemType 10', 'mp', allowed), false,
+  'game cheat lines stay with admins')
+eq(admin.moderator_may(mods, helper, 'mp', 'mp', allowed), false, 'the word alone is no command')
+eq(admin.moderator_may(mods, stranger, 'mp who', 'mp', allowed), false, 'someone not on the list may not')
+eq(admin.moderator_may(mods, { name = 'x' }, 'mp who', 'mp', allowed), false, 'a sender with no id may not')
+eq(admin.moderator_may(mods, helper, 'mp who', 'mp', nil), false, 'no moderator_commands, nothing allowed')
+
 if failures > 0 then print(failures .. ' failed'); os.exit(1) end
 print('all passed')

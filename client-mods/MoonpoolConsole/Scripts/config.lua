@@ -1,57 +1,141 @@
--- Settings for the admin console panel. Data only: edit and restart the game.
+-- Settings for the admin palette. Data only: edit and restart the game. A player's own changes go in
+-- own_settings (below), a file that returns only the keys to change.
 return {
-  -- The key that shows the panel and, pressed again, closes it and everything it opened
-  -- (a name from UE4SS's Key table).
+  -- The key that shows the palette and, pressed again, closes it (a name from UE4SS's Key table).
   key = 'F2',
   -- After a press of the key, further presses are ignored for this long.
   toggle_gap_ms = 500,
-  -- The key that steps back: open lists close first, then the panel. It does nothing while the panel
-  -- is not showing.
+  -- Keys while the palette shows: back closes it; up and down move the choice; run sends the chosen
+  -- row's action at once (or, when nothing matches, the typed line); edit_key puts the exact line it
+  -- would send into the search line instead, to change before Enter; action_keys (with action_modifier)
+  -- step through a row's actions (Give, Spawn, Equip).
   back_key = 'ESCAPE',
-  -- The word the server's console listens for (signal_word in the server's console.json).
-  word = 'mp',
-  -- Calls into the game fail now and then on this build; each is tried this many times.
-  tries = 40,
-  -- The panel and the game's pick lists make one column, so the tabs, the filter and the results are
-  -- one palette in one place. All as shares of the screen: the column runs from left to right; the
-  -- panel's block (part: the game's name for it: tabs, filter line, command line) hangs from top; an
-  -- open list's frame (list.part) fills from list.top to list.bottom, above the hotbar, darkened by
-  -- list.tint (multiplied into the game's own frame colour). The panel's own blur (backdrop.part, blur
-  -- strength) sits behind the block. It cannot go behind the list: the panel stays above the game's
-  -- lists, because below them the game takes Esc for its own menu.
-  layout = { part = 'VerticalBox_199', left = 0.36, right = 0.64, top = 0.215 },
-  -- list.label: the list's own line under its title, where the filter and its count are shown; depth:
-  -- how far into the list's widgets its frame and that line are.
-  list = { part = 'CommonBorder_0', label = 'Description', depth = 3, top = 0.335, bottom = 0.86,
-    tint = { R = 0.45, G = 0.45, B = 0.5, A = 1.0 } },
-  backdrop = { part = 'BackgroundBlur_82', strength = 30.0 },
-  -- With a list open, nav keys move the choice over the rows that show and run_key runs it. The game's
-  -- own arrows count the rows the filter hid, and its Enter runs the list's own selection.
   nav = { UP_ARROW = -1, DOWN_ARROW = 1 },
   run_key = 'RETURN',
-  -- What the panel's own label over the command line says (part: the game's name for that label; the
-  -- game rewrites the line under the command line itself, so the hint cannot go there): text with no
-  -- list open, listing while one is. filtering is the list's own line under its title, with {query}
-  -- for what has been typed.
-  hint = { part = 'CommonTextBlock_2',
-    text = 'Type a command and press Enter, or pick a list. Esc closes.',
-    listing = 'Typing filters the list below. Esc: back to the command line.',
-    filtering = 'Filter: {query}_    {shown} of {all}    a number at the end sets how many    Enter runs, Esc back' },
-  -- The panel is the game's own cheat panel. hide: kinds of part to hide. keep: part names that stay.
-  panel = {
-    hide = { 'CommonTextButton_C', 'CommonTextBlock', 'BackgroundBlur', 'HorizontalBox' },
-    keep = { 'Input', 'autocomplete', 'Description', 'ItemButton', 'SpawnButton', 'EquipButton', 'MacroButton',
-      'HistoryButton', 'HorizontalBox_0', 'CommonTextBlock_2' },
+  edit_key = 'TAB',
+  action_keys = { LEFT_ARROW = -1, RIGHT_ARROW = 1 },
+  action_modifier = 'CONTROL',
+  -- Page keys move the choice a page of rows (page_rows) at a time.
+  page_keys = { PAGE_UP = -1, PAGE_DOWN = 1 },
+  page_rows = 7,
+  -- The mouse picks a tab, a row or an action with click_key.
+  click_key = 'LEFT_MOUSE_BUTTON',
+  -- Alt and a number shows that tab (1 is the first); plain digits stay in the search, as its count.
+  tab_number_keys = { 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE' },
+  tab_number_modifier = 'ALT',
+  -- The word the server's console listens for (signal_word in the server's console.json). The
+  -- server's own word, from host-commands.lua, is used when that file is there.
+  word = 'mp',
+  -- A call into the game that fails is tried again up to this many times; a call that needed more than
+  -- one try is logged once, so the number can be set from what this build does.
+  tries = 3,
+  -- How often the search line is read while the palette shows. Nothing runs while it is hidden.
+  read_ms = 100,
+  -- Where the palette sits, as shares of the screen: from left to right, hanging from top.
+  layout = { left = 0.33, right = 0.67, top = 0.16 },
+  -- The results scroll in a list at most list_height tall (screen units before scaling); at most
+  -- max_rows of them are kept, the best first. answer_lines: lines of a server answer shown.
+  list_height = 330,
+  max_rows = 60,
+  answer_lines = 4,
+  -- Colours (R, G, B, A from 0 to 1) and text sizes.
+  colors = {
+    surface = { R = 0.012, G = 0.035, B = 0.07, A = 0.94 },
+    field = { R = 0.03, G = 0.09, B = 0.15, A = 1.0 },
+    chosen = { R = 0.55, G = 0.38, B = 0.08, A = 0.55 },
+    row = { R = 0, G = 0, B = 0, A = 0 },
+    text = { R = 0.92, G = 0.97, B = 1.0, A = 1.0 },
+    muted = { R = 0.55, G = 0.68, B = 0.78, A = 1.0 },
+    accent = { R = 0.35, G = 0.85, B = 0.95, A = 1.0 },
+    amber = { R = 1.0, G = 0.75, B = 0.3, A = 1.0 },
+    failed = { R = 1.0, G = 0.45, B = 0.4, A = 1.0 },
+    key = { R = 0.05, G = 0.16, B = 0.24, A = 1.0 },
   },
-  -- What closing also closes: the game's pick lists (by class; the game stacks them, so they are
-  -- closed one after another, wait_ms apart, at most `most` of them) and, through the game's own
-  -- commands, its diagnostic windows.
-  -- modal: the game's own command that closes its top list. Only that undoes what the game set up when
-  -- it opened the list; deactivating the list alone left the mouse with the game's menus, so the view
-  -- no longer turned. A list still open after it is deactivated.
-  close = { lists = { 'WBP_CheatListSelector_C' }, most = 100, wait_ms = 100, commands = { 'CloseDiag' },
-    modal = 'HideModal' },
-  -- After everything is closed: what the world needs back, each with the game's function that says it
+  sizes = { title = 15, field = 18, row = 15, detail = 11, small = 11 },
+  padding = 14,
+  -- The tabs, in order: a label and the kind of row it shows (nil: all).
+  tabs = { { label = 'All' }, { label = 'Items', kind = 'item' }, { label = 'Server', kind = 'server' },
+    { label = 'Game', kind = 'command' }, { label = 'Macros', kind = 'macro' },
+    { label = 'Mine', kind = 'own' }, { label = 'Recent', kind = 'recent' } },
+  -- The game's macros (text files in its Content/Macros on this PC), run here by the game's RunMacro,
+  -- which sends their lines to the server one by one; the server checks each.
+  macros = {
+    { name = 'Base Pack', detail = 'gives items' }, { name = 'Equipment Pack', detail = 'gives items' },
+    { name = 'Starting Items', detail = 'gives items' },
+    { name = 'QuickNav', detail = 'no fog, speed, fast swim; day frozen at noon for the world' },
+    { name = 'Superman', detail = 'god, fast build, unlock all, invisible, fast swim' },
+    { name = 'SculptDebug', detail = 'habitat builder, god, free build, unlimited power' },
+  },
+  run_macro = 'RunMacro {id}',
+  -- What undoes a line: { Lua pattern over the line sent, the line that undoes it } with %1.. for the
+  -- pattern's captures and {word} for the server's word. A row run before offers Undo when one applies.
+  -- Toggles undo by running again; an item given cannot be taken back, so it offers none.
+  opposites = {
+    { '^Spawn ', '{word} undo' },
+    { '^%S+ tag (%S+)$', '{word} untag %1' }, { '^%S+ untag (%S+)$', '{word} tag %1' },
+    { '^AddGlobalTag (%S+)$', 'RemoveGlobalTag %1' }, { '^RemoveGlobalTag (%S+)$', 'AddGlobalTag %1' },
+    { '^FreezeTime', 'UnfreezeTime' }, { '^UnfreezeTime', 'FreezeTime' },
+    { '^DayOnly 1', 'DayOnly 0' }, { '^DayOnly 0', 'DayOnly 1' },
+    { '^RunMacro QuickNav', 'NormalNav' }, { '^RunMacro Superman', '{word} normal' },
+    { '^RunMacro SculptDebug', '{word} normal' },
+    { '^(God)$', '%1' }, { '^(Fly)$', '%1' }, { '^(NoClip)$', '%1' }, { '^(Invisible)$', '%1' },
+    { '^(FreeBuild)$', '%1' }, { '^(FastSwim)$', '%1' }, { '^(UnlimitedPower)$', '%1' },
+  },
+  -- The actions an item row offers, each a line with {id} (the item's data name) and {count}. Equip
+  -- only on items the game calls equippable. A number at the end of the search ("glass 10") is the count.
+  -- The game's Item command answers "was not found" for things that go into the world (vehicles,
+  -- base pieces, posters): those spawn. Their PickupDestination says so, but reading that enum from
+  -- Lua crashed the game in UE4SS when an item's value had no name, so it is not read.
+  item_actions = {
+    { label = 'Give', line = 'Item {id} {count}' },
+    { label = 'Spawn', line = 'Spawn {id} {count}' },
+    { label = 'Equip', line = 'Equip {id}', equippable = true },
+  },
+  -- Items the game itself calls unpublished, or whose name marks them unfinished, are left out unless
+  -- show_unpublished is true. category: the item's folder in the game's data, a Lua pattern.
+  items = { show_unpublished = false, category = '/ItemType/([%w_]+)/', hidden_categories = { 'Deprecated' },
+    unfinished = { '^%[DEPRECATED', '^%[PLACEHOLDER', '^%[PH%]', '^%[TEST' } },
+  -- The key hints along the bottom, shown the way the game shows its own: a word and the key in a box.
+  hints = { { label = 'Send', key = 'Enter' }, { label = 'Edit first', key = 'Tab' },
+    { label = 'Action', key = 'Ctrl+Arrows' }, { label = 'Tabs', key = 'Alt 1-7' },
+    { label = 'Page', key = 'PgUp PgDn' }, { label = 'Close', key = 'Esc' } },
+  -- Words the palette shows.
+  text = {
+    title = 'MOONPOOL',
+    preview = 'Enter sends: {line}',
+    found = '{shown} of {count}',
+    none = 'Nothing matches. Enter sends the line as typed.',
+    sent = 'Sent: {line}',
+    undo = 'Sent: {line}    Undo: {undo}',
+    answer = '{header}: {text}',
+    missing = '{arg} is needed: type it after the name',
+    looking = 'Looking at {name}, {x} {y} {z} m',
+    game_detail = "the game's command",
+    recent_detail = 'run before',
+  },
+  -- The lines run from the palette, newest first (at most keep), in file under %LOCALAPPDATA%: the
+  -- launcher's folder, which an uninstall removes.
+  history = { file = '\\Moonpool\\console-recent.txt', keep = 50 },
+  -- A player's own changes to any setting here, if that file exists: a Lua file that returns a table
+  -- with only the keys to change, e.g. return { key = 'F3', layout = { top = 0.1 } }.
+  own_settings = '\\Moonpool\\console-settings.lua',
+  -- A player's own rows, if that file exists: a Lua file run with no libraries that returns a list of
+  -- rows shaped like the built-in ones (catalog.lua, own), shown under Mine and in every search, e.g.
+  --   return { { name = 'Daylight', line = 'DayOnly 1' },
+  --     { name = 'Night shift', args = { { name = 'hour', default = '22' } },
+  --       actions = { { label = 'Start', line = 'SetTimeOfDay {hour}' },
+  --                   { label = 'Stop', line = 'UnfreezeTime' } } } }
+  -- Rows for everyone on a server belong in the server's console.json instead: its commands reach this
+  -- palette through host-commands.lua.
+  own_commands = '\\Moonpool\\console-commands.lua',
+  -- The server's commands, written into this mod by the server when it publishes it.
+  host_commands = 'host-commands.lua',
+  -- The server's answers, read from the game's notification as it arrives (header and text only).
+  -- Off: the answer shows only as the game's own card.
+  answers = true,
+  -- What closing also closes, through the game's own commands: its diagnostic windows.
+  close_commands = { 'CloseDiag' },
+  -- After the palette closes: what the world needs back, each with the game's function that says it
   -- is still held and the one that lets it go.
   give_back = {
     { name = 'mouse look', held = '/Script/Engine.Controller:IsLookInputIgnored',
@@ -59,112 +143,99 @@ return {
     { name = 'movement', held = '/Script/Engine.Controller:IsMoveInputIgnored',
       release = '/Script/Engine.Controller:ResetIgnoreMoveInput' },
   },
-  -- While one of the game's lists is open, the keyboard belongs to the list, not the command line, so
-  -- this mod reads the typing keys itself (keys: UE4SS Key names, each with the character it types;
-  -- erase: the key that takes one back) and hides the rows that do not answer what was typed. Items
-  -- the game itself calls unpublished are hidden unless show_unpublished is true. Lists opening and
-  -- closing are looked for every every_ms.
-  -- strip: the parts of an item's data name that every item shares, as Lua patterns.
-  -- live: false turns the search off altogether.
-  -- settle_ms: how long a list's row count must hold still before its rows are read.
-  -- unfinished: Lua patterns over an item's display name that mark it unfinished, hidden like unpublished.
-  search = { live = true, every_ms = 250, settle_ms = 500, show_unpublished = false,
-    unfinished = { '^%[DEPRECATED', '^%[PLACEHOLDER', '^%[PH%]', '^%[TEST' },
-    strip = { '^DA_', '_ItemType.*$' },
-    keys = { A = 'a', B = 'b', C = 'c', D = 'd', E = 'e', F = 'f', G = 'g', H = 'h', I = 'i', J = 'j', K = 'k',
-      L = 'l', M = 'm', N = 'n', O = 'o', P = 'p', Q = 'q', R = 'r', S = 's', T = 't', U = 'u', V = 'v',
-      W = 'w', X = 'x', Y = 'y', Z = 'z', ZERO = '0', ONE = '1', TWO = '2', THREE = '3', FOUR = '4',
-      FIVE = '5', SIX = '6', SEVEN = '7', EIGHT = '8', NINE = '9', SPACE = ' ', OEM_PERIOD = '.',
-      OEM_MINUS = '-', OEM_COMMA = ',', OEM_TWO = '/' },
-    erase = 'BACKSPACE',
-    -- An item's category is the folder its data lives in (Tools, Resource, Equipment): typing it
-    -- narrows the list. A Lua pattern over the item's full name.
-    category = '/ItemType/([%w_]+)/' },
-  -- The lines run from the panel, kept newest first (at most keep) in file, under %LOCALAPPDATA%: the
-  -- launcher's folder, which an uninstall removes. The game's list titled title (its part title_part)
-  -- is its command history, shown in that order.
-  -- A player's own changes to any setting here, if that file exists: a Lua file that returns a table
-  -- with only the keys to change, e.g. return { key = 'F3', layout = { top = 0.1 } }.
-  own_settings = '\\Moonpool\\console-settings.lua',
-  history = { file = '\\Moonpool\\console-recent.txt', keep = 50, title_part = 'Title', title = 'Command History' },
-  -- textbox: Unreal's own text box in place of the game's command line label (replaces: that
-  -- label's part name). on = false keeps the game's label.
-  textbox = { on = true, replaces = 'Input', focus_again_ms = 150 },
   -- What this mod says in UE4SS.log.
   log = {
     tag = '[MoonpoolConsole] ',
-    ready = '{key} shows and closes the admin panel',
+    ready = '{key} shows and closes the admin palette',
     bad_key = 'config.lua names a key UE4SS does not know: {key}',
     failed = '{what} failed {tries} times: {error}',
+    retried = '{what} needed {tries} tries',
     missing = 'the game has no {what}',
     not_made = 'the game did not create the panel',
-    error = 'the panel could not be shown or closed: {error}',
-    gave_back = '{what} was still held after the panel closed; handed back to the game',
+    no_part = 'the palette is off: {what}',
+    error = 'the palette could not be shown or closed: {error}',
+    gave_back = '{what} was still held after the palette closed; handed back to the game',
+    entries = '{items} items, {game} game commands, {server} server commands, {own} own rows',
+    no_answers = 'server answers show only as the game card: {error}',
+    own_bad = 'own rows not read from {file}: {error}',
+    timing = '{what} took {ms} ms',
+    key = 'key: {what}',
   },
+  trace = false,              -- true: log each key the palette acts on, and how long opening and searching take
   -- The game's own names this mod uses. They change only when the game does.
   game = {
+    -- The game's cheat panel is the palette's shell: its parts are hidden and the palette is built
+    -- in its place, so the game's own menu handling (focus, Esc, input) still applies.
     panel = '/Game/Blueprints/UI/Cheat/WBP_CheatInput.WBP_CheatInput_C',
     panel_class = 'WBP_CheatInput_C',
-    server_cheat = 'SN2PlayerController:ServerCheat', -- named when sending a line fails
-    typed = '/Script/Subnautica2.SN2CheatInput:GetTypedString',
-    focus = '/Script/UMG.Widget:SetFocus',
+    font_from = 'Input',                -- the label whose font the palette's text uses
     controller = 'PlayerController',
+    server_cheat = 'SN2PlayerController:ServerCheat', -- named when sending a line fails
     template_prefix = 'Default__',      -- a class's own template object, never a live one
-    -- Where the walk up the cheat manager's classes ends. Subnautica's own commands are sent on to the
-    -- server by the game; the engine's (this class and above: DestroyAll, DestroyTarget, Summon) run
-    -- only on the player's PC, where they change nothing, so they are not counted as the game's and
-    -- go to the server's console like any other typed line.
-    last_class = 'CheatManager',
+    last_class = 'CheatManager',        -- the walk up the cheat manager's classes ends here
     widgets = '/Script/UMG.Default__WidgetBlueprintLibrary',
     system = '/Script/Engine.Default__KismetSystemLibrary',
-    set_visibility = '/Script/UMG.Widget:SetVisibility',
+    tree = 'WidgetTree',
+    root = 'RootWidget',
+    canvas = '/Script/UMG.CanvasPanel',
+    add_to_canvas = '/Script/UMG.CanvasPanel:AddChildToCanvas',
+    child_count = '/Script/UMG.PanelWidget:GetChildrenCount',
+    child_at = '/Script/UMG.PanelWidget:GetChildAt',
+    add_child = '/Script/UMG.PanelWidget:AddChild',
+    vertical = '/Script/UMG.VerticalBox',
+    horizontal = '/Script/UMG.HorizontalBox',
+    border = '/Script/UMG.Border',
+    text_block = '/Script/UMG.TextBlock',
+    textbox_class = '/Script/UMG.EditableText',
+    set_content = '/Script/UMG.ContentWidget:SetContent',
     set_text = '/Script/UMG.TextBlock:SetText',
-    textbox_class = '/Script/UMG.EditableText', -- the input without a frame, styled like the game's line
+    set_font = '/Script/UMG.TextBlock:SetFont',
+    set_text_color = '/Script/UMG.TextBlock:SetColorAndOpacity',
+    set_brush_color = '/Script/UMG.Border:SetBrushColor',
+    set_border_padding = '/Script/UMG.Border:SetPadding',
+    set_slot_padding_v = '/Script/UMG.VerticalBoxSlot:SetPadding',
+    set_slot_padding_h = '/Script/UMG.HorizontalBoxSlot:SetPadding',
     textbox_get = '/Script/UMG.EditableText:GetText',
     textbox_set = '/Script/UMG.EditableText:SetText',
     textbox_font = '/Script/UMG.EditableText:SetFont',
     textbox_style = 'WidgetStyle',
     style_color = 'ColorAndOpacity',
     label_font = 'Font',
-    label_color = 'ColorAndOpacity',
-    get_parent = '/Script/UMG.Widget:GetParent',
-    slot = 'Slot',                      -- the slot a widget's parent made for it
-    slot_size = '/Script/UMG.HorizontalBoxSlot:SetSize',
-    slot_fill = 1,                      -- ESlateSizeRule: Fill
+    set_visibility = '/Script/UMG.Widget:SetVisibility',
+    has_focus = '/Script/UMG.Widget:HasKeyboardFocus',
+    is_hovered = '/Script/UMG.Widget:IsHovered',
+    size_box = '/Script/UMG.SizeBox',
+    set_max_height = '/Script/UMG.SizeBox:SetMaxDesiredHeight',
+    scroll_box = '/Script/UMG.ScrollBox',
+    scroll_into_view = '/Script/UMG.ScrollBox:ScrollWidgetIntoView',
+    scroll_to_start = '/Script/UMG.ScrollBox:ScrollToStart',
+    set_wrap = '/Script/UMG.TextBlock:SetAutoWrapText',
+    run_local = 'ExecuteConsoleCommand',  -- the game's own console on this PC, for RunMacro
     keyboard_focus = '/Script/UMG.Widget:SetKeyboardFocus',
-    list_rows = 'ItemsList',            -- the part of a pick list that holds its rows
-    row_item = 'Context',               -- what a row stands for: an item's name in the game's data
-    tree = 'WidgetTree',                -- where a panel keeps its widgets
-    root = 'RootWidget',                -- and the topmost of them
-    container = '/Script/UMG.PanelWidget', -- the kind of widget that holds others
-    child_count = '/Script/UMG.PanelWidget:GetChildrenCount',
-    child_at = '/Script/UMG.PanelWidget:GetChildAt',
-    remove_child_at = '/Script/UMG.PanelWidget:RemoveChildAt',
-    add_child = '/Script/UMG.PanelWidget:AddChild',
-    item_class = 'UWEItemType',
-    item_label = 'Name',
-    is_published = '/Script/UWEAssetRegistry.UWEPrimaryDataAssetBase:IsPublished',
-    -- The game counts an activated panel as an open menu, shown or not, and stops offering the
-    -- world's own actions; so the panel is activated only while it shows.
-    activate = '/Script/CommonUI.CommonActivatableWidget:ActivateWidget',
-    deactivate = '/Script/CommonUI.CommonActivatableWidget:DeactivateWidget',
-    is_activated = '/Script/CommonUI.CommonActivatableWidget:IsActivated',
     set_anchors = '/Script/UMG.CanvasPanelSlot:SetAnchors',
     set_alignment = '/Script/UMG.CanvasPanelSlot:SetAlignment',
     set_auto_size = '/Script/UMG.CanvasPanelSlot:SetAutoSize',
     set_offsets = '/Script/UMG.CanvasPanelSlot:SetOffsets',
-    -- ESlateVisibility. Shown, the panel takes clicks only on its own parts (SelfHitTestInvisible):
-    -- its backing covers the whole screen and would swallow clicks meant for the lists and the game.
+    set_z = '/Script/UMG.CanvasPanelSlot:SetZOrder',
+    item_class = 'UWEItemType',
+    item_label = 'Name',
+    is_published = '/Script/UWEAssetRegistry.UWEPrimaryDataAssetBase:IsPublished',
+    is_equippable = '/Script/UWEInventory.UWEItemType:IsEquippable',
+    -- The server's answer arrives as the game's notification, on this player's own component.
+    notify = '/Script/UWENotifications.UWENotificationComponent:ClientNotify',
+    -- What the player looks at: the controller's interaction component and its selected target.
+    interact = 'InteractComp',
+    target = '/Script/UWEInteract.UWEInteractComponent:GetSelectedTargetActor',
+    location = '/Script/Engine.Actor:K2_GetActorLocation',
+    activate = '/Script/CommonUI.CommonActivatableWidget:ActivateWidget',
+    deactivate = '/Script/CommonUI.CommonActivatableWidget:DeactivateWidget',
+    -- ESlateVisibility: the shell takes clicks only on its own parts (SelfHitTestInvisible).
     shown = 4,
+    -- A tab, row or action takes the mouse (Visible): borders and other containers start out letting
+    -- it through to what is under them, and are then never hovered.
+    clickable = 0,
     hidden = 1,
-    row_shown = 0,                      -- a list row that shows takes clicks (Visible)
+    collapsed = 2,
     layer = 1000,                       -- above the game's own screens
-    set_tint = '/Script/UMG.Border:SetBrushColor',
-    selectable = '/Script/CommonUI.CommonButtonBase:SetIsSelectable',
-    select = '/Script/CommonUI.CommonButtonBase:SetIsSelected',
-    list_model = 'SN2CheatListViewModel', -- what a pick list shows and runs
-    pick = '/Script/Subnautica2.SN2CheatListViewModel:SelectItem',
-    list_command = 'ConsoleCommand',    -- a pick list's own command, {0} for the picked row ("Item {0} 1")
-    set_blur = '/Script/UMG.BackgroundBlur:SetBlurStrength',
   },
 }

@@ -34,66 +34,47 @@ end
 check(type(cfg.back_key) == 'string' and cfg.back_key ~= cfg.key, 'stepping back has a key of its own')
 check(cfg.toggle_gap_ms >= 100, 'a double press of the key is ignored')
 check(cfg.game.last_class == 'CheatManager', 'the cheats of the engine itself are not counted as the game ones')
-local row = route.search_text('DA_TitaniumIngot_ItemType', 'Titanium Ingot Resource', cfg.search.strip)
-check(row == 'Titanium Ingot Resource TitaniumIngot',
-  'a row is searched by its name, its category and its data name, without the shared parts')
-check(route.matches(row, 'ing TIT') and route.matches(row, ''), 'typed words match as written, in any order and case')
-check(route.matches(row, 'resource tit'), 'the category is a search word like any other')
-check(not route.matches(row, 'tnm') and not route.matches(row, 'copper'), 'a word that is not there hides the row')
-local knife = 'UWEItemType /Game/Data/ItemType/Tools/DA_Knife_ItemType.DA_Knife_ItemType'
-check(knife:match(cfg.search.category) == 'Tools',
-  'the category is the folder the item lives in')
-check(cfg.search.every_ms > 0 and cfg.search.show_unpublished == false, 'unpublished items are hidden as shipped')
-local typed_chars = {}
-for _, ch in pairs(cfg.search.keys) do typed_chars[ch] = true end
-check(typed_chars.a and typed_chars.z and typed_chars['0'] and typed_chars[' '] and cfg.search.erase,
-  'with a list open, letters, digits and space type into the filter and one key takes one back')
-local said = route.fill(cfg.hint.filtering, { query = 'tit', shown = 4, all = 208 })
-check(said:find('tit', 1, true) and said:find('4 of 208', 1, true) and not said:find('{', 1, true),
-  'the label over the command line shows what has been typed')
-check(cfg.search.settle_ms >= cfg.search.every_ms, 'a list is given time to finish building before it is read')
-
-local rules = { hide = { 'Button', 'Blur' }, keep = { 'ItemButton' } }
-check(route.hidden('Button', 'GodButton', rules), 'a part of a hidden kind is hidden')
-check(not route.hidden('Button', 'ItemButton', rules), 'a kept part stays')
-check(not route.hidden('TextBox', 'Input', rules), 'a kind that is not listed stays')
-
--- The shipped settings keep the command line and what opens the pick lists.
-local function shown(kind_, part_) return not route.hidden(kind_, part_, cfg.panel) end
-check(#cfg.hint.listing > 0, 'the hint says what typing does while a list shows')
-check(shown('CommonTextBlock', cfg.hint.part) and #cfg.hint.text > 0,
-  'the hint has words and its label stays on the panel')
-check(shown('CommonTextBlock', 'Input') and shown('CommonTextBlock', 'autocomplete'), 'the command line stays')
-check(shown('CommonTextButton_C', 'ItemButton') and not shown('CommonTextButton_C', 'GotoButton')
-  and shown('CommonTextButton_C', 'MacroButton'), 'the pick lists stay, macros among them')
-check(not shown('CommonTextButton_C', 'DiagMap') and not shown('HorizontalBox', 'StatCommandsContainer')
-  and not shown('BackgroundBlur', 'BackgroundBlur_82'), 'the debug rows and the blur are hidden')
 check(type(cfg.key) == 'string' and type(cfg.word) == 'string' and cfg.tries >= 1, 'the settings name a key and a word')
-local at = cfg.layout
-check(type(at.part) == 'string' and at.left >= 0 and at.left < at.right and at.right <= 1
-  and at.top < cfg.list.top and cfg.list.top < cfg.list.bottom and cfg.list.bottom <= 1,
-  'one column: the block hangs from the top, the list fills below it, all inside the screen')
 check(cfg.nav.UP_ARROW == -1 and cfg.nav.DOWN_ARROW == 1 and cfg.run_key == 'RETURN',
   'the arrow keys move the choice one row and Enter runs it (UE4SS key names)')
-check(not route.hidden('VerticalBox', at.part, cfg.panel), 'the block the layout places is not hidden')
-check(#cfg.close.lists >= 1 and cfg.close.most >= 1 and cfg.close.wait_ms >= 0, 'closing names what it closes')
+local at = cfg.layout
+check(at.left >= 0 and at.left < at.right and at.right <= 1 and at.top >= 0 and at.top < 1,
+  'the palette is inside the screen')
+check(cfg.max_rows >= 1 and cfg.list_height > 0 and cfg.read_ms > 0 and cfg.answer_lines >= 1,
+  'it keeps rows in a list of its own height and reads the search line while it shows')
+for _, h in ipairs(cfg.hints) do
+  check(type(h.label) == 'string' and type(h.key) == 'string' and h.key ~= '',
+    'the hint ' .. h.label .. ' names its key')
+end
+local kinds = {}
+for _, t in ipairs(cfg.tabs) do
+  check(type(t.label) == 'string' and t.label ~= '', 'a tab has a label')
+  kinds[t.kind or 'all'] = true
+end
+check(kinds.all and kinds.item and kinds.server and kinds.command and kinds.recent,
+  'one tab for each kind of row, and one for all')
+for _, a in ipairs(cfg.item_actions) do
+  check(a.line:find('{id}', 1, true), 'the item action ' .. a.label .. ' names the item')
+end
+check(cfg.items.show_unpublished == false, 'unpublished items are hidden as shipped')
+local knife = 'UWEItemType /Game/Data/ItemType/Tools/DA_Knife_ItemType.DA_Knife_ItemType'
+check(knife:match(cfg.items.category) == 'Tools', 'the category is the folder the item lives in')
+for key, message in pairs(cfg.text) do
+  check(type(message) == 'string' and message ~= '', 'the text ' .. key .. ' has words')
+end
+for key, c in pairs(cfg.colors) do
+  check(c.R and c.G and c.B and c.A and c.A <= 1, 'the colour ' .. key .. ' is R, G, B and A')
+end
 
--- A number at the end of a list's filter is how many: the search is the rest.
+-- A number at the end of the search is how many: the search is the rest.
 local search, count = route.count('glass 10')
 check(search == 'glass' and count == 10, 'glass 10 searches glass and counts 10')
 search, count = route.count('titanium ingot')
 check(search == 'titanium ingot' and count == nil, 'no number, no count')
 search, count = route.count('glass 0')
 check(search == 'glass 0' and count == nil, 'a count of 0 is no count')
-check(route.counted('Item {0} 1', 'DA_Glass_ItemType', 10) == 'Item DA_Glass_ItemType 10',
-  'the list command, with the row and the count')
-check(route.counted('Item {0} 1', 'DA_Glass_ItemType', nil) == 'Item DA_Glass_ItemType 1',
-  'no count keeps the list number')
-check(route.counted('SpawnThing {0}', 'X', 5) == nil, 'a command with no number of its own takes no count')
-check(route.counted('Summon', 'X', 5) == nil, 'a command with no {0} is not built')
-check(route.counted('Item {0} 1', 'A%1B', 2) == 'Item A%1B 2', 'a name with % is put in as written')
 
--- History: the panel's own lines, newest first, ahead of the game's A to Z order.
+-- History: the lines run from the palette, newest first.
 local recent = route.remember({}, 'help')
 recent = route.remember(recent, 'Item DA_Glass_ItemType 10')
 recent = route.remember(recent, ' help ')
@@ -101,31 +82,27 @@ check(recent[1] == 'help' and recent[2] == 'Item DA_Glass_ItemType 10' and #rece
   'a line run again moves to the front, once')
 check(#route.remember({ 'a', 'b', 'c' }, 'd', 3) == 3, 'at most max lines are kept')
 check(route.remember({ 'a' }, '  ')[1] == 'a', 'an empty line is not kept')
-local order = route.newest_first({ 'Equip X 1', 'Give 10 glass', 'help', 'Item DA_Glass_ItemType 10' }, recent)
-check(table.concat(order, ',') == '3,4,1,2', 'newest first, then the rest in the game order')
-check(table.concat(route.newest_first({ 'a', 'b' }, { 'zzz' }), ',') == '1,2',
-  'lines the list does not have change nothing')
 
 local function unfinished(name)
-  for _, pattern in ipairs(cfg.search.unfinished) do if name:find(pattern) then return true end end
+  for _, pattern in ipairs(cfg.items.unfinished) do if name:find(pattern) then return true end end
   return false
 end
 local marked = { '[PLACEHOLDER FIX OR DELETE]', '[PH] Resource Overflow', '[DEPRECATED] Old Tank', '[TEST] Box' }
 for _, name in ipairs(marked) do
-  check(unfinished(name), 'a row the game marks unfinished is hidden: ' .. name)
+  check(unfinished(name), 'an item the game marks unfinished is hidden: ' .. name)
 end
-check(not unfinished('#LeviathanAwakens Poster') and not unfinished('Acid rain'), 'a finished row stays')
+check(not unfinished('#LeviathanAwakens Poster') and not unfinished('Acid rain'), 'a finished item stays')
 
-local base = { key = 'F2', layout = { top = 0.2, left = 0.36 }, panel = { hide = { 'A', 'B' } } }
-route.merge(base, { key = 'F3', layout = { top = 0.1 }, panel = { hide = { 'C' } } })
+local base = { key = 'F2', layout = { top = 0.2, left = 0.36 }, tabs = { 'A', 'B' } }
+route.merge(base, { key = 'F3', layout = { top = 0.1 }, tabs = { 'C' } })
 check(base.key == 'F3' and base.layout.top == 0.1 and base.layout.left == 0.36,
   "a player's own settings change only the keys they name")
-check(#base.panel.hide == 1 and base.panel.hide[1] == 'C', 'a list in them replaces the shipped list whole')
+check(#base.tabs == 1 and base.tabs[1] == 'C', 'a list in them replaces the shipped list whole')
 check(route.merge(base, 'not a table') == base, 'settings that are not a table change nothing')
 local sandboxed = load("return { key = os and 'escaped' or 'kept' }", 'own', 't', {})
-check(sandboxed().key == 'kept', 'the own-settings file runs with no libraries')
-check(type(cfg.own_settings) == 'string' and cfg.own_settings:find('Moonpool', 1, true),
-  "a player's own settings live beside the panel's history")
+check(sandboxed().key == 'kept', 'the own-settings and own-rows files run with no libraries')
+check(cfg.own_settings:find('Moonpool', 1, true) and cfg.own_commands:find('Moonpool', 1, true),
+  "a player's own settings and rows live beside the palette's history")
 
 if failures > 0 then os.exit(1) end
 print('console client: ok')

@@ -56,6 +56,19 @@ function M.authorized(admins, sender)
   return sender.eos ~= nil and admins[sender.eos] == true
 end
 
+-- Whether a moderator (a sender in moderators, not an admin) may send text: only a console line,
+-- led by the console's word, whose command is one of allowed (console.json moderator_commands).
+-- Game cheat lines stay with admins.
+function M.moderator_may(moderators, sender, text, word, allowed)
+  if not (sender.eos ~= nil and moderators[sender.eos] == true) then return false end
+  local lead, command = tostring(text or ''):match('^%s*(%S+)%s+(%S+)')
+  if not lead or lead:lower() ~= tostring(word or ''):lower() then return false end
+  for _, c in ipairs(allowed or {}) do
+    if tostring(c):lower() == command:lower() then return true end
+  end
+  return false
+end
+
 function M.parse(text, prefix)
   prefix = prefix or '!'
   if prefix == '' or type(text) ~= 'string' or text:sub(1, #prefix) ~= prefix then return nil end

@@ -101,8 +101,9 @@ The server
   server save                  force an asynchronous world save on the host controller
 
 Looking inside
-  logs [game|steam|services|join_watch|web] [-f]
-                               tail a log from the volume (default: game)
+  logs [game|steam|services|join_watch|web|admin-audit] [-f]
+                               tail a log from the volume (default: game); admin-audit: one line
+                               per admin line the server handled, who sent it and what came of it
   diag verify-fresh            read-only check of its own logs that a fresh install hosted by itself
   diag friend-code [--force]   EXPERIMENTAL: the Sonar code for non-Steam players
   diag viewer                  the viewer's address and password
@@ -1456,12 +1457,12 @@ LOADOUT_ENV_LOCAL = {b"COMPOSE_PROJECT_NAME", b"SN2_CONTAINER_NAME", b"SN2_IMAGE
 # What makes a server this server, besides the game: paths in the data folder. The Steam sign-in is
 # left out on purpose: it is a live credential, and signing in once on the new machine is safer.
 # History rides along so the moved server is the same server: hours and peaks (metrics.csv), who has been
-# aboard (join_watch.log), the explored map (map-chart-*.json, map-tiles) and the Discord card's message
+# aboard (join_watch.log), what admins ran (admin-audit.log), the explored map (map-chart-*.json, map-tiles) and the Discord card's message
 # ids, so the card is edited in place, not posted again. A trailing * is a name prefix.
 LOADOUT_PATHS = ("control/plugins.yaml", "control/settings.yaml", "control/admins.txt", "control/SAVE_SELECT",
                  "sn2headless.json", "console.json", "card.yaml", "map-background.json", "mods-pins.json",
                  "client-mods", "ue4ss-client", "ue4ss-local", "ue4ss-layouts", "paks-local", "mod-signing",
-                 "metrics.csv", "logs/join_watch.log", "map-chart-*", "map-tiles", "discord")
+                 "metrics.csv", "logs/join_watch.log", "logs/admin-audit.log", "map-chart-*", "map-tiles", "discord")
 
 
 def loadout_member(name):
@@ -1656,7 +1657,7 @@ def logs(a):
             follow = True
         else:
             which = arg
-    if which not in ("game", "steam", "services", "join_watch", "web"):
+    if which not in ("game", "steam", "services", "join_watch", "web", "admin-audit"):
         usage_error(f"unknown log: {which}")
     f = Path(E.get("SN2_LOG_DIR") or cfg()["LOG_DIR"]) / f"{which}.log"
     if not f.is_file():

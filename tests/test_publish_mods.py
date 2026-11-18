@@ -296,8 +296,9 @@ class DownloadsAndLinks(unittest.TestCase):
             source, archive = PUBLISH.resolve_local({"name": "MoonpoolConsole"}, {"type": "local"}, data, public,
                                                     "MoonpoolConsole")
             with zipfile.ZipFile(archive) as z:
-                self.assertEqual(sorted(z.namelist()), ["Scripts/config.lua", "Scripts/main.lua", "Scripts/panel.lua",
-                                                       "Scripts/route.lua"])
+                shipped = sorted(p.relative_to(ROOT / "client-mods/MoonpoolConsole").as_posix()
+                                 for p in (ROOT / "client-mods/MoonpoolConsole").rglob("*") if p.is_file())
+                self.assertEqual(sorted(z.namelist()), sorted(set(shipped) | {PUBLISH.PANEL_COMMANDS}))
             self.assertEqual(source["url"], "files/MoonpoolConsole.zip?sha256=" + source["hashes"][0]["value"][:16],
                              "the address changes with the content, so a cache cannot serve an old zip")
             self.assertTrue((public / "files" / "MoonpoolConsole.zip").is_file(), "and the zip it names is still served")
@@ -306,8 +307,27 @@ class DownloadsAndLinks(unittest.TestCase):
             _, archive = PUBLISH.resolve_local({"name": "MoonpoolConsole"}, {"type": "local"}, data, public,
                                                "MoonpoolConsole")
             with zipfile.ZipFile(archive) as z:
-                self.assertEqual(z.namelist(), ["Scripts/main.lua"])
+                self.assertEqual(z.namelist(), ["Scripts/main.lua", PUBLISH.PANEL_COMMANDS])
                 self.assertEqual(z.read("Scripts/main.lua"), b"print('mine')")
+
+    def test_the_panel_gets_the_servers_own_commands_as_values_lua_can_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"; public = Path(tmp) / "public"; data.mkdir()
+            (data / "console.json").write_text(
+                '{"signal_word": "adm", "commands": {"day": {"aliases": ["day"], "lines": ["DayOnly 1"]}},'
+                r' "messages": {"help": ["day: \"sun\"\nup \\ \u00012"]}}', encoding="utf-8")
+            _, archive = PUBLISH.resolve_local({"name": "MoonpoolConsole"}, {"type": "local"}, data, public,
+                                               "MoonpoolConsole")
+            with zipfile.ZipFile(archive) as z:
+                text = z.read(PUBLISH.PANEL_COMMANDS).decode()
+            self.assertIn('["word"] = "adm"', text, "the host's own console.json wins")
+            self.assertIn('["day"] = {["aliases"] = {"day"}', text, "its commands are added to the shipped ones")
+            self.assertIn('["give"]', text, "the shipped commands stay")
+            self.assertIn(r'{"day: \"sun\"\010up \\ \0012"}', text,
+                          "quotes, backslashes and control characters are escaped, three digits each")
+            self.assertNotIn("DayOnly", text, "what a command runs stays on the server")
+            other = PUBLISH.zip_bytes([("a", b"x")])
+            self.assertNotIn(PUBLISH.PANEL_COMMANDS.encode(), other, "other mods get nothing added")
 
     def test_a_link_under_client_mods_is_not_published(self):
         with tempfile.TemporaryDirectory() as tmp:

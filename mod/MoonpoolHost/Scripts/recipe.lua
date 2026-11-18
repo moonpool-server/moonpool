@@ -1,6 +1,7 @@
 -- recipe.lua: what the container adds to MoonpoolHost: the moonpool control queue, status.json,
 -- the idle freeze and the player commands. Hosting itself stays in main.lua. Original code, MIT.
 local json = require('json')
+local audit = require('audit')
 local protocol = require('protocol')
 local status = require('status')
 local host_core = require('sn2_host_core')
@@ -81,6 +82,14 @@ local HOST_NAME = os.getenv('SN2_HOST_NAME') or 'SN2 Host'
 local env_limit = tonumber(os.getenv('SN2_SESSION_LIMIT') or '')
 if env_limit and env_limit >= 2 and env_limit <= 64 then CFG.host.max_players = env_limit end
 local DIR = os.getenv('SN2_CONTROL_WIN') or CFG.control_dir
+-- The admin audit log (audit.lua), beside the server's other logs in the data volume.
+local DATA_WIN = os.getenv('SN2_DATA_WIN') or ''
+local AUDIT = DATA_WIN ~= '' and (DATA_WIN .. '\\logs\\admin-audit.log') or nil
+local function audited(who, eos, line, result, said)
+  if not AUDIT then return end
+  local ok, err = audit.append(AUDIT, audit.entry(os.time(), who, eos, line, result, said))
+  if not ok then log('audit: not written: ' .. tostring(err)) end
+end
 if CFG.control_dir ~= DEFAULTS.control_dir then DIR = CFG.control_dir end
 host_core.configure({ dir = DIR })
 local cpath = host_core.cpath
@@ -787,7 +796,7 @@ local function admin_call(name, args)
           to, 'info', args.line, table.concat(r.lines, '\n'), tonumber(CATALOG.reply_seconds) or 8)
       end)
     end
-    return true, { lines = r.lines }
+    return true, { lines = r.lines, runs = #r.runs, undone = r.undo ~= nil }
   end
   if name == 'ping' then
     local rows = status.players(to_str)
@@ -882,7 +891,12 @@ end
 local function admin_drain()
   local line = admin_pace.take(cheat_queue, os.time())
   if line then -- from the game's cheat call: the gate already checked the sender
-    admin_call('mp', { sender = line.sender, line = line.text, forwarded = true })
+    local ok, out, said = admin_call('mp', { sender = line.sender, line = line.text, forwarded = true })
+    -- What came of it: game lines queued to run for players (each runs a moment later, line_gap_ms
+    -- apart), the server's own work (undo), or only an answer (help, who, a refusal).
+    local result = not ok and 'refused' or (out.runs > 0 and ('queued ' .. out.runs .. ' line(s)'))
+      or (out.undone and 'undo') or 'answered'
+    audited(line.sender.name, line.sender.eos, line.text, result, ok and out.lines or said)
     admin_pace.mark(cheat_queue, os.time())
   end
   local item = admin_pace.take(admin_queue, os.time())
@@ -898,6 +912,7 @@ local function admin_drain()
     if r and not r.silent then
       log(string.format('admin command: sender=%s eos=%s command=%s result=%s %s',
         tostring(sender.name), tostring(sender.eos), item.text, r.ok and 'done' or 'refused', r.text))
+      audited(sender.name, sender.eos, item.text, r.ok and 'ran' or 'refused', r.text)
       admin_reply(item.ping_id, r)
       remember_restore(item)
       admin_pace.mark(admin_queue, os.time())
@@ -1015,6 +1030,7 @@ LoopAsync(5000, function()
         -- sender who is not an admin is removed (console.json: on_gate_failure), so it happens once.
         log(string.format('cheat gate: COULD NOT STOP a line from %s (eos %s): %s', sender.name,
           tostring(sender.eos), tostring(text)))
+        audited(sender.name, sender.eos, text, 'run by the game: the gate could not stop it')
         if CATALOG.on_gate_failure == 'kick' and not admin_signal.authorized(ADMIN.admins, sender) then
           pcall(handlers.kick, { player = sender.name })
           log('cheat gate: removed ' .. sender.name .. ' after a line that could not be stopped')
@@ -1022,20 +1038,25 @@ LoopAsync(5000, function()
         return
       end
       if type(text) ~= 'string' or text == '' then return end
-      if not admin_signal.authorized(ADMIN.admins, sender) then
+      local moderator = not admin_signal.authorized(ADMIN.admins, sender) and admin_signal.moderator_may(
+        ADMIN.moderators or {}, sender, text, CATALOG.signal_word, CATALOG.moderator_commands)
+      if not (moderator or admin_signal.authorized(ADMIN.admins, sender)) then
         log(string.format('cheat gate: dropped %s from %s (eos %s): not an admin', text, sender.name,
           tostring(sender.eos)))
+        audited(sender.name, sender.eos, text, 'refused: not an admin')
         return
       end
       if admin_pace.repeated(cheat_queue, sender.eos or sender.name, text, os.time()) then
         log(string.format('cheat gate: %s from admin %s: dropped, the same line arrived just before', text,
           sender.name))
+        audited(sender.name, sender.eos, text, 'dropped: the same line just before')
         return
       end
       -- It waits its turn in the same paced queue as the signal commands.
       local queued, why = admin_pace.push(cheat_queue, { sender = sender, text = text, forwarded = true },
         sender.eos or sender.name)
-      log(string.format('cheat gate: %s from admin %s: %s', text, sender.name, queued and 'queued' or why))
+      log(string.format('cheat gate: %s from %s %s: %s', text, moderator and 'moderator' or 'admin', sender.name,
+        queued and 'queued' or why))
     end, cheat_restore)
     cheat_hooked = true
     _G.SN2_CHEAT_GATE = true -- main.lua makes no Host call until both gates are in place
@@ -1393,6 +1414,7 @@ local banned_seen = {}
 local function hosted_replay()
   local ok, err = pcall(function()
     ADMIN.admins = admin_signal.admin_set(os.getenv('SN2_ADMINS') or '', read_file(cpath('admins.txt')))
+    ADMIN.moderators = admin_signal.admin_set('', read_file(cpath('moderators.txt')))
     access.tick(banned_seen, access.names(read_file(cpath('bans.txt'))), cached_players(), HOST_NAME,
       function(name)
         local ran, _, why = handlers.player({ player = HOST_NAME, command = 'KickPlayer ' .. name })

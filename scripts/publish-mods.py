@@ -393,6 +393,49 @@ def resolve_curseforge(entry, install, key, temp_dir, name, kind, pins=None):
 
 # Client mods that come with Moonpool: beside this script's folder in the image and in the repository.
 SHIPPED_CLIENT_MODS = Path(__file__).resolve().parent.parent / "client-mods"
+# The admin panel is given the server's own console commands: its console.json (the shipped one, then
+# the host's data-volume copy over it key by key, as the host mod reads them) as a Lua table of values.
+PANEL_MOD, PANEL_COMMANDS = "MoonpoolConsole", "Scripts/host-commands.lua"
+SHIPPED_CONSOLE = Path(__file__).resolve().parent.parent / "mod" / "MoonpoolHost" / "console.json"
+HOST_COMMANDS_PROTOCOL = 1
+
+
+def lua_value(v):
+    """v as a Lua literal: tables, strings, numbers and booleans only."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        return '"' + "".join("\\" + c if c in '\\"' else "\\%03d" % ord(c) if ord(c) < 32 else c for c in v) + '"'
+    if isinstance(v, list):
+        return "{" + ", ".join(lua_value(x) for x in v) + "}"
+    if isinstance(v, dict):
+        return "{" + ", ".join("[%s] = %s" % (lua_value(str(k)), lua_value(x)) for k, x in sorted(v.items())) + "}"
+    return "nil"
+
+
+def merged(base, over):
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            merged(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
+def host_commands(data):
+    """The panel's host-commands.lua: the server's word, commands with their arguments, verbs and help."""
+    cat = json.loads(SHIPPED_CONSOLE.read_text(encoding="utf-8"))
+    own = data / "console.json"
+    if own.is_file():
+        merged(cat, json.loads(own.read_text(encoding="utf-8")))
+    table = {"protocol": HOST_COMMANDS_PROTOCOL, "word": cat.get("signal_word", "mp"),
+             "commands": {name: {"aliases": c.get("aliases", [name]), "args": c.get("args", [])}
+                          for name, c in (cat.get("commands") or {}).items()},
+             "verbs": cat.get("verbs") or {}, "help": (cat.get("messages") or {}).get("help") or []}
+    return ("-- Written by publish-mods.py from the server's console.json when this mod was published.\n"
+            "return " + lua_value(table) + "\n").encode("utf-8")
 
 
 def resolve_local(entry, install, data, public, name):
@@ -414,7 +457,10 @@ def resolve_local(entry, install, data, public, name):
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", name) + ".zip"
     archive = out_dir / zip_name
-    put(archive, zip_bytes((path.relative_to(folder).as_posix(), path.read_bytes()) for path in files))
+    members = [(path.relative_to(folder).as_posix(), path.read_bytes()) for path in files]
+    if name == PANEL_MOD:
+        members = [m for m in members if m[0] != PANEL_COMMANDS] + [(PANEL_COMMANDS, host_commands(data))]
+    put(archive, zip_bytes(members))
     digest = sha256(archive)
     # The address names the content: a cache in front of the server (a CDN keeps files for hours) would
     # otherwise hand out the old zip under the same name, and every player's download fails its check.
