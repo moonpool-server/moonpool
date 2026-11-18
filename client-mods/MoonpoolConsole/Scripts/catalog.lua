@@ -12,6 +12,10 @@ local function lower(s) return tostring(s or ''):lower() end
 -- Same-named items are told apart by their data id in detail.
 function M.items(facts, actions, show_unpublished, hidden_categories)
   local out = {}
+  -- An item's second line is its category in the game's data; the data name is added only where two
+  -- items share a display name, so they can be told apart.
+  local named = {}
+  for _, f in pairs(facts or {}) do named[f.label] = (named[f.label] or 0) + 1 end
   for id, f in pairs(facts or {}) do
     local hidden = false
     for _, c in ipairs(hidden_categories or {}) do hidden = hidden or f.category == c end
@@ -24,7 +28,8 @@ function M.items(facts, actions, show_unpublished, hidden_categories)
         end
       end
       out[#out + 1] = { key = 'item:' .. id, id = id, name = f.label, kind = 'item',
-        detail = (f.category ~= '' and f.category .. ' · ' or '') .. id, actions = acts,
+        detail = named[f.label] > 1 and ((f.category ~= '' and f.category .. ' · ' or '') .. id)
+          or (f.category ~= '' and f.category or id), actions = acts,
         args = { { name = 'count', default = '1' } } }
     end
   end
@@ -137,16 +142,36 @@ function M.own(list)
   return out
 end
 
--- The game's macros (text files in the game's Content/Macros), each run on this PC by the game's own
--- RunMacro, which sends its lines to the server one by one: list of { name, detail }.
+-- The game's macros, each run on this PC by the game's own macro command, which sends its lines to the
+-- server one by one: a list of { name, id, detail } (from the game's own Macro list, or the settings)
+-- and the line that runs one, {id} for its name.
 function M.macros(list, line)
   local out = {}
   for _, m in ipairs(list or {}) do
-    out[#out + 1] = { key = 'macro:' .. m.name, name = m.name, kind = 'macro', detail = tostring(m.detail or ''),
-      local_run = true, actions = { { label = 'Run', line = (line or 'RunMacro {id}'), local_run = true } },
-      id = m.name, args = {} }
+    out[#out + 1] = { key = 'macro:' .. (m.id or m.name), name = m.name, kind = 'macro',
+      detail = tostring(m.detail or ''), local_run = true,
+      actions = { { label = 'Run', line = (line or 'RunMacro {id}'), local_run = true } },
+      id = m.id or m.name, args = {} }
   end
   return out
+end
+
+-- The rows a search looks through: recent lines only on their own tab, or on All while nothing is
+-- typed, so old lines don't crowd out what a search is for.
+function M.searchable(entries, kind, query)
+  if kind == 'recent' or tostring(query or ''):match('^%s*$') then return entries end
+  local out = {}
+  for _, e in ipairs(entries) do if e.kind ~= 'recent' then out[#out + 1] = e end end
+  return out
+end
+
+-- The line that gives an item to someone else: through the server's console, which picks Give or
+-- Spawn from the game's own lists. template: with {word}, {who}, {id} and {count}.
+function M.give_for(template, word, who, id, count)
+  local first = tostring(who or ''):match('^(%S+)') or ''
+  return (tostring(template):gsub('{(%w+)}', function(k)
+    return ({ word = word, who = first, id = id, count = tostring(count or 1) })[k] or ''
+  end))
 end
 
 -- The line that undoes line, from rules: a list of { pattern, undo } where undo may use %1.. for the

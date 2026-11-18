@@ -111,6 +111,14 @@ end
 
 -- What the game's data says about each item: name, category, published (and not marked unfinished)
 -- and equippable. Read once, at the first opening.
+-- An item's category: the last part of its own category tag in the game's data (Item.Category.Tools ->
+-- Tools), else the folder its data is in.
+local function category_of(asset)
+  local tag = ''
+  pcall(function() tag = asset[G.item_category][G.tag_name]:ToString() end)
+  local last = tag ~= 'None' and tag:match('([%w_]+)$') or nil
+  return last or asset:GetFullName():match(CFG.items.category) or ''
+end
 local function item_facts()
   local facts = {}
   for _, asset in ipairs(live(G.item_class)) do
@@ -122,7 +130,7 @@ local function item_facts()
     local eok, equippable = ucall(asset, G.is_equippable)
     facts[id] = { label = label, published = (not ok or published ~= false) and finished,
       equippable = eok and equippable == true,
-      category = asset:GetFullName():match(CFG.items.category) or '' }
+      category = category_of(asset) }
   end
   return facts
 end
@@ -137,45 +145,67 @@ end
 -- What each of the game's own cheat lists holds, read through the panel's own handlers: each is run as
 -- a click on its button runs it, its list's view model is read (the command, the items' data names)
 -- and the list is closed with the game's own command. A list that cannot be read is left out.
+-- One of the game's own cheat lists, read through the panel's own handler: it is run as a click on
+-- its button runs it, the list it fills is read (its command; each item's data name and title) and
+-- closed the game's way (a list still active after that is deactivated and hidden, or it would stay
+-- on screen behind the palette). The list read is the one the handler filled: a view model that was
+-- not there before, or one whose command changed. Nil when it cannot be read.
+local function read_game_list(pc, panel, def)
+  local button
+  pcall(function() button = panel[def.button] end)
+  if not (def and valid(panel) and valid(button)) then return nil end
+  local before = {}
+  for _, vm in ipairs(live(G.list_model)) do
+    local c = ''
+    pcall(function() c = vm[G.list_command]:ToString() end)
+    before[vm:GetAddress()] = c
+  end
+  local handler = route.fill(G.list_handler, def)
+  if not pcall(function() panel[handler](panel, button) end) then return nil end
+  local found
+  for _, vm in ipairs(live(G.list_model)) do
+    local c = ''
+    pcall(function() c = vm[G.list_command]:ToString() end)
+    if before[vm:GetAddress()] ~= c then
+      found = { command = c, items = {} }
+      pcall(function()
+        local items = vm[G.list_items]
+        for i = 1, items:GetArrayNum() do
+          local id, title
+          pcall(function() id = items[i][G.list_id]:ToString() end)
+          pcall(function() title = items[i][G.list_title]:ToString() end)
+          if id then found.items[#found.items + 1] = { id = id, title = title or id } end
+        end
+      end)
+    end
+  end
+  local system = StaticFindObject(G.system)
+  pcall(function() system:ExecuteConsoleCommand(pc, G.hide_list, pc) end)
+  for _, list in ipairs(live(G.list_widget)) do
+    local ok, open = ucall(list, G.is_activated)
+    if ok and open then ucall(list, G.deactivate) end
+    ucall(list, G.set_visibility, G.collapsed)
+  end
+  return found
+end
+-- The item actions' lists: { label, command, ids } each.
 local function game_lists(pc, panel)
   local out = {}
-  local system = StaticFindObject(G.system)
   for _, want in ipairs(CFG.list_actions) do
-    local def = G.lists[want.list]
-    local entry = { label = want.label, ids = {} }
-    local button
-    pcall(function() button = panel[def.button] end)
-    if def and valid(panel) and valid(button) then
-      local handler = route.fill(G.list_handler, def)
-      local ran = pcall(function() panel[handler](panel, button) end)
-      for _, vm in ipairs(ran and live(G.list_model) or {}) do
-        local command = ''
-        pcall(function() command = vm[G.list_command]:ToString() end)
-        local word = command:match('^(%S+)') or ''
-        if word:lower() == want.list then
-          entry.command = command
-          pcall(function()
-            local items = vm[G.list_items]
-            for i = 1, items:GetArrayNum() do
-              local id
-              pcall(function() id = items[i][G.list_id]:ToString() end)
-              if id then entry.ids[id] = true end
-            end
-          end)
-        end
-      end
-      -- Closed the game's way; a list still active after that is deactivated and hidden, or it would
-      -- stay on screen behind the palette.
-      pcall(function() system:ExecuteConsoleCommand(pc, G.hide_list, pc) end)
-      for _, list in ipairs(live(G.list_widget)) do
-        local ok, open = ucall(list, G.is_activated)
-        if ok and open then ucall(list, G.deactivate) end
-        ucall(list, G.set_visibility, G.collapsed)
-      end
-    end
+    local list = read_game_list(pc, panel, G.lists[want.list])
+    local entry = { label = want.label, ids = {}, command = list and list.command }
+    for _, it in ipairs(list and list.items or {}) do entry.ids[it.id] = true end
     out[#out + 1] = entry
   end
   return out
+end
+-- The game's macros, from its own Macro list: { name, id } each and the line that runs one.
+local function game_macros(pc, panel)
+  local list = read_game_list(pc, panel, G.lists.macro)
+  if not (list and #list.items > 0) then return nil end
+  local out = {}
+  for _, it in ipairs(list.items) do out[#out + 1] = { name = it.title, id = it.id } end
+  return out, catalog.list_line(list.command)
 end
 local function build(pc, panel)
   if entries then return entries end
@@ -187,12 +217,14 @@ local function build(pc, panel)
   local game = catalog.game_commands(game_commands(pc), CFG.text.game_detail, params)
   local server = catalog.host_commands(host)
   local own = own_rows()
-  local macros = catalog.macros(CFG.macros, CFG.run_macro)
+  local game_macro_list, macro_line = game_macros(pc, panel)
+  local macros = catalog.macros(game_macro_list or CFG.macros, macro_line or CFG.run_macro)
   entries = {}
   for _, list in ipairs({ items, server, game, macros, own }) do
     for _, e in ipairs(list) do entries[#entries + 1] = e end
   end
-  say('entries', { items = #items, game = #game, server = #server, own = #own })
+  say('entries', { items = #items, game = #game, server = #server, own = #own, macros = #macros,
+    from = game_macro_list and 'the game' or 'config.lua' })
   trace('reading the rows', t)
   return entries
 end
@@ -235,10 +267,13 @@ local function text_block(tree, size, color)
   return t
 end
 local function set_text(t, s) if valid(t) then ucall(t, G.set_text, FText(s or '')) end end
-local function add(box, child, pad, horizontal)
+-- in: the kind of box child goes in (nil a vertical one, true a horizontal one, 'wrap' a wrap box),
+-- for the padding call its slot takes.
+local function add(box, child, pad, in_kind)
   local ok, slot = ucall(box, G.add_child, child)
   if ok and valid(slot) and pad then
-    ucall(slot, horizontal and G.set_slot_padding_h or G.set_slot_padding_v, pad)
+    local set = in_kind == 'wrap' and G.set_slot_padding_w or in_kind and G.set_slot_padding_h or G.set_slot_padding_v
+    ucall(slot, set, pad)
   end
 end
 local function margin(l, t, r, b) return { Left = l, Top = t, Right = r or l, Bottom = b or t } end
@@ -339,7 +374,7 @@ local function build_ui(w, pc)
     local row = make(tree, G.border)
     local lines = make(tree, G.vertical)
     local name = text_block(tree, CFG.sizes.row, C.text)
-    local detail = text_block(tree, CFG.sizes.detail, C.muted)
+    local detail = text_block(tree, CFG.sizes.detail, C.dim)
     if not (row and lines and name and detail) then return nil end
     ucall(row, G.set_brush_color, C.row)
     ucall(row, G.set_border_padding, margin(10, 4))
@@ -361,6 +396,18 @@ local function build_ui(w, pc)
     add(acts, u.act_areas[i], margin(0, 0, 10, 0), true)
   end
   add(col, acts, margin(0, 8, 0, 0))
+  -- Who an item is for: the player, each other player in the game's own player list, everyone.
+  local for_row = make(tree, G.horizontal)
+  u.for_row, u.targets, u.target_areas = for_row, {}, {}
+  local for_label = text_block(tree, CFG.sizes.small, C.muted)
+  set_text(for_label, CFG.text.for_label)
+  add(for_row, for_label, margin(0, 3, 8, 0), true)
+  for i = 1, CFG.max_targets do
+    u.targets[i] = text_block(tree, CFG.sizes.small, C.muted)
+    u.target_areas[i] = hit_area(u.targets[i], margin(6, 2))
+    add(for_row, u.target_areas[i], margin(0, 0, 6, 0), true)
+  end
+  add(col, for_row, margin(0, 6, 0, 0))
   u.preview = text_block(tree, CFG.sizes.small, C.muted)
   add(col, u.preview, margin(0, 4, 0, 0))
   -- What was sent, and the server's answer under it: wrapped, one line per line of the answer.
@@ -378,16 +425,20 @@ local function build_ui(w, pc)
   -- The keys along the bottom. One that is a game action (h.action) is the game's own hint, which
   -- draws the player's own key for it ("Close ( Esc )"); the rest, keys the game has no action for,
   -- are a word and the key in a box made to look like it.
-  local hints = make(tree, G.horizontal)
+  local hints = make(tree, G.wrap_box)  -- wraps onto a second line when the panel is narrow
   local hint_cls, lib = StaticFindObject(G.hint_widget), StaticFindObject(G.widgets)
-  u.game_hints = {}
+  u.game_hints, u.more_hints = {}, {}
   for _, h in ipairs(CFG.hints) do
     local game_hint
     if h.action and valid(hint_cls) then
       pcall(function() game_hint = lib:Create(pc, hint_cls, pc) end)
       if valid(game_hint) then
         -- Its text is set once it is in the panel: added, it starts again from its designer text.
-        add(hints, game_hint, margin(0, 1, 16, 0), true)
+        add(hints, game_hint, margin(0, 1, 16, 2), 'wrap')
+        if not h.core then
+          u.more_hints[#u.more_hints + 1] = game_hint
+          ucall(game_hint, G.set_visibility, G.collapsed)
+        end
         if ucall(game_hint, G.hint_set_text, FText(route.fill(G.hint_text, h))) then
           u.game_hints[#u.game_hints + 1] = { widget = game_hint, text = route.fill(G.hint_text, h) }
         else
@@ -397,19 +448,25 @@ local function build_ui(w, pc)
       end
     end
     if not game_hint then
+      local group = make(tree, G.horizontal)  -- one hint, kept on one line
       local word = text_block(tree, CFG.sizes.small, C.text)
       set_text(word, h.label .. ' (')
-      add(hints, word, margin(0, 3, 4, 0), true)
+      add(group, word, margin(0, 3, 4, 0), true)
       local cap = text_block(tree, CFG.sizes.small, C.accent)
       set_text(cap, h.key)
       local frame = make(tree, G.border)
       ucall(frame, G.set_brush_color, C.key)
       ucall(frame, G.set_border_padding, margin(5, 1))
       ucall(frame, G.set_content, cap)
-      add(hints, frame, margin(0, 1, 4, 0), true)
+      add(group, frame, margin(0, 1, 4, 0), true)
       local close = text_block(tree, CFG.sizes.small, C.text)
       set_text(close, ')')
-      add(hints, close, margin(0, 3, 16, 0), true)
+      add(group, close, margin(0, 3, 0, 0), true)
+      add(hints, group, margin(0, 0, 16, 2), 'wrap')
+      if not h.core then
+        u.more_hints[#u.more_hints + 1] = group
+        ucall(group, G.set_visibility, G.collapsed)
+      end
     end
   end
   add(col, hints, margin(0, 8, 0, 0))
@@ -441,6 +498,34 @@ end
 -- ---- what it shows -----------------------------------------------------------------------------
 
 local query, tab, found, chosen, action = nil, 1, {}, 1, 1
+local targets, target = {}, 1  -- who an item is for: { label, who } each, who nil for the player
+-- The players now in the game, from its own player list (this player first, as "me"), then everyone.
+local function read_targets(pc)
+  local out, mine = { { label = CFG.text.me } }, nil
+  pcall(function() mine = pc.PlayerState end)
+  local state = FindFirstOf(G.game_state)
+  local list
+  if valid(state) then pcall(function() list = state[G.player_array] end) end
+  pcall(function()
+    for i = 1, list:GetArrayNum() do
+      local ps = list[i]
+      if valid(ps) and not (valid(mine) and ps:GetAddress() == mine:GetAddress()) then
+        local name
+        pcall(function() name = ps[G.player_name]:ToString() end)
+        if name and name ~= '' and #out < CFG.max_targets - 1 then out[#out + 1] = { label = name, who = name } end
+      end
+    end
+  end)
+  out[#out + 1] = { label = CFG.text.everyone, who = CFG.everyone_word }
+  return out
+end
+-- The line an action sends: for someone else, an item goes through the server's give.
+local function line_for(e, act, count)
+  if e.kind == 'item' and targets[target] and targets[target].who then
+    return catalog.give_for(CFG.give_for, WORD, targets[target].who, e.id, count)
+  end
+  return catalog.draft(e, act, { count = count })
+end
 local function chosen_entry() return found[chosen] end
 -- The chosen row's colour, its actions and the line Enter sends; the row is scrolled into view.
 local function mark()
@@ -459,9 +544,20 @@ local function mark()
     set_color(t, i == action and C.amber or C.muted)
     ucall(ui.act_areas[i], G.set_brush_color, a and i == action and C.chosen or C.row)
   end
+  local is_item = e and e.kind == 'item'
+  ucall(ui.for_row, G.set_visibility, is_item and G.shown or G.collapsed)
+  for i, t in ipairs(ui.targets) do
+    local who = is_item and targets[i]
+    ucall(ui.target_areas[i], G.set_visibility, who and G.clickable or G.collapsed)
+    if who then
+      set_text(t, who.label)
+      set_color(t, i == target and C.amber or C.muted)
+      ucall(ui.target_areas[i], G.set_brush_color, i == target and C.chosen or C.row)
+    end
+  end
   local act = e and (e.actions[action] or e.actions[1])
   local _, count = route.count(query or '')
-  set_text(ui.preview, act and route.fill(CFG.text.preview, { line = catalog.draft(e, act, { count = count }) }) or '')
+  set_text(ui.preview, act and route.fill(CFG.text.preview, { line = line_for(e, act, count) }) or '')
 end
 -- The rows themselves: written once per search.
 local function draw()
@@ -482,9 +578,11 @@ local function search(text)
   local t = os.clock()
   local wanted, count = route.count(text)
   local rows, recent_first = with_recent()
+  rows = catalog.searchable(rows, CFG.tabs[tab].kind, wanted)
   local list, all = catalog.search(rows, wanted, CFG.max_rows, CFG.tabs[tab].kind, recent_first)
   found, chosen, action = list, 1, 1
-  set_text(ui.count, route.fill(CFG.text.found, { shown = #found, count = all }))
+  local found_text = all > #found and CFG.text.found_more or CFG.text.found
+  set_text(ui.count, route.fill(found_text, { shown = #found, count = all }))
   if #found == 0 and text ~= '' then set_text(ui.receipt, CFG.text.none); set_color(ui.receipt, C.muted); ui.none = true
   elseif ui.none then set_text(ui.receipt, ''); ui.none = false end
   draw()
@@ -539,6 +637,7 @@ local function send(pc, line, local_run)
   end
   local undo = catalog.opposite(line, CFG.opposites, WORD)
   set_text(ui.receipt, route.fill(undo and CFG.text.undo or CFG.text.sent, { line = line, undo = undo }))
+  set_text(ui.preview, '')  -- the line went: the receipt says what was sent; the preview returns on a move
   set_color(ui.receipt, C.accent)
   ucall(ui.answer_area, G.set_visibility, G.collapsed)  -- the last answer goes; this line's comes under it
   ui.none = false
@@ -575,6 +674,11 @@ local function run()
     return
   end
   local act = e.actions[action] or e.actions[1]
+  if e.kind == 'item' and targets[target] and targets[target].who then
+    local line = line_for(e, act, count)
+    if send(pc, line) then remember(line) end
+    return
+  end
   local line, missing = catalog.line(e, act, { count = count })
   if not line then
     set_text(ui.receipt, route.fill(CFG.text.missing, { arg = missing }))
@@ -599,6 +703,19 @@ local function edit()
     set_box(catalog.draft(e, act, { count = count }))
   end
   focus_box()
+end
+-- F1: the other key hints, shown or put away.
+local keys_shown = false
+local function toggle_keys()
+  if not (shown and ui) then return end
+  keys_shown = not keys_shown
+  for _, w in ipairs(ui.more_hints) do ucall(w, G.set_visibility, keys_shown and G.shown or G.collapsed) end
+end
+-- Ctrl and Up or Down: who an item is for.
+local function step_target(step)
+  if not shown or #targets == 0 then return end
+  target = (target - 1 + step) % #targets + 1
+  mark()
 end
 -- Ctrl and an arrow: the chosen row's next or previous action.
 local function step_action(step)
@@ -637,6 +754,9 @@ local function click()
       if i ~= chosen then chosen, action = i, 1 end
       return mark()
     end
+  end
+  for i, area in ipairs(ui.target_areas) do
+    if targets[i] and hovered(area) then target = i; return mark() end
   end
   local e = chosen_entry()
   for i, area in ipairs(ui.act_areas) do
@@ -721,6 +841,7 @@ local function toggle()
   if want then
     set_box('')
     query = nil
+    targets, target = read_targets(pc), 1
     -- The game's own hints go back to their designer text when first shown, so theirs is set again.
     for _, gh in ipairs(ui.game_hints or {}) do
       if valid(gh.widget) then
@@ -747,4 +868,5 @@ end
 local function back() if shown then toggle() end end
 
 return { toggle = toggle, back = back, nav = nav, run = run, edit = edit, step_action = step_action,
+  step_target = step_target, toggle_keys = toggle_keys,
   click = click, pick_tab = pick_tab, answer = answer, config = CFG, say = say }

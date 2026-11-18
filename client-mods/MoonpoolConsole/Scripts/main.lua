@@ -30,6 +30,10 @@ if bind(CFG.key, palette.toggle) then palette.say('ready', { key = CFG.key }) en
 bind(CFG.back_key, palette.back)
 bind(CFG.run_key, palette.run)
 bind(CFG.edit_key, palette.edit)
+bind(CFG.keys_key, palette.toggle_keys)
+for name, step in pairs(CFG.target_keys) do
+  bind(name, function() palette.step_target(step) end, CFG.action_modifier)
+end
 for name, step in pairs(CFG.action_keys) do
   bind(name, function() palette.step_action(step) end, CFG.action_modifier)
 end
