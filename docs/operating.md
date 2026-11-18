@@ -259,6 +259,36 @@ Two files in the data volume, both able to call anything in `bin/moonpool`:
 
 For mentions on important alerts, set `DISCORD_ALERT_ROLE_ID` to an opt-in role's id.
 
+## Outside check
+
+The Discord alerts come from inside the container, so they can't report the PC, WSL or Docker being down. A check from another machine covers that. The public mod list is enough:
+
+| `GET https://<your address>/mods.json` | Means |
+|---|---|
+| no answer, or not 200 | the PC, Docker or the web server is down |
+| 200 without `session` | the game has no world open: the server removes the session within about a minute of the game process ending, and has none while it starts |
+| 200 with `session.lobby_id` | the game is running with its world open |
+
+It doesn't see a game that is running but stuck: that keeps its session.
+
+A restart (a deploy, an update, or `RESTART_CRON`) has no session for a few minutes, so alert only after several failed checks in a row. An example for [Gatus](https://github.com/TwiN/gatus) (Apache-2.0), checked with v5.38.0:
+
+```yaml
+endpoints:
+  - name: moonpool
+    url: https://<your address>/mods.json
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "len([BODY].session.lobby_id) > 0"
+    alerts:
+      - type: discord          # needs alerting.discord.webhook-url; any Gatus alert type works
+        failure-threshold: 5
+        send-on-resolved: true
+```
+
+Any monitor that can match text in a response works too: look for `"lobby_id"`.
+
 ## Make it yours
 
 Change what players see from the data volume.
