@@ -796,7 +796,7 @@ local function admin_call(name, args)
           to, 'info', args.line, table.concat(r.lines, '\n'), tonumber(CATALOG.reply_seconds) or 8)
       end)
     end
-    return true, { lines = r.lines }
+    return true, { lines = r.lines, runs = #r.runs, undone = r.undo ~= nil }
   end
   if name == 'ping' then
     local rows = status.players(to_str)
@@ -892,7 +892,11 @@ local function admin_drain()
   local line = admin_pace.take(cheat_queue, os.time())
   if line then -- from the game's cheat call: the gate already checked the sender
     local ok, out, said = admin_call('mp', { sender = line.sender, line = line.text, forwarded = true })
-    audited(line.sender.name, line.sender.eos, line.text, ok and 'ran' or 'refused', ok and out and out.lines or said)
+    -- What came of it: game lines queued to run for players (each runs a moment later, line_gap_ms
+    -- apart), the server's own work (undo), or only an answer (help, who, a refusal).
+    local result = not ok and 'refused' or (out.runs > 0 and ('queued ' .. out.runs .. ' line(s)'))
+      or (out.undone and 'undo') or 'answered'
+    audited(line.sender.name, line.sender.eos, line.text, result, ok and out.lines or said)
     admin_pace.mark(cheat_queue, os.time())
   end
   local item = admin_pace.take(admin_queue, os.time())
@@ -1026,6 +1030,7 @@ LoopAsync(5000, function()
         -- sender who is not an admin is removed (console.json: on_gate_failure), so it happens once.
         log(string.format('cheat gate: COULD NOT STOP a line from %s (eos %s): %s', sender.name,
           tostring(sender.eos), tostring(text)))
+        audited(sender.name, sender.eos, text, 'run by the game: the gate could not stop it')
         if CATALOG.on_gate_failure == 'kick' and not admin_signal.authorized(ADMIN.admins, sender) then
           pcall(handlers.kick, { player = sender.name })
           log('cheat gate: removed ' .. sender.name .. ' after a line that could not be stopped')

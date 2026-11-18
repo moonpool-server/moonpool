@@ -115,8 +115,12 @@ The game's macros are text files in `Content/Macros` on each admin's PC, one con
 ## What admins ran
 
 Every admin line the server handles gets one JSON line in `logs/admin-audit.log` in the data volume:
-- **When it's written:** a line typed or picked in game, a console line, a PDA signal order, and a cheat line from a non-admin that the gate refused.
-- **What each line holds:** the time (UTC), the sender's name and EOS id, the line, and what came of it (`ran`, `refused: …`, `dropped: …`) with the server's answer.
+- **When it's written:** a line typed or picked in game, a console line, a PDA signal order, a cheat line from a non-admin that the gate refused, and a line the game ran because the gate could not stop it.
+- **What each line holds:** the time (UTC), the sender's name and EOS id, the line, what came of it and the server's answer. Outcomes:
+  - `queued N line(s)`: game lines queued for players. Each runs a moment later, so one can still miss a player who left.
+  - `undo`, `answered` (help, who, a refusal from the console itself), `ran` (a PDA order).
+  - `refused: …`, `dropped: …`.
+  - `run by the game: the gate could not stop it`.
 - **Reading it:** `bin/moonpool logs admin-audit`.
 - **Kept:** like the other logs (10 MB plus four older pieces), and it moves with `server pack`.
 
@@ -197,7 +201,7 @@ return {
 }
 ```
 
-- Both files are read with no Lua libraries, so they can hold values only.
+- Both files run as Lua with no libraries, so they can't open files or run programs. They can still hold any Lua, though, and a file that never ends holds up the game when the panel loads, so keep them to plain tables.
 - Commands for every admin on a server go in the server's `console.json`: when the server publishes the panel it writes its commands into the mod (`Scripts/host-commands.lua`), so they show under Server with their arguments.
 
 ## Console commands

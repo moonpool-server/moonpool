@@ -119,7 +119,7 @@ return {
   -- A player's own changes to any setting here, if that file exists: a Lua file that returns a table
   -- with only the keys to change, e.g. return { key = 'F3', layout = { top = 0.1 } }.
   own_settings = '\\Moonpool\\console-settings.lua',
-  -- A player's own rows, if that file exists: a Lua file read as values only that returns a list of
+  -- A player's own rows, if that file exists: a Lua file run with no libraries that returns a list of
   -- rows shaped like the built-in ones (catalog.lua, own), shown under Mine and in every search, e.g.
   --   return { { name = 'Daylight', line = 'DayOnly 1' },
   --     { name = 'Night shift', args = { { name = 'hour', default = '22' } },

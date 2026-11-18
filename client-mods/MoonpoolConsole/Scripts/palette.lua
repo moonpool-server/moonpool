@@ -7,7 +7,7 @@ local CFG = dofile(DIR .. 'config.lua')
 local route = dofile(DIR .. 'route.lua')
 local catalog = dofile(DIR .. 'catalog.lua')
 local HOME = os.getenv('LOCALAPPDATA') or ''
--- A file read as values only: no libraries, so it can only return a table.
+-- A player's file, run with no libraries (it can't open files or run programs), for the table it returns.
 local function values(path)
   local f = loadfile(path, 't', {})
   if not f then return nil end
