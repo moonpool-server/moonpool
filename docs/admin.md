@@ -193,6 +193,8 @@ Not yet tested with a second player:
 - F2 does nothing until the player has a body in the world: making the panel while the world was still loading crashed the game.
 - The lines run are kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
 
+The panel is also released as a mod of its own for players without a Moonpool server: [docs/moonpool-console.md](moonpool-console.md). It is zipped by `.github/workflows/console-release.yml` on a `console-v*` tag.
+
 **Changing it**
 
 - `Scripts/config.lua` holds every setting: keys, tabs, item actions, undo rules, macros, colours, sizes, words, and the game names the mod relies on.
