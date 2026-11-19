@@ -88,7 +88,7 @@ return {
   -- The actions an item row offers come from the game's own cheat lists: each list's command ("Item {0}
   -- 1") is the action's line, and an item gets the action only if that list holds it (so a Tadpole,
   -- which the Item list leaves out, only spawns). label: the action's name; list: which of the game's
-  -- lists (game.lists below). A number at the end of the search ("glass 10") is the count.
+  -- lists (game.lists below). A number before or after the search ("glass 10", "10 glass", "glass x10") is the count.
   -- item_actions is used only when the game's lists cannot be read; then Equip is offered where the
   -- game calls an item equippable.
   list_actions = { { label = 'Give', list = 'item' }, { label = 'Spawn', list = 'spawn' },
@@ -123,6 +123,7 @@ return {
   text = {
     title = 'MOONPOOL',
     preview = 'Enter sends: {line}',
+    count_hint = '    · for more, type {example}',
     for_label = 'For:',
     me = 'Me',
     everyone = 'Everyone',

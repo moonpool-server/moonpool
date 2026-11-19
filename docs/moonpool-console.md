@@ -23,7 +23,7 @@ Unzip `MoonpoolConsole-<version>.zip` into the game's `Subnautica2/Binaries/Win6
 
 | Key | Does |
 |---|---|
-| typing | searches; a number at the end is the count (`glass 10`) |
+| typing | searches; a number before or after the name is the count (`glass 10`, `10 glass`, `glass x10`) |
 | Up, Down, PgUp, PgDn, or a click on a row | move the choice (the mouse wheel scrolls the list) |
 | Enter | sends the chosen action, or the line as typed |
 | Tab | puts the exact line in the search field to change first |

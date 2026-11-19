@@ -567,8 +567,13 @@ local function mark()
     end
   end
   local act = e and (e.actions[action] or e.actions[1])
-  local _, count = route.count(query or '')
-  set_text(ui.preview, act and route.fill(CFG.text.preview, { line = line_for(e, act, count) }) or '')
+  local search, count = route.count(query or '')
+  local said = act and route.fill(CFG.text.preview, { line = line_for(e, act, count) }) or ''
+  if act and e.kind == 'item' and not count then
+    local name = search:match('^%s*(.-)%s*$')
+    said = said .. route.fill(CFG.text.count_hint, { example = (name ~= '' and name or e.name:lower()) .. ' 10' })
+  end
+  set_text(ui.preview, said)
 end
 -- The rows themselves: written once per search.
 local function draw()
