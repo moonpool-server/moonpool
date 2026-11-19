@@ -117,6 +117,8 @@ return {
   max_targets = 8,
   for_others = '{word} @{who} {line}',
   everyone_word = 'all',
+  -- A line for everyone goes on a second Enter within confirm_s seconds.
+  confirm_s = 5,
   -- Words the palette shows.
   text = {
     title = 'MOONPOOL',
@@ -129,6 +131,7 @@ return {
     found_more = '{shown} of {count} results',
     none = 'Nothing matches. Enter sends the line as typed.',
     sent = 'Sent: {line}',
+    confirm = 'Enter again to send to everyone: {line}',
     undo = 'Sent: {line}    Undo: {undo}',
     answer = '{header}: {text}',
     missing = '{arg} is needed: type it after the name',

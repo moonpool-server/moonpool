@@ -45,7 +45,7 @@ Unzip `MoonpoolConsole-<version>.zip` into the game's `Subnautica2/Binaries/Win6
 A Moonpool server publishes this mod to its players with its own command list written in, which adds:
 - a Server tab with the server's console commands;
 - the server's answer to a command, shown in the panel;
-- items for another player or everyone, run as them by the server.
+- items for another player or everyone, run as them by the server. A line for everyone goes on a second Enter within 5 seconds (`confirm_s`).
 
 What runs where:
 - **Checked by the server.** Every line that reaches a Moonpool server: game cheats, the lines a macro sends, server commands. Its cheat gate drops each one from anyone who isn't one of its admins ([docs/admin.md](admin.md)).
