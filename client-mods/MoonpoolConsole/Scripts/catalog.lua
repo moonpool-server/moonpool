@@ -175,6 +175,13 @@ function M.for_others(template, word, who, line)
   end))
 end
 
+-- Whether Enter sends line now, for a line that waits for a second Enter: it goes when waiting holds
+-- the same line from at most window seconds before. Returns go, and what waits after this Enter.
+function M.confirm(waiting, line, now, window)
+  if waiting and waiting.line == line and now - waiting.at <= window then return true, nil end
+  return false, { line = line, at = now }
+end
+
 -- The line that undoes line, from rules: a list of { pattern, undo } where undo may use %1.. for the
 -- pattern's captures and {word} for the server's word. Nil when no rule knows one.
 function M.opposite(line, rules, word)

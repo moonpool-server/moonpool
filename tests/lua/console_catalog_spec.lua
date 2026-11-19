@@ -136,5 +136,14 @@ check(cat.for_others('{word} @{who} {line}', 'mp', 'Johnny Pappis', 'Spawn DA_Co
 check(cat.for_others('{word} @{who} {line}', 'mp', 'all', 'Equip DA_X') == 'mp @all Equip DA_X',
   'everyone, by the server word')
 
+local go, waiting = cat.confirm(nil, 'mp @all Item DA_X 1', 100, 5)
+check(not go and waiting.line == 'mp @all Item DA_X 1', 'a line for everyone waits on the first Enter')
+go, waiting = cat.confirm(waiting, 'mp @all Item DA_X 1', 103, 5)
+check(go and waiting == nil, 'the same line within the window goes')
+go = cat.confirm({ line = 'mp @all Item DA_X 1', at = 100 }, 'mp @all Item DA_X 1', 106, 5)
+check(not go, 'a second Enter after the window waits again')
+go = cat.confirm({ line = 'mp @all Item DA_X 1', at = 100 }, 'mp @all Item DA_Y 1', 101, 5)
+check(not go, 'a different line waits again')
+
 if failures > 0 then os.exit(1) end
 print('console catalog: ok')
