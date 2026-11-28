@@ -66,13 +66,21 @@ for key, c in pairs(cfg.colors) do
   check(c.R and c.G and c.B and c.A and c.A <= 1, 'the colour ' .. key .. ' is R, G, B and A')
 end
 
--- A number at the end of the search is how many: the search is the rest.
+-- A number before or after the search is how many: the search is the rest.
 local search, count = route.count('glass 10')
 check(search == 'glass' and count == 10, 'glass 10 searches glass and counts 10')
 search, count = route.count('titanium ingot')
 check(search == 'titanium ingot' and count == nil, 'no number, no count')
 search, count = route.count('glass 0')
 check(search == 'glass 0' and count == nil, 'a count of 0 is no count')
+search, count = route.count('10 glass')
+check(search == 'glass' and count == 10, 'a number first counts too')
+search, count = route.count('glass x10')
+check(search == 'glass' and count == 10, 'x10 counts 10')
+search, count = route.count('10x enameled glass')
+check(search == 'enameled glass' and count == 10, '10x first counts 10')
+search, count = route.count('10')
+check(search == '10' and count == nil, 'a number alone is a search, not a count')
 
 -- History: the lines run from the palette, newest first.
 local recent = route.remember({}, 'help')
