@@ -189,7 +189,7 @@ Not yet tested with a second player:
 - After a line is sent, the panel shows it and, for a server command, the server's answer, as the game's notification also does.
 - Undo, from Recent: a spawn by `mp undo`, a tag by its untag, `DayOnly 1` by `DayOnly 0`, `FreezeTime` by `UnfreezeTime`, a toggle (God, Fly, NoClip, …) by running it again. The rules are `opposites` in `config.lua`. A given item has no undo.
 - Unpublished items, items in the game's `Deprecated` folder, and items named `[DEPRECATED…]`, `[PLACEHOLDER…]`, `[PH]` or `[TEST…]` are hidden unless `items.show_unpublished` is set.
-- The first time F2 is pressed in a session, the panel reads the game's items and those three lists through the game's cheat panel itself (opening and closing each), one piece per frame, then opens. `UE4SS.log` gets one line with the total time and the longest frame. If the lists can't be read, it offers the actions in `item_actions` and logs that.
+- The first time F2 is pressed in a session, the panel reads the game's items and those three lists through the game's cheat panel itself (opening and closing each), one piece per frame, then opens (about 0.85 s in all, no frame over 60 ms on the test PC). `UE4SS.log` gets one line with the total time and the longest frame. If the lists can't be read, it offers the actions in `item_actions` and logs that.
 - F2 does nothing until the player has a body in the world: making the panel while the world was still loading crashed the game.
 - The lines run are kept in `%LOCALAPPDATA%\Moonpool\console-recent.txt` (removed with the launcher).
 
