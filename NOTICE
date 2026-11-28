@@ -111,9 +111,10 @@ Libraries the map page loads (map page only)
   without a hash check.
 
 Map backgrounds
-  No map picture is included. map-background.example.json points at joric's
-  Subnautica 2 tileset (https://github.com/joric/subnautica2_tileset, Unlicense),
-  a community capture of the game loaded from joric's site by the viewer's browser.
+  No map picture is included. examples/map-background.example.json points at
+  joric's Subnautica 2 tileset (https://github.com/joric/subnautica2_tileset,
+  Unlicense), a community capture of the game loaded from joric's site by the
+  viewer's browser.
   That licence covers joric's work and can't speak for the game's own rights.
 
 MoonpoolHost (this project's host mod)

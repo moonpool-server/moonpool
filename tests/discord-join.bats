@@ -194,7 +194,7 @@ import importlib.util, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 spec = importlib.util.spec_from_file_location("dn", root / "scripts" / "discord-notify.py"); dn = importlib.util.module_from_spec(spec)
 sys.argv = [sys.argv[0]]; spec.loader.exec_module(dn)
-keys = [l.split(":", 1)[0] for l in (root / "card.example.yaml").read_text().splitlines() if l and not l.startswith(("#", " "))]
+keys = [l.split(":", 1)[0] for l in (root / "examples" / "card.example.yaml").read_text().splitlines() if l and not l.startswith(("#", " "))]
 assert keys == list(dn.TEXT), (keys, list(dn.TEXT))
 PY
 }

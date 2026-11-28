@@ -1,6 +1,8 @@
----
 blank_issues_enabled: false
 contact_links:
   - name: Private security report
     url: https://github.com/moonpool-server/moonpool/security/advisories/new
     about: Report vulnerabilities privately; do not open a public issue.
+  - name: How do I...?
+    url: https://github.com/moonpool-server/moonpool/blob/main/docs/operating.md
+    about: Running, updating and backing up a host is covered here.

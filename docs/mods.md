@@ -10,7 +10,7 @@ How players' launchers trust a server and its mods: [SECURITY.md](../SECURITY.md
 ## Player mods
 
 ```sh
-cp plugins.example.yaml plugins.yaml   # edit it with any editor
+cp examples/plugins.example.yaml plugins.yaml   # edit it with any editor
 bin/moonpool mods publish plugins.yaml
 bin/moonpool mods list
 ```

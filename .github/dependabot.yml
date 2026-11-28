@@ -5,6 +5,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels: [dependencies]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -12,6 +13,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels: [dependencies]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -19,6 +21,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels: [dependencies]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -26,6 +29,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels: [dependencies]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
