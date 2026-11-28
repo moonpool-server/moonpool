@@ -240,7 +240,7 @@ local function prepare(pc, done)
     end
   end
   step('finding the panel', function() panel = shell_widget(pc) end)
-  step('building the palette', function() if panel then shell_ui(panel, pc) end end)
+  step('building the palette', function() if panel then shell_ui(panel) end end)
   step('finding the list widget', function() known(G.list_widget) end)
   step('finding the items', function()
     local assets = live(G.item_class)
@@ -338,7 +338,7 @@ local function margin(l, t, r, b) return { Left = l, Top = t, Right = r or l, Bo
 
 -- The shell: the game's cheat panel, made once (or one an earlier load of this script left taken
 -- over), every part of it hidden, the palette added to its canvas.
-local function build_ui(w, pc)
+local function build_ui(w)
   local tree, root
   pcall(function() tree = w[G.tree]; root = tree[G.root] end)
   local canvas_cls = StaticFindObject(G.canvas)
@@ -480,51 +480,28 @@ local function build_ui(w, pc)
   ucall(u.answer_area, G.set_content, u.answer)
   ucall(u.answer_area, G.set_visibility, G.collapsed)
   add(col, u.answer_area, margin(0, 4, 0, 0))
-  -- The keys along the bottom. One that is a game action (h.action) is the game's own hint, which
-  -- draws the player's own key for it ("Close ( Esc )"); the rest, keys the game has no action for,
-  -- are a word and the key in a box made to look like it.
+  -- The keys along the bottom: a word and the key in a box each.
   local hints = make(tree, G.wrap_box)  -- wraps onto a second line when the panel is narrow
-  local hint_cls, lib = StaticFindObject(G.hint_widget), StaticFindObject(G.widgets)
-  u.game_hints, u.more_hints = {}, {}
+  u.more_hints = {}
   for _, h in ipairs(CFG.hints) do
-    local game_hint
-    if h.action and valid(hint_cls) then
-      pcall(function() game_hint = lib:Create(pc, hint_cls, pc) end)
-      if valid(game_hint) then
-        -- Its text is set once it is in the panel: added, it starts again from its designer text.
-        add(hints, game_hint, margin(0, 1, 16, 2), 'wrap')
-        if not h.core then
-          u.more_hints[#u.more_hints + 1] = game_hint
-          ucall(game_hint, G.set_visibility, G.collapsed)
-        end
-        if ucall(game_hint, G.hint_set_text, FText(route.fill(G.hint_text, h))) then
-          u.game_hints[#u.game_hints + 1] = { widget = game_hint, text = route.fill(G.hint_text, h) }
-        else
-          ucall(game_hint, G.set_visibility, G.collapsed)
-          game_hint = nil
-        end
-      end
-    end
-    if not game_hint then
-      local group = make(tree, G.horizontal)  -- one hint, kept on one line
-      local word = text_block(tree, CFG.sizes.small, C.text)
-      set_text(word, h.label .. ' (')
-      add(group, word, margin(0, 3, 4, 0), true)
-      local cap = text_block(tree, CFG.sizes.small, C.accent)
-      set_text(cap, h.key)
-      local frame = make(tree, G.border)
-      ucall(frame, G.set_brush_color, C.key)
-      ucall(frame, G.set_border_padding, margin(5, 1))
-      ucall(frame, G.set_content, cap)
-      add(group, frame, margin(0, 1, 4, 0), true)
-      local close = text_block(tree, CFG.sizes.small, C.text)
-      set_text(close, ')')
-      add(group, close, margin(0, 3, 0, 0), true)
-      add(hints, group, margin(0, 0, 16, 2), 'wrap')
-      if not h.core then
-        u.more_hints[#u.more_hints + 1] = group
-        ucall(group, G.set_visibility, G.collapsed)
-      end
+    local group = make(tree, G.horizontal)  -- one hint, kept on one line
+    local word = text_block(tree, CFG.sizes.small, C.text)
+    set_text(word, h.label .. ' (')
+    add(group, word, margin(0, 3, 4, 0), true)
+    local cap = text_block(tree, CFG.sizes.small, C.accent)
+    set_text(cap, h.key)
+    local frame = make(tree, G.border)
+    ucall(frame, G.set_brush_color, C.key)
+    ucall(frame, G.set_border_padding, margin(5, 1))
+    ucall(frame, G.set_content, cap)
+    add(group, frame, margin(0, 1, 4, 0), true)
+    local close = text_block(tree, CFG.sizes.small, C.text)
+    set_text(close, ')')
+    add(group, close, margin(0, 3, 0, 0), true)
+    add(hints, group, margin(0, 0, 16, 2), 'wrap')
+    if not h.core then
+      u.more_hints[#u.more_hints + 1] = group
+      ucall(group, G.set_visibility, G.collapsed)
     end
   end
   add(col, hints, margin(0, 8, 0, 0))
@@ -549,16 +526,16 @@ function shell_widget(pc)
   return w
 end
 -- The palette's own widgets, built into w once.
-function shell_ui(w, pc)
+function shell_ui(w)
   if valid(shell) and ui then return shell end
-  ui = build_ui(w, pc)
+  ui = build_ui(w)
   if not ui then return nil end
   shell, shown = w, false
   return w
 end
 local function make_shell(pc)
   local w = shell_widget(pc)
-  return w and shell_ui(w, pc)
+  return w and shell_ui(w)
 end
 
 -- ---- what it shows -----------------------------------------------------------------------------
@@ -959,17 +936,6 @@ function toggle()
     set_box('')
     query = nil
     targets, target = read_targets(pc), 1
-    -- The game's own hints show their designer text until shown once, so theirs is set on the first
-    -- opening, and only then: set again, the widget draws a stray glyph in place of the hint.
-    for _, gh in ipairs(ui.game_hints or {}) do
-      if valid(gh.widget) and not gh.set then
-        gh.set = true
-        pcall(function() gh.widget.OriginalText = FText(gh.text) end)
-        pcall(function() gh.widget.Text = FText(gh.text) end)
-        ucall(gh.widget, G.hint_set_text, FText(gh.text))
-        ucall(gh.widget, G.hint_rebuild)  -- it draws its text and key caps when its mappings are rebuilt
-      end
-    end
     set_text(ui.receipt, looking_at(pc) or '')
     set_color(ui.receipt, C.muted)
     focus_box()

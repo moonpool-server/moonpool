@@ -184,7 +184,7 @@ Not yet tested with a second player:
 
 - Equip, as the game runs it, puts the item in the player's hand (a toolbar slot) or in its equipment slot, which is why the game's Equip list holds resources too. Checked on this build: Air Bladder and High Capacity Air Tank equipped, a Standard Air Tank already worn was left, and Repair Tool, Titanium and Copper went into a toolbar slot and the hand.
 - Places (the game's Goto list) are not in the panel: the cheat panel's Goto button fills no list the panel can read. `mp @all Goto <place>` typed in the search field sends everyone to one of the game's places.
-- Along the bottom: Send, Edit first, Close and Keys (F1 shows the rest). Close is the game's own hint (`WBP_InputHintText`, its `CloseAction`), so it shows the key the player has bound; the others are keys the game has no action for, drawn to look the same.
+- Along the bottom: Send, Edit first, Close and Keys (F1 shows the rest). Each is a word and its key in a box.
 - Under the list: the chosen command's signature (`Give  <ItemName: text>  <Amount: number>`, `mp give  <item: items>  [count = 1]`) and the line Enter sends.
 - After a line is sent, the panel shows it and, for a server command, the server's answer, as the game's notification also does.
 - Undo, from Recent: a spawn by `mp undo`, a tag by its untag, `DayOnly 1` by `DayOnly 0`, `FreezeTime` by `UnfreezeTime`, a toggle (God, Fly, NoClip, …) by running it again. The rules are `opposites` in `config.lua`. A given item has no undo.

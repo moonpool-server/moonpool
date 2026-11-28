@@ -105,14 +105,13 @@ return {
   -- show_unpublished is true. category: the item's folder in the game's data, a Lua pattern.
   items = { show_unpublished = false, category = '/ItemType/([%w_]+)/', hidden_categories = { 'Deprecated' },
     unfinished = { '^%[DEPRECATED', '^%[PLACEHOLDER', '^%[PH%]', '^%[TEST' } },
-  -- The key hints along the bottom: a word and the key in a box. A hint with an action is the game's
-  -- own hint for that action (game.hint_widget), which shows the key the player has bound to it.
+  -- The key hints along the bottom: a word and the key in a box.
   -- core: shown always; the rest only after keys_key (F1).
   keys_key = 'F1',
   hints = { { label = 'Send', key = 'Enter', core = true }, { label = 'Edit first', key = 'Tab', core = true },
     { label = 'Action', key = 'Ctrl+Left Right' }, { label = 'For', key = 'Ctrl+Up Down' },
     { label = 'Tabs', key = 'Alt 1-7' },
-    { label = 'Page', key = 'PgUp PgDn' }, { label = 'Close', key = 'Esc', action = 'CloseAction', core = true },
+    { label = 'Page', key = 'PgUp PgDn' }, { label = 'Close', key = 'Esc', core = true },
     { label = 'Keys', key = 'F1', core = true } },
   -- Who an item is for: the player, another player in the game, or everyone. For someone else the
   -- chosen action's own line is run as them by the server's console (for_others: {word}, {who},
@@ -283,10 +282,6 @@ return {
     hide_list = 'HideModal',
     list_widget = 'WBP_CheatListSelector_C',  -- the list on screen
     is_activated = '/Script/CommonUI.CommonActivatableWidget:IsActivated',
-    hint_widget = '/Game/Blueprints/UI/GenericUIElements/GenericUI_WBP/WBP_InputHintText.WBP_InputHintText_C',
-    hint_set_text = '/Script/Subnautica2.SN2InputSymbolTextBlock:SetText',
-    hint_rebuild = '/Script/Subnautica2.SN2InputSymbolTextBlock:OnControlMappingsRebuilt',
-    hint_text = '{label} ([{action}])',  -- how the game writes its own hints: "Close ([CloseAction])"
     activate = '/Script/CommonUI.CommonActivatableWidget:ActivateWidget',
     deactivate = '/Script/CommonUI.CommonActivatableWidget:DeactivateWidget',
     -- ESlateVisibility: the shell takes clicks only on its own parts (SelfHitTestInvisible).
