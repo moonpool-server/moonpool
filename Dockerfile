@@ -139,7 +139,7 @@ CMD ["/bin/bash", "-c", "mkdir -p \"$DATA_DIR/logs\" && touch \"$DATA_DIR/logs/s
 # ---------------------------------------------------------------------------
 # Keep offen's backup engine and add only the scheduling policy that it lacks:
 # skip byte-for-byte unchanged sources and optionally cap local archive bytes.
-FROM offen/docker-volume-backup:v2.50.1@sha256:06fccb4c6ff79c4d5e4a839ace17c174da82a9327f43594f8a2c6a15f43bc660 AS backup
+FROM offen/docker-volume-backup:v2.50.2@sha256:c0d241667212b3a50f6820e8c5e195627f8648520dd41cc3304e1b4c8041f95b AS backup
 # The pinned image's Alpine packages can lag their security fixes (zlib, for one): take the fixed versions.
 RUN apk upgrade --no-cache
 COPY --chmod=0755 scripts/backup-run.sh /usr/local/bin/sn2-backup
