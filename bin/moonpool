@@ -1899,7 +1899,7 @@ def outer(r):
             usage_error("usage: moonpool settings apply")
         f = E.get("SN2_SETTINGS_FILE") or "./settings.yaml"
         if not Path(f).is_file():
-            unavailable(f"no settings file: {f} (copy settings.example.yaml beside .env)")
+            unavailable(f"no settings file: {f} (copy examples/settings.example.yaml beside .env)")
         staged = f"/tmp/sn2-settings-{R['request_id']}.yaml"
         run_compose("cp", f, f"{SERVICE}:{staged}")
         forward(["settings", "apply", "--from", staged])

@@ -35,7 +35,7 @@ The server keeps a chart per branch and save, `map-chart-<branch>-<save>.json` i
 Moonpool ships no map picture. To set one:
 
 ```sh
-docker compose cp map-background.example.json sn2:/home/container/map-background.json
+docker compose cp examples/map-background.example.json sn2:/home/container/map-background.json
 ```
 
 - One entry per branch: a picture, or a list laid side by side. Each `url` is a tile address with `{z}`, a picture address or a file in the data volume. `bounds` are left, top, right, bottom in game units. Name the picture's author and licence in `credit`; the page shows it.

@@ -1,0 +1,26 @@
+name: PR title
+
+"on":
+  pull_request:
+    types: [opened, edited, reopened]
+
+permissions: {}
+
+jobs:
+  title:
+    name: Title is a short subject
+    # The squash commit's subject is the PR title. Dependabot's own titles are left alone.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: At most 60 characters, no trailing period
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          n=${#TITLE}
+          if [ "$n" -gt 60 ]; then
+            echo "::error::PR title is $n characters; keep it to 60 and put the detail in the description"
+            exit 1
+          fi
+          case $TITLE in *.) echo "::error::PR title ends in a period"; exit 1 ;; esac
+          echo "ok: $n characters"

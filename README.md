@@ -98,7 +98,7 @@ bin/moonpool server unpack <file>          # put it back, here or on a new PC
 ## Mods
 
 ```sh
-cp plugins.example.yaml plugins.yaml   # list each mod with its download link
+cp examples/plugins.example.yaml plugins.yaml   # list each mod with its download link
 bin/moonpool mods publish plugins.yaml
 ```
 
