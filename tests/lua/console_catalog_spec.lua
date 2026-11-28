@@ -145,5 +145,28 @@ check(not go, 'a second Enter after the window waits again')
 go = cat.confirm({ line = 'mp @all Item DA_X 1', at = 100 }, 'mp @all Item DA_Y 1', 101, 5)
 check(not go, 'a different line waits again')
 
+-- stage: one step per frame, steps added on the way run too, done comes last
+do
+  local frames, ran, finished = {}, {}, false
+  local function later(fn) frames[#frames + 1] = fn end
+  local queue = {}
+  queue[1] = function() ran[#ran + 1] = 'a'; queue[#queue + 1] = function() ran[#ran + 1] = 'c' end end
+  queue[2] = function() ran[#ran + 1] = 'b' end
+  cat.stage(queue, later, function() finished = true end)
+  check(#ran == 0, 'stage runs nothing until a later frame')
+  local per_frame = {}
+  while #frames > 0 do
+    local fn = table.remove(frames, 1)
+    local before = #ran
+    fn()
+    per_frame[#per_frame + 1] = #ran - before
+  end
+  check(table.concat(ran) == 'abc', 'stage runs the steps in order, including one added by a step')
+  local most = 0
+  for _, n in ipairs(per_frame) do most = math.max(most, n) end
+  check(most == 1, 'stage runs at most one step per frame')
+  check(finished, 'stage calls done after the last step')
+end
+
 if failures > 0 then os.exit(1) end
 print('console catalog: ok')

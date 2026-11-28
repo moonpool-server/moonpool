@@ -110,7 +110,7 @@ local function game_commands(pc)
 end
 
 -- What the game's data says about each item: name, category, published (and not marked unfinished)
--- and equippable. Read once, at the first opening.
+-- and equippable, added to facts. Read for each item at the first opening.
 -- An item's category: the last part of its own category tag in the game's data (Item.Category.Tools ->
 -- Tools), else the folder its data is in.
 local function category_of(asset)
@@ -119,20 +119,16 @@ local function category_of(asset)
   local last = tag ~= 'None' and tag:match('([%w_]+)$') or nil
   return last or asset:GetFullName():match(CFG.items.category) or ''
 end
-local function item_facts()
-  local facts = {}
-  for _, asset in ipairs(live(G.item_class)) do
-    local id, label = asset:GetFName():ToString(), ''
-    pcall(function() label = asset[G.item_label]:ToString() end)
-    local ok, published = ucall(asset, G.is_published)
-    local finished = true
-    for _, p in ipairs(CFG.items.unfinished or {}) do finished = finished and not label:find(p) end
-    local eok, equippable = ucall(asset, G.is_equippable)
-    facts[id] = { label = label, published = (not ok or published ~= false) and finished,
-      equippable = eok and equippable == true,
-      category = category_of(asset) }
-  end
-  return facts
+local function add_fact(facts, asset)
+  local id, label = asset:GetFName():ToString(), ''
+  pcall(function() label = asset[G.item_label]:ToString() end)
+  local ok, published = ucall(asset, G.is_published)
+  local finished = true
+  for _, p in ipairs(CFG.items.unfinished or {}) do finished = finished and not label:find(p) end
+  local eok, equippable = ucall(asset, G.is_equippable)
+  facts[id] = { label = label, published = (not ok or published ~= false) and finished,
+    equippable = eok and equippable == true,
+    category = category_of(asset) }
 end
 
 local entries  -- every row but the recent ones, built at the first opening
@@ -142,95 +138,153 @@ local function own_rows()
   if err then say('own_bad', { file = file, error = err }) end
   return catalog.own(t)
 end
--- What each of the game's own cheat lists holds, read through the panel's own handlers: each is run as
--- a click on its button runs it, its list's view model is read (the command, the items' data names)
--- and the list is closed with the game's own command. A list that cannot be read is left out.
--- One of the game's own cheat lists, read through the panel's own handler: it is run as a click on
--- its button runs it, the list it fills is read (its command; each item's data name and title) and
--- closed the game's way (a list still active after that is deactivated and hidden, or it would stay
--- on screen behind the palette). The list read is the one the handler filled: a view model that was
--- not there before, or one whose command changed. Nil when it cannot be read.
-local function read_game_list(pc, panel, def)
+-- Objects of a class the game keeps (its one list view model, its one list widget, the player's
+-- controller), found once: each FindAllOf walks every object in the game, about 30 ms. Found again
+-- when one of them is gone, or when fresh is asked for.
+local kept = {}
+local function known(class, fresh)
+  local list = kept[class]
+  local ok = list and #list > 0 and not fresh
+  for _, o in ipairs(ok and list or {}) do ok = ok and valid(o) end
+  if not ok then list = live(class); kept[class] = list end
+  return list
+end
+-- One of the game's own cheat lists, read through the panel's own handler in two frames. open_list
+-- runs the handler as a click on the list's button runs it and closes the list again the game's way (a
+-- list still active after that is deactivated and hidden, or it would stay on screen behind the
+-- palette); it returns what each view model held before, or nil when the list can't be opened. The
+-- view model keeps what the handler put in it after the list closes, so take_list reads it on a later
+-- frame: the one whose command changed, or one that was not there before (its command; each item's
+-- data name, and its title when titles is asked for). Nil when nothing changed.
+local function list_command(vm)
+  local c = ''
+  pcall(function() c = vm[G.list_command]:ToString() end)
+  return c
+end
+local function open_list(pc, panel, def)
   local button
   pcall(function() button = panel[def.button] end)
   if not (def and valid(panel) and valid(button)) then return nil end
   local before = {}
-  for _, vm in ipairs(live(G.list_model)) do
-    local c = ''
-    pcall(function() c = vm[G.list_command]:ToString() end)
-    before[vm:GetAddress()] = c
+  for _, vm in ipairs(kept[G.list_model] or {}) do
+    if valid(vm) then before[vm:GetAddress()] = list_command(vm) end
   end
   local handler = route.fill(G.list_handler, def)
   if not pcall(function() panel[handler](panel, button) end) then return nil end
-  local found
-  for _, vm in ipairs(live(G.list_model)) do
-    local c = ''
-    pcall(function() c = vm[G.list_command]:ToString() end)
-    if before[vm:GetAddress()] ~= c then
-      found = { command = c, items = {} }
-      pcall(function()
-        local items = vm[G.list_items]
-        for i = 1, items:GetArrayNum() do
-          local id, title
-          pcall(function() id = items[i][G.list_id]:ToString() end)
-          pcall(function() title = items[i][G.list_title]:ToString() end)
-          if id then found.items[#found.items + 1] = { id = id, title = title or id } end
-        end
-      end)
-    end
-  end
-  if CFG.trace then
-    say('key', { what = 'list ' .. def.button .. ': ' .. (found and (found.command .. ', ' .. #found.items .. ' items')
-      or ('nothing new among ' .. #live(G.list_model) .. ' view models')) })
-  end
   local system = StaticFindObject(G.system)
   pcall(function() system:ExecuteConsoleCommand(pc, G.hide_list, pc) end)
-  for _, list in ipairs(live(G.list_widget)) do
+  for _, list in ipairs(known(G.list_widget)) do
     local ok, open = ucall(list, G.is_activated)
     if ok and open then ucall(list, G.deactivate) end
     ucall(list, G.set_visibility, G.collapsed)
   end
+  return before
+end
+local function take_list(def, before, titles)
+  if not before then return nil end
+  local function filled(models)
+    for _, vm in ipairs(models) do
+      local c = list_command(vm)
+      if before[vm:GetAddress()] ~= c then return vm, c end
+    end
+  end
+  local vm, c = filled(known(G.list_model))
+  if not vm then vm, c = filled(known(G.list_model, true)) end
+  local found
+  if vm then
+    found = { command = c, items = {} }
+    pcall(function()
+      local items = vm[G.list_items]
+      for i = 1, items:GetArrayNum() do
+        local id, title
+        pcall(function() id = items[i][G.list_id]:ToString() end)
+        if titles then pcall(function() title = items[i][G.list_title]:ToString() end) end
+        if id then found.items[#found.items + 1] = { id = id, title = title or id } end
+      end
+    end)
+  end
+  if CFG.trace then
+    say('key', { what = 'list ' .. def.button .. ': ' .. (found and (found.command .. ', ' .. #found.items .. ' items')
+      or 'no view model changed') })
+  end
   return found
 end
--- The item actions' lists: { label, command, ids } each.
-local function game_lists(pc, panel)
-  local out = {}
-  for _, want in ipairs(CFG.list_actions) do
-    local list = read_game_list(pc, panel, G.lists[want.list])
-    local entry = { label = want.label, ids = {}, command = list and list.command }
-    for _, it in ipairs(list and list.items or {}) do entry.ids[it.id] = true end
-    out[#out + 1] = entry
-  end
-  return out
+-- One item action's list: { label, command, ids }.
+local function action_list(want, list)
+  local entry = { label = want.label, ids = {}, command = list and list.command }
+  for _, it in ipairs(list and list.items or {}) do entry.ids[it.id] = true end
+  return entry
 end
 -- The game's macros, from its own Macro list: { name, id } each and the line that runs one.
-local function game_macros(pc, panel)
-  local list = read_game_list(pc, panel, G.lists.macro)
+local function macros_from(list)
   if not (list and #list.items > 0) then return nil end
   local out = {}
   for _, it in ipairs(list.items) do out[#out + 1] = { name = it.title, id = it.id } end
   return out, catalog.list_line(list.command)
 end
-local function build(pc, panel)
-  if entries then return entries end
-  local t = os.clock()
-  local from_game = catalog.list_actions(game_lists(pc, panel))
-  if not from_game then say('no_lists') end
-  local items = catalog.items(item_facts(), from_game or CFG.item_actions, CFG.items.show_unpublished,
-    CFG.items.hidden_categories)
-  local game = catalog.game_commands(game_commands(pc), CFG.text.game_detail, params)
-  local server = catalog.host_commands(host)
-  local own = own_rows()
-  local game_macro_list, macro_line = game_macros(pc, panel)
-  local macros = catalog.macros(game_macro_list or CFG.macros, macro_line or CFG.run_macro)
-  entries = {}
-  for _, list in ipairs({ items, server, game, macros, own }) do
-    for _, e in ipairs(list) do entries[#entries + 1] = e end
+local shell_widget, shell_ui  -- below, with the palette's layout
+-- Makes the palette and reads every row at the first opening, one piece per frame (catalog.stage), so
+-- the game never stops for the whole of it at once; done runs once entries is filled.
+local function prepare(pc, done)
+  local t0, longest, steps = os.clock(), 0, 0
+  local panel
+  local facts, lists, macro_list, macro_line = {}, {}, nil, nil
+  local queue = {}
+  local function step(what, fn)
+    queue[#queue + 1] = function()
+      local t = os.clock()
+      local ok, err = pcall(fn)
+      if not ok then say('error', { error = err }) end
+      steps, longest = steps + 1, math.max(longest, ms_since(t))
+      trace(what, t)
+    end
   end
-  say('entries', { items = #items, game = #game, server = #server, own = #own, macros = #macros,
-    from = game_macro_list and 'the game' or 'config.lua' })
-  trace('reading the rows', t)
-  return entries
+  step('finding the panel', function() panel = shell_widget(pc) end)
+  step('building the palette', function() if panel then shell_ui(panel, pc) end end)
+  step('finding the list widget', function() known(G.list_widget) end)
+  step('finding the items', function()
+    local assets = live(G.item_class)
+    for first = 1, #assets, CFG.items_per_step do
+      step('reading items', function()
+        for i = first, math.min(first + CFG.items_per_step - 1, #assets) do
+          if valid(assets[i]) then add_fact(facts, assets[i]) end
+        end
+      end)
+    end
+  end)
+  step('reading the game commands', function() game_commands(pc) end)
+  for n, want in ipairs(CFG.list_actions) do
+    local def, before = G.lists[want.list], nil
+    lists[n] = { label = want.label, ids = {} }
+    step('opening a list', function() before = open_list(pc, panel, def) end)
+    step('reading a list', function() lists[n] = action_list(want, take_list(def, before)) end)
+  end
+  local macro_before
+  step('opening the macros', function() macro_before = open_list(pc, panel, G.lists.macro) end)
+  step('reading the macros', function()
+    macro_list, macro_line = macros_from(take_list(G.lists.macro, macro_before, true))
+  end)
+  catalog.stage(queue, function(fn) ExecuteInGameThreadWithDelay(CFG.step_gap_ms, fn) end, function()
+    local ok, err = pcall(function()
+      local from_game = catalog.list_actions(lists)
+      if not from_game then say('no_lists') end
+      local items = catalog.items(facts, from_game or CFG.item_actions, CFG.items.show_unpublished,
+        CFG.items.hidden_categories)
+      local game = catalog.game_commands(commands, CFG.text.game_detail, params)
+      local server = catalog.host_commands(host)
+      local own = own_rows()
+      local macros = catalog.macros(macro_list or CFG.macros, macro_line or CFG.run_macro)
+      entries = {}
+      for _, list in ipairs({ items, server, game, macros, own }) do
+        for _, e in ipairs(list) do entries[#entries + 1] = e end
+      end
+      say('entries', { items = #items, game = #game, server = #server, own = #own, macros = #macros,
+        from = macro_list and 'the game' or 'config.lua' })
+      say('prepared', { ms = ms_since(t0), steps = steps, longest = longest })
+    end)
+    if not ok then say('error', { error = err }) end
+    done()
+  end)
 end
 -- The lines run before, as rows first in line while nothing is typed; each offers Undo when a rule in
 -- config.lua knows the line that undoes it.
@@ -477,7 +531,8 @@ local function build_ui(w, pc)
   return u
 end
 
-local function make_shell(pc)
+-- The game's panel widget, found or made, hidden; the shell already made when there is one.
+function shell_widget(pc)
   if valid(shell) and ui then return shell end
   local w = live(G.panel_class)[1]
   if not w then
@@ -491,12 +546,19 @@ local function make_shell(pc)
   end
   ucall(w, G.deactivate)
   ucall(w, G.set_visibility, G.hidden)
-  local t = os.clock()
+  return w
+end
+-- The palette's own widgets, built into w once.
+function shell_ui(w, pc)
+  if valid(shell) and ui then return shell end
   ui = build_ui(w, pc)
-  trace('building the palette', t)
   if not ui then return nil end
   shell, shown = w, false
   return w
+end
+local function make_shell(pc)
+  local w = shell_widget(pc)
+  return w and shell_ui(w, pc)
 end
 
 -- ---- what it shows -----------------------------------------------------------------------------
@@ -677,15 +739,15 @@ end
 local waiting  -- a line for everyone, sent on a second Enter (catalog.confirm)
 local function run()
   if not shown or not ui then return end
-  local pc = live(G.controller)[1]
+  local pc = known(G.controller)[1]
   if not pc then return end
   local text = box_text()
   local _, count = route.count(text)
   local e = chosen_entry()
   -- A command followed by what it needs ("give john glass 10") goes as typed.
   local first_word = text:match('^%s*(%S+)%s+%S') or ''
-  local known = game_commands(pc) or {}
-  local typed_command = first_word ~= '' and (known[first_word:lower()] or first_word:lower() == WORD
+  local game_words = game_commands(pc) or {}
+  local typed_command = first_word ~= '' and (game_words[first_word:lower()] or first_word:lower() == WORD
     or (host and host.commands and (host.commands[first_word:lower()] or (host.verbs or {})[first_word:lower()])))
   if typed_command or not e then
     if text ~= '' then send_typed(pc, text) end
@@ -849,24 +911,37 @@ end
 
 -- A second press while the first is still being carried out is ignored: opening and closing in the
 -- same instant, on a panel only just made, crashed the game.
-local busy = false
-local function toggle()
+local busy, preparing = false, false
+local toggle
+function toggle()
   if busy then return end
   busy = true
   ExecuteInGameThreadWithDelay(CFG.toggle_gap_ms, function() busy = false end)
   local t = os.clock()
-  local pc = live(G.controller)[1]
+  local pc = known(G.controller)[1]
   if not pc then return end
   -- It opens only once the player has a body in the world: the game crashed making the panel while
   -- the world was still loading. Closing needs no body.
   local pawn
   pcall(function() pawn = pc.Pawn end)
   if not shown and not valid(pawn) then return end
+  local want = not shown
+  -- The first opening makes the palette and reads the rows first, over several frames, and opens when
+  -- they are read. A press meanwhile is ignored.
+  if want and not entries then
+    if preparing then return end
+    preparing = true
+    prepare(pc, function()
+      preparing = false
+      local now
+      pcall(function() now = pc.Pawn end)
+      if valid(shell) and ui and valid(now) and not shown then busy = false; toggle() end
+    end)
+    return
+  end
   local w = make_shell(pc)
   if not w then return end
-  local want = not shown
   if want then
-    build(pc, w)  -- before the panel shows: reading the game's lists opens and closes them
     -- A tab with nothing in it is not shown: without a Moonpool server the Server tab has no commands,
     -- and Mine is empty until a player adds rows.
     local have = {}
