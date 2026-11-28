@@ -567,8 +567,13 @@ local function mark()
     end
   end
   local act = e and (e.actions[action] or e.actions[1])
-  local _, count = route.count(query or '')
-  set_text(ui.preview, act and route.fill(CFG.text.preview, { line = line_for(e, act, count) }) or '')
+  local search, count = route.count(query or '')
+  local said = act and route.fill(CFG.text.preview, { line = line_for(e, act, count) }) or ''
+  if act and e.kind == 'item' and not count then
+    local name = search:match('^%s*(.-)%s*$')
+    said = said .. route.fill(CFG.text.count_hint, { example = (name ~= '' and name or e.name:lower()) .. ' 10' })
+  end
+  set_text(ui.preview, said)
 end
 -- The rows themselves: written once per search.
 local function draw()
@@ -669,6 +674,7 @@ local function send_typed(pc, said)
   if send(pc, where == route.CONSOLE and text or said) then remember(said) end
 end
 
+local waiting  -- a line for everyone, sent on a second Enter (catalog.confirm)
 local function run()
   if not shown or not ui then return end
   local pc = live(G.controller)[1]
@@ -689,6 +695,15 @@ local function run()
   local act = e.actions[action] or e.actions[1]
   if for_anyone(e) and targets[target] and targets[target].who then
     local line = line_for(e, act, count)
+    if targets[target].who == CFG.everyone_word then
+      local go
+      go, waiting = catalog.confirm(waiting, line, os.time(), CFG.confirm_s)
+      if not go then
+        set_text(ui.receipt, route.fill(CFG.text.confirm, { line = line }))
+        set_color(ui.receipt, C.failed)
+        return
+      end
+    end
     if send(pc, line) then remember(line) end
     return
   end
