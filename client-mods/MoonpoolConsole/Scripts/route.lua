@@ -18,12 +18,15 @@ function M.route(line, known, word)
   return M.CONSOLE, word .. ' ' .. line
 end
 
--- A filter that ends in a number is a search and a count: "glass 10" finds Glass, 10 of it. Returns
+-- A filter with a number at either end is a search and a count: "glass 10", "10 glass" and "glass x10"
+-- find Glass, 10 of it. A number alone is a search. Returns
 -- the search and the count (nil when there is none).
 function M.count(query)
-  local search, n = tostring(query):match('^(.-)%s+(%d+)%s*$')
+  query = tostring(query)
+  local search, n = query:match('^(.-)%s+[xX]?(%d+)[xX]?%s*$')
+  if not search or search:match('^%s*$') then n, search = query:match('^%s*[xX]?(%d+)[xX]?%s+(.-)%s*$') end
   n = tonumber(n)
-  if not n or n < 1 then return tostring(query), nil end
+  if not n or n < 1 or not search or search:match('^%s*$') then return query, nil end
   return search, math.floor(n)
 end
 
