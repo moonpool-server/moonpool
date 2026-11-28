@@ -1,0 +1,16 @@
+name: Feature request
+description: Something you'd like the server, launcher or console to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What do you want to do?
+      description: What you're trying to do as a host or player, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Any idea how it should work?
+      description: Optional. A rough idea is fine.

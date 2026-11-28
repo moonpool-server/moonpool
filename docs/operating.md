@@ -122,7 +122,7 @@ bin/moonpool --instance family status
 | Empty server | as the game decides | skips saves and archives |
 | A crash loses | up to 2 minutes | up to `SAVE_EVERY_MINUTES` |
 
-- Archives go into `./backups` every 30 minutes and are kept 7 days. For remote storage or encryption, copy `backup.env.example` to `backup.env`.
+- Archives go into `./backups` every 30 minutes and are kept 7 days. For remote storage or encryption, copy `examples/backup.env.example` to `backup.env`.
 - They hold the saves and the game's Steam userdata folder, not the sign-in or the mod-signing key.
 - Lose that key and players' launchers treat the server as new and ask again. Keep a private copy: `docker compose cp sn2:/home/container/mod-signing ./mod-signing`.
 
@@ -315,7 +315,7 @@ docker compose cp join.html.j2 sn2:/home/container/templates/join.html.j2
 - `templates/join.html.j2`: the join page. A copy that fails to render is logged and the shipped page used. It gets `world`, `join`, `friend`, `refresh`, `banner`, `modnote` (the launcher button and the mod list), `mod_action` and `mod_list` (the same, split), `mods_published`, `build`, `branch`, `branch_label`, `map` (the map still, or empty when the map is off; the page then embeds `map.html?embed=1`), `map_facts` (such as `15 min behind`, `2 players`), `game` (`GAME_NAME`, or Subnautica 2) and `theme` (a fingerprint; link `theme.css?{{ theme }}`).
 - `templates/banner.png` (or `.jpg`, `.jpeg`, `.webp`, `.gif`): a picture at the top of the join page, served as is.
 - `templates/map.html`, from `web/map.html`: a whole page you own, scripts included.
-- `card.yaml`, from [card.example.yaml](../card.example.yaml): the Discord card's wording. Layout and buttons stay. A bad line is logged and the shipped one kept.
+- `card.yaml`, from [examples/card.example.yaml](../examples/card.example.yaml): the Discord card's wording. Layout and buttons stay. A bad line is logged and the shipped one kept.
 
 ## When something's wrong
 
