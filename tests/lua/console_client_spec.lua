@@ -112,5 +112,13 @@ check(sandboxed().key == 'kept', 'the own-settings and own-rows files run with n
 check(cfg.own_settings:find('Moonpool', 1, true) and cfg.own_commands:find('Moonpool', 1, true),
   "a player's own settings and rows live beside the palette's history")
 
+-- The game draws these files' text as UTF-8: a byte that isn't (a Latin-1 middle dot) shows as a broken glyph.
+for _, name in ipairs({ 'config.lua', 'catalog.lua', 'palette.lua', 'route.lua', 'main.lua' }) do
+  local f = assert(io.open(DIR .. name, 'rb'))
+  local body = f:read('a')
+  f:close()
+  check(utf8.len(body) ~= nil, name .. ' is valid UTF-8')
+end
+
 if failures > 0 then os.exit(1) end
 print('console client: ok')

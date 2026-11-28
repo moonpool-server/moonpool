@@ -5,6 +5,9 @@ return {
   key = 'F2',
   -- After a press of the key, further presses are ignored for this long.
   toggle_gap_ms = 500,
+  -- The first opening reads the game's items this many per frame, with this long between its steps.
+  items_per_step = 40,
+  step_gap_ms = 10,
   -- Keys while the palette shows: back closes it; up and down move the choice; run sends the chosen
   -- row's action at once (or, when nothing matches, the typed line); edit_key puts the exact line it
   -- would send into the search line instead, to change before Enter; action_keys (with action_modifier)
@@ -123,7 +126,7 @@ return {
   text = {
     title = 'MOONPOOL',
     preview = 'Enter sends: {line}',
-    count_hint = '    · for more, type {example}',
+    count_hint = '    Â· for more, type {example}',
     for_label = 'For:',
     me = 'Me',
     everyone = 'Everyone',
@@ -184,6 +187,7 @@ return {
     gave_back = '{what} was still held after the palette closed; handed back to the game',
     entries = '{items} items, {game} game commands, {server} server commands, {own} own rows, '
       .. '{macros} macros from {from}',
+    prepared = 'rows read in {ms} ms over {steps} frames, longest {longest} ms',
     no_lists = "the game's item lists could not be read; items offer the actions in item_actions",
     no_answers = 'server answers show only as the game card: {error}',
     own_bad = 'own rows not read from {file}: {error}',

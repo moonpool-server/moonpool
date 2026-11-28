@@ -261,4 +261,17 @@ function M.draft(entry, action, values)
   return (M.line(entry, { line = head }, values) or head) .. ' '
 end
 
+-- Runs the queue's steps one at a time, each handed to later (which runs it on a later frame), then
+-- done. A step may add steps to the end of the queue. Spread this way no single frame does all the work.
+function M.stage(queue, later, done)
+  local i = 0
+  local function nxt()
+    i = i + 1
+    if i > #queue then return done() end
+    queue[i]()
+    later(nxt)
+  end
+  later(nxt)
+end
+
 return M

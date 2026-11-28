@@ -110,7 +110,7 @@ local function game_commands(pc)
 end
 
 -- What the game's data says about each item: name, category, published (and not marked unfinished)
--- and equippable. Read once, at the first opening.
+-- and equippable, added to facts. Read for each item at the first opening.
 -- An item's category: the last part of its own category tag in the game's data (Item.Category.Tools ->
 -- Tools), else the folder its data is in.
 local function category_of(asset)
@@ -119,20 +119,16 @@ local function category_of(asset)
   local last = tag ~= 'None' and tag:match('([%w_]+)$') or nil
   return last or asset:GetFullName():match(CFG.items.category) or ''
 end
-local function item_facts()
-  local facts = {}
-  for _, asset in ipairs(live(G.item_class)) do
-    local id, label = asset:GetFName():ToString(), ''
-    pcall(function() label = asset[G.item_label]:ToString() end)
-    local ok, published = ucall(asset, G.is_published)
-    local finished = true
-    for _, p in ipairs(CFG.items.unfinished or {}) do finished = finished and not label:find(p) end
-    local eok, equippable = ucall(asset, G.is_equippable)
-    facts[id] = { label = label, published = (not ok or published ~= false) and finished,
-      equippable = eok and equippable == true,
-      category = category_of(asset) }
-  end
-  return facts
+local function add_fact(facts, asset)
+  local id, label = asset:GetFName():ToString(), ''
+  pcall(function() label = asset[G.item_label]:ToString() end)
+  local ok, published = ucall(asset, G.is_published)
+  local finished = true
+  for _, p in ipairs(CFG.items.unfinished or {}) do finished = finished and not label:find(p) end
+  local eok, equippable = ucall(asset, G.is_equippable)
+  facts[id] = { label = label, published = (not ok or published ~= false) and finished,
+    equippable = eok and equippable == true,
+    category = category_of(asset) }
 end
 
 local entries  -- every row but the recent ones, built at the first opening
@@ -192,16 +188,12 @@ local function read_game_list(pc, panel, def)
   end
   return found
 end
--- The item actions' lists: { label, command, ids } each.
-local function game_lists(pc, panel)
-  local out = {}
-  for _, want in ipairs(CFG.list_actions) do
-    local list = read_game_list(pc, panel, G.lists[want.list])
-    local entry = { label = want.label, ids = {}, command = list and list.command }
-    for _, it in ipairs(list and list.items or {}) do entry.ids[it.id] = true end
-    out[#out + 1] = entry
-  end
-  return out
+-- One item action's list: { label, command, ids }.
+local function game_list(pc, panel, want)
+  local list = read_game_list(pc, panel, G.lists[want.list])
+  local entry = { label = want.label, ids = {}, command = list and list.command }
+  for _, it in ipairs(list and list.items or {}) do entry.ids[it.id] = true end
+  return entry
 end
 -- The game's macros, from its own Macro list: { name, id } each and the line that runs one.
 local function game_macros(pc, panel)
@@ -211,26 +203,58 @@ local function game_macros(pc, panel)
   for _, it in ipairs(list.items) do out[#out + 1] = { name = it.title, id = it.id } end
   return out, catalog.list_line(list.command)
 end
-local function build(pc, panel)
-  if entries then return entries end
-  local t = os.clock()
-  local from_game = catalog.list_actions(game_lists(pc, panel))
-  if not from_game then say('no_lists') end
-  local items = catalog.items(item_facts(), from_game or CFG.item_actions, CFG.items.show_unpublished,
-    CFG.items.hidden_categories)
-  local game = catalog.game_commands(game_commands(pc), CFG.text.game_detail, params)
-  local server = catalog.host_commands(host)
-  local own = own_rows()
-  local game_macro_list, macro_line = game_macros(pc, panel)
-  local macros = catalog.macros(game_macro_list or CFG.macros, macro_line or CFG.run_macro)
-  entries = {}
-  for _, list in ipairs({ items, server, game, macros, own }) do
-    for _, e in ipairs(list) do entries[#entries + 1] = e end
+-- Reads every row at the first opening, one piece per frame (catalog.stage), so the game never stops
+-- for the whole read at once; done runs once entries is filled.
+local function prepare(pc, panel, done)
+  local t0, longest, steps = os.clock(), 0, 0
+  local facts, lists, macro_list, macro_line = {}, {}, nil, nil
+  local queue = {}
+  local function step(what, fn)
+    queue[#queue + 1] = function()
+      local t = os.clock()
+      local ok, err = pcall(fn)
+      if not ok then say('error', { error = err }) end
+      steps, longest = steps + 1, math.max(longest, ms_since(t))
+      trace(what, t)
+    end
   end
-  say('entries', { items = #items, game = #game, server = #server, own = #own, macros = #macros,
-    from = game_macro_list and 'the game' or 'config.lua' })
-  trace('reading the rows', t)
-  return entries
+  step('finding the items', function()
+    local assets = live(G.item_class)
+    for first = 1, #assets, CFG.items_per_step do
+      step('reading items', function()
+        for i = first, math.min(first + CFG.items_per_step - 1, #assets) do
+          if valid(assets[i]) then add_fact(facts, assets[i]) end
+        end
+      end)
+    end
+  end)
+  step('reading the game commands', function() game_commands(pc) end)
+  for n, want in ipairs(CFG.list_actions) do
+    lists[n] = { label = want.label, ids = {} }
+    step('reading a list', function() lists[n] = game_list(pc, panel, want) end)
+  end
+  step('reading the macros', function() macro_list, macro_line = game_macros(pc, panel) end)
+  catalog.stage(queue, function(fn) ExecuteInGameThreadWithDelay(CFG.step_gap_ms, fn) end, function()
+    local ok, err = pcall(function()
+      local from_game = catalog.list_actions(lists)
+      if not from_game then say('no_lists') end
+      local items = catalog.items(facts, from_game or CFG.item_actions, CFG.items.show_unpublished,
+        CFG.items.hidden_categories)
+      local game = catalog.game_commands(commands, CFG.text.game_detail, params)
+      local server = catalog.host_commands(host)
+      local own = own_rows()
+      local macros = catalog.macros(macro_list or CFG.macros, macro_line or CFG.run_macro)
+      entries = {}
+      for _, list in ipairs({ items, server, game, macros, own }) do
+        for _, e in ipairs(list) do entries[#entries + 1] = e end
+      end
+      say('entries', { items = #items, game = #game, server = #server, own = #own, macros = #macros,
+        from = macro_list and 'the game' or 'config.lua' })
+      say('prepared', { ms = ms_since(t0), steps = steps, longest = longest })
+    end)
+    if not ok then say('error', { error = err }) end
+    done()
+  end)
 end
 -- The lines run before, as rows first in line while nothing is typed; each offers Undo when a rule in
 -- config.lua knows the line that undoes it.
@@ -849,8 +873,9 @@ end
 
 -- A second press while the first is still being carried out is ignored: opening and closing in the
 -- same instant, on a panel only just made, crashed the game.
-local busy = false
-local function toggle()
+local busy, preparing = false, false
+local toggle
+function toggle()
   if busy then return end
   busy = true
   ExecuteInGameThreadWithDelay(CFG.toggle_gap_ms, function() busy = false end)
@@ -865,8 +890,20 @@ local function toggle()
   local w = make_shell(pc)
   if not w then return end
   local want = not shown
+  -- The first opening reads the rows first, over several frames, and opens when they are read. A press
+  -- meanwhile is ignored.
+  if want and not entries then
+    if preparing then return end
+    preparing = true
+    prepare(pc, w, function()
+      preparing = false
+      local now
+      pcall(function() now = pc.Pawn end)
+      if valid(w) and valid(now) and not shown then busy = false; toggle() end
+    end)
+    return
+  end
   if want then
-    build(pc, w)  -- before the panel shows: reading the game's lists opens and closes them
     -- A tab with nothing in it is not shown: without a Moonpool server the Server tab has no commands,
     -- and Mine is empty until a player adds rows.
     local have = {}
